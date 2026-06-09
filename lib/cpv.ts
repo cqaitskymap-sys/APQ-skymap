@@ -1,0 +1,421 @@
+import { z } from 'zod';
+
+export const CPV_COLLECTIONS = {
+  cpp: 'cpv_cpp',
+  yield: 'cpv_yield',
+  utility: 'cpv_utility',
+  cqa: 'cpv_cqa',
+  cqaAssay: 'cpv_cqa_assay',
+  cqaPhysical: 'cpv_cqa_physical',
+  cqaSterility: 'cpv_cqa_sterility',
+  cqaPreservative: 'cpv_cqa_preservative',
+  cqaParticulate: 'cpv_cqa_particulate',
+  capability: 'cpv_capability',
+  trends: 'cpv_trends',
+  controlCharts: 'cpv_control_charts',
+  risk: 'cpv_risk_assessment',
+  annualReview: 'cpv_annual_review',
+  audit: 'cpv_audit_trail',
+} as const;
+
+export type CpvStatus = 'Complies' | 'OOT' | 'OOS';
+export type RiskLevel = 'Low' | 'Medium' | 'High' | 'Critical';
+
+const requiredText = z.string().trim().min(1, 'Required');
+const finiteNumber = z.coerce.number().finite();
+
+export const cppSchema = z.object({
+  productName: requiredText,
+  batchNo: requiredText,
+  manufacturingDate: requiredText,
+  processStage: requiredText,
+  parameterName: requiredText,
+  observedValue: finiteNumber,
+  targetValue: finiteNumber,
+  lsl: finiteNumber,
+  usl: finiteNumber,
+  unit: requiredText,
+  recordedBy: requiredText,
+  reviewedBy: z.string().trim(),
+}).refine((value) => value.lsl < value.usl, {
+  message: 'USL must be greater than LSL',
+  path: ['usl'],
+});
+
+export const cqaSchema = z.object({
+  productName: requiredText,
+  batchNo: requiredText,
+  testParameter: requiredText,
+  observedValue: finiteNumber,
+  target: finiteNumber,
+  lsl: finiteNumber,
+  usl: finiteNumber,
+  unit: requiredText,
+  recordedBy: requiredText,
+  reviewedBy: z.string().trim(),
+}).refine((value) => value.lsl < value.usl, {
+  message: 'USL must be greater than LSL',
+  path: ['usl'],
+});
+
+export const yieldSchema = z.object({
+  productName: requiredText,
+  batchNo: requiredText,
+  manufacturingDate: requiredText,
+  bulkYield: finiteNumber.min(0).max(100),
+  fillingYield: finiteNumber.min(0).max(100),
+  packingYield: finiteNumber.min(0).max(100),
+  lowerLimit: finiteNumber,
+  upperLimit: finiteNumber,
+  observedValue: finiteNumber,
+  recordedBy: requiredText,
+}).refine((value) => value.lowerLimit < value.upperLimit, {
+  message: 'Upper limit must be greater than lower limit',
+  path: ['upperLimit'],
+});
+
+export const utilitySchema = z.object({
+  productName: requiredText,
+  batchNo: requiredText,
+  manufacturingDate: requiredText,
+  hvacTemperature: finiteNumber,
+  relativeHumidity: finiteNumber,
+  differentialPressure: finiteNumber,
+  compressedAirPressure: finiteNumber,
+  wfiConductivity: finiteNumber,
+  loopTemperature: finiteNumber,
+  recordedBy: requiredText,
+});
+
+export const assaySchema = z.object({
+  productName: requiredText,
+  batchNo: requiredText,
+  assayPercent: finiteNumber,
+  observedValue: finiteNumber,
+  lowerLimit: finiteNumber,
+  upperLimit: finiteNumber,
+  recordedBy: requiredText,
+}).refine((value) => value.lowerLimit < value.upperLimit, {
+  message: 'Upper limit must be greater than lower limit',
+  path: ['upperLimit'],
+});
+
+export const physicalSchema = z.object({
+  productName: requiredText,
+  batchNo: requiredText,
+  testDate: requiredText,
+  ph: finiteNumber,
+  extractableVolume: finiteNumber,
+  colour: requiredText,
+  description: requiredText,
+  clarity: requiredText,
+  status: z.enum(['Complies', 'OOT', 'OOS']),
+  recordedBy: requiredText,
+});
+
+export const sterilitySchema = z.object({
+  productName: requiredText,
+  batchNo: requiredText,
+  testDate: requiredText,
+  result: requiredText,
+  passFail: z.enum(['Pass', 'Fail']),
+  mediaLotNo: requiredText,
+  analyst: requiredText,
+});
+
+export const preservativeSchema = z.object({
+  productName: requiredText,
+  batchNo: requiredText,
+  methylParaben: finiteNumber,
+  propylParaben: finiteNumber,
+  observedValue: finiteNumber,
+  lsl: finiteNumber,
+  usl: finiteNumber,
+  unit: requiredText,
+  recordedBy: requiredText,
+}).refine((value) => value.lsl < value.usl, {
+  message: 'USL must be greater than LSL',
+  path: ['usl'],
+});
+
+export const particulateSchema = z.object({
+  productName: requiredText,
+  batchNo: requiredText,
+  particles10Micron: finiteNumber.min(0),
+  particles25Micron: finiteNumber.min(0),
+  observedValue: finiteNumber.min(0),
+  limit: finiteNumber.min(0),
+  recordedBy: requiredText,
+});
+
+export const riskSchema = z.object({
+  productName: requiredText,
+  batchNo: z.string().trim(),
+  factor: requiredText,
+  likelihood: z.coerce.number().int().min(1).max(5),
+  severity: z.coerce.number().int().min(1).max(5),
+  detectability: z.coerce.number().int().min(1).max(5),
+  rationale: requiredText,
+  mitigation: requiredText,
+  owner: requiredText,
+  dueDate: requiredText,
+});
+
+export type CppInput = z.infer<typeof cppSchema>;
+export type CqaInput = z.infer<typeof cqaSchema>;
+export type YieldInput = z.infer<typeof yieldSchema>;
+export type UtilityInput = z.infer<typeof utilitySchema>;
+export type AssayInput = z.infer<typeof assaySchema>;
+export type PhysicalInput = z.infer<typeof physicalSchema>;
+export type SterilityInput = z.infer<typeof sterilitySchema>;
+export type PreservativeInput = z.infer<typeof preservativeSchema>;
+export type ParticulateInput = z.infer<typeof particulateSchema>;
+export type RiskInput = z.infer<typeof riskSchema>;
+
+export interface CpvRecordMeta {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+  createdByName: string;
+  version: number;
+}
+
+export interface CppRecord extends CppInput, Partial<CpvRecordMeta> {
+  status: CpvStatus;
+  deviationPercent: number;
+}
+
+export interface CqaRecord extends CqaInput, Partial<CpvRecordMeta> {
+  status: CpvStatus;
+  deviationPercent: number;
+}
+
+export interface YieldRecord extends YieldInput, Partial<CpvRecordMeta> {
+  status: CpvStatus;
+}
+
+export interface UtilityRecord extends UtilityInput, Partial<CpvRecordMeta> {
+  status: CpvStatus;
+  parameterStatuses: Record<keyof typeof UTILITY_LIMITS, CpvStatus>;
+}
+
+export interface AssayRecord extends AssayInput, Partial<CpvRecordMeta> {
+  status: CpvStatus;
+}
+
+export interface PhysicalRecord extends PhysicalInput, Partial<CpvRecordMeta> {}
+
+export interface SterilityRecord extends SterilityInput, Partial<CpvRecordMeta> {
+  status: 'Pass' | 'Fail';
+}
+
+export interface PreservativeRecord extends PreservativeInput, Partial<CpvRecordMeta> {
+  status: CpvStatus;
+}
+
+export interface ParticulateRecord extends ParticulateInput, Partial<CpvRecordMeta> {
+  status: CpvStatus;
+}
+
+export interface RiskRecord extends RiskInput, Partial<CpvRecordMeta> {
+  rpn: number;
+  riskLevel: RiskLevel;
+}
+
+export interface CapabilityResult {
+  count: number;
+  mean: number;
+  median: number;
+  range: number;
+  variance: number;
+  standardDeviation: number;
+  cp: number;
+  cpk: number;
+  cpu: number;
+  cpl: number;
+  pp: number;
+  ppk: number;
+  sigmaLevel: number;
+  performanceIndex: number;
+  status: 'Excellent' | 'Acceptable' | 'Poor' | 'Insufficient Data';
+}
+
+export const CPP_PARAMETERS = [
+  'Mixing Time', 'Mixing RPM', 'Mixing Temperature', 'Bulk Hold Time',
+  'Filtration Pressure', 'Filtration Time', 'Sterilization Temperature',
+  'Sterilization Time', 'Depyrogenation Temperature', 'Fill Volume',
+  'Filling Speed', 'Nitrogen Pressure', 'Room Temperature',
+  'Relative Humidity', 'Differential Pressure',
+];
+
+export const PROCESS_PARAMETERS = [
+  'Mixing Time', 'Mixing RPM', 'Mixing Temperature', 'Filtration Pressure',
+  'Filtration Time', 'Sterilization Temperature', 'Sterilization Time',
+  'Fill Volume', 'Nitrogen Pressure',
+];
+
+export const UTILITY_LIMITS = {
+  hvacTemperature: { label: 'HVAC Temperature', lsl: 18, usl: 25, unit: '°C' },
+  relativeHumidity: { label: 'Relative Humidity', lsl: 30, usl: 65, unit: '%' },
+  differentialPressure: { label: 'Differential Pressure', lsl: 10, usl: 20, unit: 'Pa' },
+  compressedAirPressure: { label: 'Compressed Air Pressure', lsl: 5, usl: 7, unit: 'bar' },
+  wfiConductivity: { label: 'WFI Conductivity', lsl: 0, usl: 1.3, unit: 'µS/cm' },
+  loopTemperature: { label: 'Loop Temperature', lsl: 70, usl: 85, unit: '°C' },
+} as const;
+
+export const CQA_PARAMETERS = [
+  'Assay', 'pH', 'Description', 'Colour', 'Extractable Volume',
+  'Particulate Matter >=10 um', 'Particulate Matter >=25 um', 'Sterility',
+  'Bacterial Endotoxin', 'Methyl Paraben Assay', 'Propyl Paraben Assay',
+];
+
+export const RISK_FACTORS = [
+  'CPP Drift', 'CQA Drift', 'Yield Loss', 'Repeated OOS', 'Repeated OOT',
+  'Repeated Deviations', 'Vendor Issues', 'Equipment Issues',
+];
+
+const round = (value: number, digits = 3) =>
+  Number.isFinite(value) ? Number(value.toFixed(digits)) : 0;
+
+export function classifySpecification(
+  observed: number,
+  target: number,
+  lsl: number,
+  usl: number,
+): CpvStatus {
+  if (observed < lsl || observed > usl) return 'OOS';
+  const tolerance = usl - lsl;
+  const warningBand = tolerance * 0.1;
+  if (observed <= lsl + warningBand || observed >= usl - warningBand) return 'OOT';
+  return 'Complies';
+}
+
+export function deviationPercent(observed: number, target: number) {
+  return target === 0 ? 0 : round(((observed - target) / Math.abs(target)) * 100, 2);
+}
+
+export function classifyUtility(input: UtilityInput) {
+  const parameterStatuses = Object.fromEntries(
+    Object.entries(UTILITY_LIMITS).map(([key, limits]) => [
+      key,
+      classifySpecification(
+        input[key as keyof typeof UTILITY_LIMITS],
+        (limits.lsl + limits.usl) / 2,
+        limits.lsl,
+        limits.usl,
+      ),
+    ]),
+  ) as Record<keyof typeof UTILITY_LIMITS, CpvStatus>;
+  const statuses = Object.values(parameterStatuses);
+  const status: CpvStatus = statuses.includes('OOS') ? 'OOS' : statuses.includes('OOT') ? 'OOT' : 'Complies';
+  return { status, parameterStatuses };
+}
+
+export function calculateCapability(values: number[], lsl: number, usl: number): CapabilityResult {
+  const clean = values.filter(Number.isFinite);
+  if (clean.length < 2 || lsl >= usl) {
+    return {
+      count: clean.length, mean: 0, median: 0, range: 0, variance: 0,
+      standardDeviation: 0, cp: 0, cpk: 0, cpu: 0, cpl: 0, pp: 0,
+      ppk: 0, sigmaLevel: 0, performanceIndex: 0, status: 'Insufficient Data',
+    };
+  }
+
+  const sorted = [...clean].sort((a, b) => a - b);
+  const mean = clean.reduce((sum, value) => sum + value, 0) / clean.length;
+  const middle = Math.floor(sorted.length / 2);
+  const median = sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+  const variance = clean.reduce((sum, value) => sum + ((value - mean) ** 2), 0) / (clean.length - 1);
+  const standardDeviation = Math.sqrt(variance);
+  const movingRanges = clean.slice(1).map((value, index) => Math.abs(value - clean[index]));
+  const averageMovingRange = movingRanges.length
+    ? movingRanges.reduce((sum, value) => sum + value, 0) / movingRanges.length
+    : standardDeviation * 1.128;
+  const withinSigma = (averageMovingRange / 1.128) || Number.EPSILON;
+  const overallSigma = standardDeviation || Number.EPSILON;
+  const cp = (usl - lsl) / (6 * withinSigma);
+  const cpu = (usl - mean) / (3 * withinSigma);
+  const cpl = (mean - lsl) / (3 * withinSigma);
+  const cpk = Math.min(cpu, cpl);
+  const pp = (usl - lsl) / (6 * overallSigma);
+  const ppu = (usl - mean) / (3 * overallSigma);
+  const ppl = (mean - lsl) / (3 * overallSigma);
+  const ppk = Math.min(ppu, ppl);
+  const status = cpk > 1.33 ? 'Excellent' : cpk >= 1 ? 'Acceptable' : 'Poor';
+
+  return {
+    count: clean.length,
+    mean: round(mean),
+    median: round(median),
+    range: round(sorted[sorted.length - 1] - sorted[0]),
+    variance: round(variance),
+    standardDeviation: round(standardDeviation),
+    cp: round(cp),
+    cpk: round(cpk),
+    cpu: round(cpu),
+    cpl: round(cpl),
+    pp: round(pp),
+    ppk: round(ppk),
+    sigmaLevel: round(cpk * 3),
+    performanceIndex: round(Math.min(2, Math.max(0, cpk)) * 50, 1),
+    status,
+  };
+}
+
+export function calculateControlLimits(values: number[]) {
+  const clean = values.filter(Number.isFinite);
+  const mean = clean.length ? clean.reduce((sum, value) => sum + value, 0) / clean.length : 0;
+  const movingRanges = clean.slice(1).map((value, index) => Math.abs(value - clean[index]));
+  const mrBar = movingRanges.length
+    ? movingRanges.reduce((sum, value) => sum + value, 0) / movingRanges.length
+    : 0;
+  const sigma = mrBar / 1.128;
+  const ucl = mean + (3 * sigma);
+  const lcl = mean - (3 * sigma);
+  return {
+    centerLine: round(mean),
+    ucl: round(ucl),
+    lcl: round(lcl),
+    mrCenterLine: round(mrBar),
+    mrUcl: round(mrBar * 3.267),
+    points: clean.map((value, index) => ({
+      index: index + 1,
+      value,
+      movingRange: index === 0 ? 0 : Math.abs(value - clean[index - 1]),
+      outOfControl: value > ucl || value < lcl,
+    })),
+  };
+}
+
+export function calculateRisk(likelihood: number, severity: number, detectability: number) {
+  const rpn = likelihood * severity * detectability;
+  const riskLevel: RiskLevel = rpn >= 80 ? 'Critical' : rpn >= 50 ? 'High' : rpn >= 20 ? 'Medium' : 'Low';
+  return { rpn, riskLevel };
+}
+
+export function calculateAiRiskScore(input: {
+  oot: number;
+  oos: number;
+  deviations: number;
+  averageCpk: number;
+  yieldTrend: number;
+  controlViolations: number;
+}) {
+  const score =
+    Math.min(input.oot * 3, 18) +
+    Math.min(input.oos * 8, 32) +
+    Math.min(input.deviations * 2, 14) +
+    Math.max(0, 1.33 - input.averageCpk) * 18 +
+    Math.max(0, -input.yieldTrend) * 2 +
+    Math.min(input.controlViolations * 5, 15);
+  return round(Math.min(100, Math.max(0, score)), 1);
+}
+
+export const cpvPermissions = {
+  canEnterCpp: (role?: string) => ['super_admin', 'qa', 'production', 'engineering'].includes(role || ''),
+  canEnterCqa: (role?: string) => ['super_admin', 'qa', 'qc'].includes(role || ''),
+  canReview: (role?: string) => ['super_admin', 'qa'].includes(role || ''),
+  canView: (role?: string) => Boolean(role),
+  isReadOnly: (role?: string) => ['viewer', 'auditor'].includes(role || ''),
+};

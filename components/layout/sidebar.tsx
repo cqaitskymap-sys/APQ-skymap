@@ -9,7 +9,7 @@ import {
   RefreshCw, LineChart, Cog, BookOpen, Users, FileText, TruckIcon, ShieldCheck,
   Bell, Brain, ClipboardList, BarChart3, ChevronDown, ChevronRight, PanelLeftClose,
   PanelLeftOpen, LogOut, Settings, UserCircle, PackageSearch, Beaker, Award,
-  AlertCircle, Building2
+  AlertCircle, Building2, Activity
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
@@ -28,6 +28,19 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+  {
+    label: 'Continued Process Verification', icon: LineChart,
+    children: [
+      { label: 'CPV Dashboard', href: '/cpv', icon: LayoutDashboard },
+      { label: 'CPP Monitoring', href: '/cpv/cpp', icon: Activity },
+      { label: 'CQA Monitoring', href: '/cpv/cqa', icon: TestTube },
+      { label: 'Process Capability', href: '/cpv/process-capability', icon: BarChart3 },
+      { label: 'Trend Analysis', href: '/cpv/trends', icon: LineChart },
+      { label: 'Control Charts', href: '/cpv/control-charts', icon: BarChart3 },
+      { label: 'Risk Assessment', href: '/cpv/risk-assessment', icon: ShieldCheck },
+      { label: 'Annual CPV Review', href: '/cpv/annual-review', icon: FileText },
+    ]
+  },
   {
     label: 'Quality Management', icon: ShieldCheck,
     children: [
@@ -92,7 +105,12 @@ interface SidebarProps {
 export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const pathname = usePathname();
   const { profile, signOut } = useAuth();
-  const [openGroups, setOpenGroups] = useState<string[]>(['Quality Management', 'Manufacturing', 'Product Quality']);
+  const [openGroups, setOpenGroups] = useState<string[]>([
+    'Quality Management',
+    'Manufacturing',
+    'Product Quality',
+    'Continued Process Verification',
+  ]);
 
   const toggleGroup = (label: string) => {
     setOpenGroups(prev =>
