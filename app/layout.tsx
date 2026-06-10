@@ -4,6 +4,7 @@ import { ThemeProvider } from '@/components/theme-provider';
 import { Toaster } from '@/components/ui/sonner';
 import { AuthProvider } from '@/contexts/auth-context';
 import { LoadingProvider } from '@/contexts/loading-context';
+import { FirebaseSetupBanner } from '@/components/layout/firebase-setup-banner';
 
 export const metadata: Metadata = {
   title: 'Skymap QMS — Enterprise Quality Management System',
@@ -17,6 +18,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
           <LoadingProvider>
             <AuthProvider>
+              <FirebaseSetupBanner />
               {children}
               <Toaster richColors position="top-right" />
             </AuthProvider>

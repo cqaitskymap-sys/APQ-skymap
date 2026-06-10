@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/auth-context';
 import {
@@ -33,11 +33,7 @@ export default function VendorReviewPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  async function fetchData() {
+  const fetchData = useCallback(async () => {
     try {
       setLoading(true);
       if (user?.uid) {
@@ -56,7 +52,11 @@ export default function VendorReviewPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [user?.uid]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   async function handleRecalculate(vendorName: string) {
     try {

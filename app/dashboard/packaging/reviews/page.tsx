@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/contexts/auth-context';
@@ -91,11 +91,7 @@ export default function PackagingReviewPage() {
     remarks: '',
   });
 
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  async function fetchData() {
+  const fetchData = useCallback(async () => {
     try {
       setLoading(true);
       const [reviewsData, materialsData] = await Promise.all([
@@ -114,7 +110,11 @@ export default function PackagingReviewPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [linkedPqrId, filterCompliance]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   async function handleSave() {
     try {

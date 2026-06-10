@@ -1,0 +1,119 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function getProfileRole() {
+      return get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.role;
+    }
+
+    function isSuperAdmin() {
+      return isAuthenticated() && getProfileRole() == 'super_admin';
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && getProfileRole() in ['super_admin', 'admin'];
+    }
+
+    match /profiles/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.auth.uid == userId;
+      allow update: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+      allow delete: if isSuperAdmin();
+    }
+
+    match /audit_logs/{logId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update, delete: if false;
+    }
+
+    match /users/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /roles/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isSuperAdmin();
+    }
+
+    match /permissions/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isSuperAdmin();
+    }
+
+    match /system_settings/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isSuperAdmin();
+    }
+
+    match /esign_settings/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isSuperAdmin();
+    }
+
+    match /backup_history/{docId} {
+      allow read: if isAdmin();
+      allow create: if isAdmin();
+      allow update, delete: if isSuperAdmin();
+    }
+
+    match /departments/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin() || getProfileRole() in ['head_qa', 'qa_manager'];
+    }
+
+    match /designations/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin() || getProfileRole() in ['head_qa', 'qa_manager'];
+    }
+
+    match /company_sites/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /products/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin() || getProfileRole() in ['head_qa', 'qa_manager'];
+    }
+
+    match /batches/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && getProfileRole() != 'viewer';
+    }
+
+    match /parameters/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin() || getProfileRole() in ['head_qa', 'qa_manager', 'qa_executive'];
+    }
+
+    match /workflows/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /approval_matrix/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /document_numbering/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /notification_settings/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /{collection}/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && !(getProfileRole() in ['auditor', 'viewer']);
+    }
+  }
+}

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/contexts/auth-context';
@@ -82,11 +82,7 @@ export default function PackagingMaterialMasterPage() {
     remarks: '',
   });
 
-  useEffect(() => {
-    fetchMaterials();
-  }, [filterType, filterStatus]);
-
-  async function fetchMaterials() {
+  const fetchMaterials = useCallback(async () => {
     try {
       setLoading(true);
       const data = await getPackagingMaterials({
@@ -102,7 +98,11 @@ export default function PackagingMaterialMasterPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [filterType, filterStatus, searchTerm]);
+
+  useEffect(() => {
+    fetchMaterials();
+  }, [fetchMaterials]);
 
   async function handleInitializeDefaults() {
     try {

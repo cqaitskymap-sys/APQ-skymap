@@ -26,7 +26,7 @@ export function AnnualReviewPage() {
   const cppYear = cpp.filter((record) => inYear(record.createdAt));
   const cqaYear = cqa.filter((record) => inYear(record.createdAt));
   const riskYear = risks.filter((record) => inYear(record.createdAt));
-  const all = [...cppYear, ...cqaYear];
+  const all = useMemo(() => [...cppYear, ...cqaYear], [cppYear, cqaYear]);
   const grouped = useMemo(() => {
     const map = new Map<string, typeof all>();
     all.forEach((record) => {

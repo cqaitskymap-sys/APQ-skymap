@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "type-check": "tsc --noEmit",
+    "emulators": "npx firebase emulators:start --only auth,firestore"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",
@@ -71,5 +73,8 @@
     "typescript": "5.2.2",
     "vaul": "^0.9.9",
     "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "firebase-tools": "^13.35.1"
   }
 }

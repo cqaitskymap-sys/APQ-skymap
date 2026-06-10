@@ -52,8 +52,8 @@ export default function SignupPage() {
     if (error) {
       toast.error('Registration failed', { description: error.message });
     } else {
-      toast.success('Account created!', { description: 'You can now log in.' });
-      router.push('/auth/login');
+      toast.success('Account created!', { description: 'Redirecting to dashboard...' });
+      router.push('/dashboard');
     }
     setLoading(false);
   };

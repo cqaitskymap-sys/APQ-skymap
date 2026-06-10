@@ -1,24 +1,106 @@
-import { initializeApp } from 'firebase/app';
-import { getAuth, Auth } from 'firebase/auth';
-import { getFirestore, Firestore } from 'firebase/firestore';
+import { initializeApp, getApps, FirebaseApp } from 'firebase/app';
+import { getAuth, Auth, connectAuthEmulator } from 'firebase/auth';
+import { getFirestore, Firestore, connectFirestoreEmulator } from 'firebase/firestore';
 import { getStorage, FirebaseStorage } from 'firebase/storage';
 
-const firebaseConfig = {
-  apiKey: "AIzaSyC0O8J9_1eYUt4__QQ4INv_H1U9sBrzJBU",
-  authDomain: "apq-skymap.firebaseapp.com",
-  databaseURL: "https://apq-skymap-default-rtdb.firebaseio.com",
-  projectId: "apq-skymap",
-  storageBucket: "apq-skymap.firebasestorage.app",
-  messagingSenderId: "52013725731",
-  appId: "1:52013725731:web:f0e4faeece7b4d8998d996",
-  measurementId: "G-8SPWM00W7L"
+const fallbackConfig = {
+  apiKey: 'AIzaSyC0O8J9_1eYUt4__QQ4INv_H1U9sBrzJBU',
+  authDomain: 'apq-skymap.firebaseapp.com',
+  databaseURL: 'https://apq-skymap-default-rtdb.firebaseio.com',
+  projectId: 'apq-skymap',
+  storageBucket: 'apq-skymap.firebasestorage.app',
+  messagingSenderId: '52013725731',
+  appId: '1:52013725731:web:f0e4faeece7b4d8998d996',
+  measurementId: 'G-8SPWM00W7L',
 };
 
-const app = initializeApp(firebaseConfig);
+function getFirebaseConfig() {
+  return {
+    apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || fallbackConfig.apiKey,
+    authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || fallbackConfig.authDomain,
+    databaseURL: process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL || fallbackConfig.databaseURL,
+    projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || fallbackConfig.projectId,
+    storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || fallbackConfig.storageBucket,
+    messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || fallbackConfig.messagingSenderId,
+    appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || fallbackConfig.appId,
+    measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID || fallbackConfig.measurementId,
+  };
+}
 
-export const auth: Auth = getAuth(app);
-export const firestore: Firestore = getFirestore(app);
-export const storage: FirebaseStorage = getStorage(app);
+export function isFirebaseConfigured(): boolean {
+  return Boolean(
+    process.env.NEXT_PUBLIC_FIREBASE_API_KEY &&
+    process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID &&
+    process.env.NEXT_PUBLIC_FIREBASE_APP_ID
+  );
+}
+
+let app: FirebaseApp;
+let authInstance: Auth | null = null;
+let firestoreInstance: Firestore | null = null;
+let storageInstance: FirebaseStorage | null = null;
+let emulatorsConnected = false;
+
+function connectEmulators(auth: Auth, db: Firestore) {
+  if (emulatorsConnected || typeof window === 'undefined') return;
+  if (process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATOR !== 'true') return;
+  try {
+    connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
+    connectFirestoreEmulator(db, '127.0.0.1', 8080);
+    emulatorsConnected = true;
+  } catch {
+    // Already connected
+  }
+}
+
+function getFirebaseApp(): FirebaseApp {
+  if (typeof window === 'undefined') {
+    return getApps()[0] ?? initializeApp(getFirebaseConfig());
+  }
+  if (!app) {
+    app = getApps().length === 0 ? initializeApp(getFirebaseConfig()) : getApps()[0]!;
+  }
+  return app;
+}
+
+function getAuthInstance(): Auth {
+  if (!authInstance) {
+    authInstance = getAuth(getFirebaseApp());
+    connectEmulators(authInstance, getFirestoreInstance());
+  }
+  return authInstance;
+}
+
+function getFirestoreInstance(): Firestore {
+  if (!firestoreInstance) {
+    firestoreInstance = getFirestore(getFirebaseApp());
+    if (authInstance) connectEmulators(authInstance, firestoreInstance);
+  }
+  return firestoreInstance;
+}
+
+function getStorageInstance(): FirebaseStorage {
+  if (!storageInstance) {
+    storageInstance = getStorage(getFirebaseApp());
+  }
+  return storageInstance;
+}
+
+export const auth: Auth = typeof window !== 'undefined'
+  ? getAuthInstance()
+  : getAuth(getFirebaseApp());
+
+export const firestore: Firestore = typeof window !== 'undefined'
+  ? getFirestoreInstance()
+  : getFirestore(getFirebaseApp());
+
+export const storage: FirebaseStorage = typeof window !== 'undefined'
+  ? getStorageInstance()
+  : getStorage(getFirebaseApp());
+
+export function isDemoAuthEnabled(): boolean {
+  return process.env.NEXT_PUBLIC_DEMO_AUTH === 'true';
+}
 
 export type UserRole = 'super_admin' | 'qa' | 'qc' | 'production' | 'engineering' | 'warehouse' | 'regulatory' | 'viewer' | 'auditor';
 
