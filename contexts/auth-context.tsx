@@ -11,7 +11,7 @@ import {
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth, firestore, Profile, isDemoAuthEnabled } from '@/lib/firebase';
 import {
-  demoSignIn, demoSignUp, demoSignOut, demoGetSession, formatAuthError,
+  demoSignIn, demoSignUp, demoSignOut, demoGetSession, formatAuthError, isAuthNetworkError,
 } from '@/lib/demo-auth';
 
 interface AuthContextType {
@@ -31,7 +31,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
-  const isDemoMode = isDemoAuthEnabled();
+  const [isDemoMode, setIsDemoMode] = useState(() => isDemoAuthEnabled());
+
+  const activateDemoSession = (demoProfile: Profile) => {
+    setIsDemoMode(true);
+    setProfile(demoProfile);
+    setUser({ uid: demoProfile.id, email: demoProfile.email } as User);
+  };
 
   const fetchProfile = async (userId: string) => {
     try {
@@ -81,8 +87,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (isDemoMode) {
       const { profile: demoProfile, error } = demoSignIn(email, password);
       if (error) return { error: new Error(error) };
-      setProfile(demoProfile);
-      setUser({ uid: demoProfile!.id, email: demoProfile!.email } as User);
+      activateDemoSession(demoProfile!);
       return { error: null };
     }
 
@@ -90,6 +95,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await signInWithEmailAndPassword(auth, email, password);
       return { error: null };
     } catch (error) {
+      if (isAuthNetworkError(error)) {
+        const demoResult = demoSignIn(email, password);
+        if (demoResult.profile) {
+          activateDemoSession(demoResult.profile);
+          return { error: null };
+        }
+      }
       return { error: new Error(formatAuthError(error)) };
     }
   };
@@ -98,8 +110,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (isDemoMode) {
       const { profile: demoProfile, error } = demoSignUp(email, password, fullName, role);
       if (error) return { error: new Error(error) };
-      setProfile(demoProfile);
-      setUser({ uid: demoProfile!.id, email: demoProfile!.email } as User);
+      activateDemoSession(demoProfile!);
       return { error: null };
     }
 
@@ -119,6 +130,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       return { error: null };
     } catch (error) {
+      if (isAuthNetworkError(error)) {
+        const demoResult = demoSignUp(email, password, fullName, role);
+        if (demoResult.profile) {
+          activateDemoSession(demoResult.profile);
+          return { error: null };
+        }
+      }
       return { error: new Error(formatAuthError(error)) };
     }
   };

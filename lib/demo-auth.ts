@@ -122,9 +122,20 @@ export function demoGetSession(): Profile | null {
   return users.find((u) => u.uid === uid)?.profile ?? null;
 }
 
+export function isAuthNetworkError(error: unknown): boolean {
+  const message = ((error as Error)?.message || String(error)).toLowerCase();
+  return (
+    message.includes('auth/network-request-failed') ||
+    message.includes('err_ssl') ||
+    message.includes('ssl') ||
+    message.includes('network') ||
+    message.includes('failed to fetch')
+  );
+}
+
 export function formatAuthError(error: unknown): string {
   const message = (error as Error)?.message || String(error);
-  if (message.includes('ERR_SSL') || message.includes('SSL') || message.includes('network') || message.includes('Failed to fetch')) {
+  if (isAuthNetworkError(error)) {
     return 'Network/SSL error connecting to Firebase. Enable NEXT_PUBLIC_DEMO_AUTH=true in .env.local for local development, or disable antivirus HTTPS scanning.';
   }
   if (message.includes('auth/email-already-in-use')) return 'This email is already registered.';
