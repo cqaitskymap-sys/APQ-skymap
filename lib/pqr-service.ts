@@ -148,7 +148,7 @@ export async function buildPqrSnapshot(pqr: PqrDocument): Promise<PqrDataSnapsho
 
   const filterRecords = (records: Record<string, unknown>[]) =>
     records.filter((r) => matchesProduct(r, product) && (
-      inDateRange(String(r.manufacturing_date || r.manufacturingDate || r.detected_date || r.created_at || r.createdAt || ''), from, to)
+      inDateRange(String(r.manufacturing_date || r.manufacturingDate || r.test_date || r.testDate || r.detected_date || r.created_at || r.createdAt || ''), from, to)
     ));
 
   let batches = [...pqrBatches, ...filterRecords(allBatches as Record<string, unknown>[])];
@@ -214,8 +214,14 @@ export async function buildPqrSnapshot(pqr: PqrDocument): Promise<PqrDataSnapsho
     },
     cpp: { total: cppRecords.length, records: cppRecords, ...cppStats, summary: `CPP monitoring: ${cppStats.complies} complies, ${cppStats.oot} OOT, ${cppStats.oos} OOS.` },
     cqa: { total: cqaRecords.length, records: cqaRecords, ...cqaStats, summary: `CQA monitoring: ${cqaStats.complies} complies, ${cqaStats.oot} OOT, ${cqaStats.oos} OOS.` },
-    deviations: { total: deviations.length, open: deviations.filter((d) => d.status === 'open' || d.status === 'under_investigation').length, records: deviations, summary: `${deviations.length} deviations recorded; ${deviations.filter((d) => d.status === 'open').length} open.` },
-    oos: { total: oosRecords.length, open: oosRecords.filter((d) => String(d.status).includes('open')).length, records: oosRecords, summary: `${oosRecords.length} OOS investigations during review period.` },
+    deviations: { total: deviations.length, open: deviations.filter((d) => {
+      const s = String(d.status || '');
+      return ['open', 'under_investigation', 'submitted', 'qa_review', 'capa_required', 'overdue', 'draft'].includes(s);
+    }).length, records: deviations, summary: `${deviations.length} deviations recorded; ${deviations.filter((d) => !['closed', 'approved', 'rejected'].includes(String(d.status))).length} open.` },
+    oos: { total: oosRecords.length, open: oosRecords.filter((d) => {
+      const s = String(d.status || '');
+      return ['open', 'under_investigation', 'submitted', 'phase1_investigation', 'phase2_investigation', 'qa_review', 'final_qa_review', 'capa_required', 'overdue', 'draft'].includes(s);
+    }).length, records: oosRecords, summary: `${oosRecords.length} OOS investigations during review period.` },
     capa: { total: capaRecords.length, open: capaRecords.filter((d) => !String(d.status).includes('closed')).length, records: capaRecords.slice(0, 50), summary: `${capaRecords.length} CAPA records linked to product quality events.` },
     changeControl: { total: changeControl.length, records: changeControl, summary: `${changeControl.length} change control records reviewed.` },
     stability: { total: stability.length, records: stability, summary: stability.length ? `${stability.length} stability studies ongoing/completed.` : 'Stability program maintained per approved protocol.' },

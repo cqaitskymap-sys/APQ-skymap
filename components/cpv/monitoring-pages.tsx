@@ -202,8 +202,8 @@ export function CqaMonitoringPage() {
   const form = useForm<CqaInput>({
     resolver: zodResolver(cqaSchema),
     defaultValues: {
-      productName: '', batchNo: '', testParameter: '', observedValue: 0,
-      target: 0, lsl: 0, usl: 0, unit: '', recordedBy: profile?.full_name || '', reviewedBy: '',
+      productName: '', batchNo: '', testDate: new Date().toISOString().split('T')[0], testParameter: '',
+      observedValue: 0, target: 0, lsl: 0, usl: 0, unit: '', recordedBy: profile?.full_name || '', reviewedBy: '',
     },
   });
   const load = async () => { setLoading(true); setRecords(await listCpvRecords<CqaRecord>(CPV_COLLECTIONS.cqa)); setLoading(false); };
@@ -233,7 +233,7 @@ export function CqaMonitoringPage() {
         <Button variant="outline" onClick={() => downloadCsv('cpv-cqa.csv', ['Product', 'Batch', 'Test', 'Observed', 'Target', 'LSL', 'USL', 'Unit', 'Status'], filtered.map((r) => [r.productName, r.batchNo, r.testParameter, r.observedValue, r.target, r.lsl, r.usl, r.unit, r.status]))}><Download className="mr-2 h-4 w-4" />Export</Button>
         <Dialog open={open} onOpenChange={setOpen}><DialogTrigger asChild><Button disabled={!canEnter}><Plus className="mr-2 h-4 w-4" />Record CQA</Button></DialogTrigger><DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto"><DialogHeader><DialogTitle>Controlled CQA Entry</DialogTitle></DialogHeader>
           <Form {...form}><form onSubmit={submit} className="space-y-5"><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <TextField form={form} name="productName" label="Product Name" /><TextField form={form} name="batchNo" label="Batch No" /><ParameterField form={form} name="testParameter" label="Test Parameter" options={CQA_PARAMETERS} />
+            <TextField form={form} name="productName" label="Product Name" /><TextField form={form} name="batchNo" label="Batch No" /><ParameterField form={form} name="testParameter" label="Test Parameter" options={[...CQA_PARAMETERS]} />
             <TextField form={form} name="observedValue" label="Observed Value" type="number" /><TextField form={form} name="target" label="Target" type="number" /><TextField form={form} name="unit" label="Unit" />
             <TextField form={form} name="lsl" label="LSL" type="number" /><TextField form={form} name="usl" label="USL" type="number" /><div className="rounded-lg border bg-slate-50 p-3"><p className="text-xs text-muted-foreground">Calculated Status</p><div className="mt-2"><StatusBadge status={preview} /></div></div>
             <TextField form={form} name="recordedBy" label="Recorded By" /><TextField form={form} name="reviewedBy" label="Reviewed By" />

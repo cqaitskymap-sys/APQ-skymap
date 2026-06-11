@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-const PROTECTED_PREFIXES = ['/dashboard', '/cpv'];
-const AUTH_ROUTES = ['/auth/login', '/auth/signup'];
+const PROTECTED_PREFIXES = ['/dashboard', '/cpv', '/qms', '/pqr', '/admin'];
+const AUTH_ROUTES = ['/auth/login', '/auth/signup', '/login'];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -29,5 +29,5 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/dashboard/:path*', '/cpv/:path*', '/auth/:path*'],
+  matcher: ['/dashboard/:path*', '/cpv/:path*', '/qms/:path*', '/pqr/:path*', '/admin/:path*', '/auth/:path*', '/login'],
 };

@@ -6,18 +6,23 @@ import {
   ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
 import { addDoc, collection } from 'firebase/firestore';
-import { Download, FileBarChart, Save } from 'lucide-react';
+import { Download, FileBarChart, Printer, Save } from 'lucide-react';
 import { toast } from 'sonner';
 import { firestore } from '@/lib/firebase';
 import { useAuth } from '@/contexts/auth-context';
 import {
-  AssayRecord, CPV_COLLECTIONS, CapabilityResult, CppRecord, CqaRecord,
-  ParticulateRecord, PreservativeRecord, YieldRecord, calculateCapability,
+  CPV_COLLECTIONS, CapabilityResult, CppRecord, CqaRecord, capabilityStatusTone,
 } from '@/lib/cpv';
+import {
+  CapabilityDataSource, CapabilityObservation, buildCapabilityReport,
+  buildHistogram, capabilityIndexChartData, filterObservations,
+  mergeCapabilityObservations, parameterCpkComparison,
+} from '@/lib/cpv-capability-report';
 import { listCpvRecords } from '@/lib/cpv-service';
-import { printPage } from '@/lib/export-utils';
+import { calculateCapability } from '@/lib/cpv';
+import { downloadCsv, printPage } from '@/lib/export-utils';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -25,28 +30,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { DataState, KpiCard, PageHeading, StatusBadge } from '@/components/cpv/cpv-ui';
 
-type CapabilitySource = 'batch' | 'cpp' | 'cqa';
 type ReportPeriod = 'monthly' | 'yearly';
-
-interface Observation {
-  id: string;
-  source: CapabilitySource;
-  product: string;
-  batch: string;
-  date: string;
-  parameter: string;
-  value: number;
-  lsl: number;
-  usl: number;
-  unit: string;
-}
-
-interface ReportRow extends CapabilityResult {
-  parameter: string;
-  product: string;
-  lsl: number;
-  usl: number;
-}
+type SourceFilter = CapabilityDataSource | 'all';
 
 const chartColors = {
   blue: '#2563eb',
@@ -61,11 +46,46 @@ const getDate = (value?: string) => {
   return Number.isNaN(date.getTime()) ? new Date() : date;
 };
 
+function MetricGrid({ result }: { result: CapabilityResult }) {
+  const tone = capabilityStatusTone(result.status);
+  return (
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
+      <KpiCard label="Mean" value={result.mean} />
+      <KpiCard label="Median" value={result.median} />
+      <KpiCard label="Range" value={result.range} />
+      <KpiCard label="Variance" value={result.variance} />
+      <KpiCard label="Standard Deviation" value={result.standardDeviation} />
+      <KpiCard label="Samples (n)" value={result.count} />
+      <KpiCard label="Cp" value={result.cp} />
+      <KpiCard label="Cpk" value={result.cpk} tone={result.cpk >= 1.33 ? 'green' : result.cpk >= 1 ? 'amber' : 'red'} />
+      <KpiCard label="CPU" value={result.cpu} />
+      <KpiCard label="CPL" value={result.cpl} />
+      <KpiCard label="Pp" value={result.pp} />
+      <KpiCard label="Ppk" value={result.ppk} tone={result.ppk >= 1.33 ? 'green' : result.ppk >= 1 ? 'amber' : 'red'} />
+      <KpiCard label="Sigma Level" value={result.sigmaLevel} />
+      <KpiCard label="Capability Status" value={result.status} tone={tone} />
+    </div>
+  );
+}
+
+function exportReportCsv(rows: ReturnType<typeof buildCapabilityReport>['rows'], filename: string) {
+  if (!rows.length) return toast.error('No data to export');
+  const headers = [
+    'Source', 'Product', 'Parameter', 'Samples', 'Mean', 'Median', 'Range', 'Variance',
+    'Std Dev', 'Cp', 'Cpk', 'CPU', 'CPL', 'Pp', 'Ppk', 'Sigma Level', 'LSL', 'USL', 'Status',
+  ];
+  downloadCsv(filename, headers, rows.map((r) => [
+    r.source.toUpperCase(), r.product, r.parameter, r.count, r.mean, r.median, r.range,
+    r.variance, r.standardDeviation, r.cp, r.cpk, r.cpu, r.cpl, r.pp, r.ppk, r.sigmaLevel,
+    r.lsl, r.usl, r.status,
+  ]));
+}
+
 export function CapabilityWorkspace() {
   const { user, profile } = useAuth();
   const [loading, setLoading] = useState(true);
-  const [observations, setObservations] = useState<Observation[]>([]);
-  const [source, setSource] = useState<CapabilitySource>('cpp');
+  const [observations, setObservations] = useState<CapabilityObservation[]>([]);
+  const [source, setSource] = useState<SourceFilter>('all');
   const [parameter, setParameter] = useState('');
   const [product, setProduct] = useState('all');
   const [reportPeriod, setReportPeriod] = useState<ReportPeriod>('monthly');
@@ -75,114 +95,44 @@ export function CapabilityWorkspace() {
   useEffect(() => {
     const load = async () => {
       setLoading(true);
-      const [yieldRecords, cppRecords, cqaRecords, assays, preservatives, particulates] = await Promise.all([
-        listCpvRecords<YieldRecord>(CPV_COLLECTIONS.yield),
+      const [cppRecords, cqaRecords] = await Promise.all([
         listCpvRecords<CppRecord>(CPV_COLLECTIONS.cpp),
         listCpvRecords<CqaRecord>(CPV_COLLECTIONS.cqa),
-        listCpvRecords<AssayRecord>(CPV_COLLECTIONS.cqaAssay),
-        listCpvRecords<PreservativeRecord>(CPV_COLLECTIONS.cqaPreservative),
-        listCpvRecords<ParticulateRecord>(CPV_COLLECTIONS.cqaParticulate),
       ]);
-
-      const batchData: Observation[] = yieldRecords.flatMap((record) => [
-        ['Observed Yield', record.observedValue],
-        ['Bulk Yield', record.bulkYield],
-        ['Filling Yield', record.fillingYield],
-        ['Packing Yield', record.packingYield],
-      ].map(([name, value]) => ({
-        id: `${record.id}-${name}`,
-        source: 'batch' as const,
-        product: record.productName,
-        batch: record.batchNo,
-        date: record.manufacturingDate || record.createdAt || '',
-        parameter: String(name),
-        value: Number(value),
-        lsl: record.lowerLimit,
-        usl: record.upperLimit,
-        unit: '%',
-      })));
-
-      const cppData: Observation[] = cppRecords.map((record) => ({
-        id: record.id || `${record.batchNo}-${record.parameterName}`,
-        source: 'cpp',
-        product: record.productName,
-        batch: record.batchNo,
-        date: record.manufacturingDate || record.createdAt || '',
-        parameter: record.parameterName,
-        value: record.observedValue,
-        lsl: record.lsl,
-        usl: record.usl,
-        unit: record.unit,
-      }));
-
-      const cqaData: Observation[] = [
-        ...cqaRecords.map((record) => ({
-          id: record.id || `${record.batchNo}-${record.testParameter}`,
-          source: 'cqa' as const,
-          product: record.productName,
-          batch: record.batchNo,
-          date: record.createdAt || '',
-          parameter: record.testParameter,
-          value: record.observedValue,
-          lsl: record.lsl,
-          usl: record.usl,
-          unit: record.unit,
-        })),
-        ...assays.map((record) => ({
-          id: record.id || `${record.batchNo}-assay`,
-          source: 'cqa' as const,
-          product: record.productName,
-          batch: record.batchNo,
-          date: record.createdAt || '',
-          parameter: 'Assay',
-          value: record.observedValue,
-          lsl: record.lowerLimit,
-          usl: record.upperLimit,
-          unit: '%',
-        })),
-        ...preservatives.map((record) => ({
-          id: record.id || `${record.batchNo}-preservative`,
-          source: 'cqa' as const,
-          product: record.productName,
-          batch: record.batchNo,
-          date: record.createdAt || '',
-          parameter: 'Preservative Assay',
-          value: record.observedValue,
-          lsl: record.lsl,
-          usl: record.usl,
-          unit: record.unit,
-        })),
-        ...particulates.map((record) => ({
-          id: record.id || `${record.batchNo}-particulate`,
-          source: 'cqa' as const,
-          product: record.productName,
-          batch: record.batchNo,
-          date: record.createdAt || '',
-          parameter: 'Particulate Matter',
-          value: record.observedValue,
-          lsl: 0,
-          usl: record.limit,
-          unit: 'particles',
-        })),
-      ];
-
-      setObservations([...batchData, ...cppData, ...cqaData]);
+      setObservations(mergeCapabilityObservations(cppRecords, cqaRecords));
       setLoading(false);
     };
     void load();
   }, []);
 
-  const sourceRecords = observations.filter((item) => item.source === source);
-  const parameters = Array.from(new Set(sourceRecords.map((item) => item.parameter)));
-  const selectedParameter = parameter && parameters.includes(parameter) ? parameter : parameters[0] || '';
-  const products = Array.from(new Set(sourceRecords.map((item) => item.product)));
-  const selected = sourceRecords
+  const parameters = useMemo(() => {
+    const scoped = filterObservations(observations, { source, product });
+    return Array.from(new Set(scoped.map((item) => item.parameter))).sort();
+  }, [observations, source, product]);
+
+  const products = useMemo(() => {
+    const scoped = filterObservations(observations, { source });
+    return Array.from(new Set(scoped.map((item) => item.product))).sort();
+  }, [observations, source]);
+
+  useEffect(() => {
+    if (!parameter && parameters.length) setParameter(parameters[0]);
+    if (parameter && parameters.length && !parameters.includes(parameter)) setParameter(parameters[0]);
+  }, [parameter, parameters]);
+
+  const selectedParameter = parameter && parameters.includes(parameter)
+    ? parameter
+    : parameters[0] || '';
+
+  const selected = useMemo(() => filterObservations(observations, { source, product })
     .filter((item) => item.parameter === selectedParameter)
-    .filter((item) => product === 'all' || item.product === product)
-    .sort((a, b) => getDate(a.date).getTime() - getDate(b.date).getTime());
-  const lsl = selected[0]?.lsl ?? 0;
-  const usl = selected[0]?.usl ?? 0;
-  const result = calculateCapability(selected.map((item) => item.value), lsl, usl);
+    .sort((a, b) => getDate(a.date).getTime() - getDate(b.date).getTime()),
+  [observations, source, product, selectedParameter]);
+
+  const analysisRecords = selected;
+  const lsl = analysisRecords[0]?.lsl ?? 0;
+  const usl = analysisRecords[0]?.usl ?? 0;
+  const result = calculateCapability(analysisRecords.map((item) => item.value), lsl, usl);
 
   const runChart = selected.map((item, index) => ({
     sample: index + 1,
@@ -191,55 +141,33 @@ export function CapabilityWorkspace() {
     mean: result.mean,
   }));
 
-  const histogram = useMemo(() => {
-    if (!selected.length) return [];
-    const values = selected.map((item) => item.value);
-    const minimum = Math.min(...values);
-    const maximum = Math.max(...values);
-    const binCount = Math.min(10, Math.max(5, Math.ceil(Math.sqrt(values.length))));
-    const width = (maximum - minimum) / binCount || 1;
-    return Array.from({ length: binCount }, (_, index) => {
-      const start = minimum + (index * width);
-      const end = index === binCount - 1 ? maximum + Number.EPSILON : start + width;
-      return {
-        range: `${start.toFixed(2)}-${(end - Number.EPSILON).toFixed(2)}`,
-        count: values.filter((value) => value >= start && value < end).length,
-      };
-    });
-  }, [selected]);
+  const histogram = useMemo(
+    () => buildHistogram(selected.map((item) => item.value)),
+    [selected],
+  );
 
-  const reportRows = useMemo(() => {
-    const scoped = observations.filter((item) => {
-      if (item.source !== source) return false;
-      if (product !== 'all' && item.product !== product) return false;
-      const date = getDate(item.date);
-      if (date.getFullYear() !== reportYear) return false;
-      return reportPeriod === 'yearly' || date.getMonth() + 1 === reportMonth;
-    });
-    const groups = new Map<string, Observation[]>();
-    scoped.forEach((item) => {
-      const key = `${item.product}::${item.parameter}`;
-      groups.set(key, [...(groups.get(key) || []), item]);
-    });
-    return Array.from(groups.entries()).map(([key, records]) => {
-      const [groupProduct, groupParameter] = key.split('::');
-      return {
-        product: groupProduct,
-        parameter: groupParameter,
-        lsl: records[0].lsl,
-        usl: records[0].usl,
-        ...calculateCapability(records.map((item) => item.value), records[0].lsl, records[0].usl),
-      };
-    }) as ReportRow[];
-  }, [observations, product, reportMonth, reportPeriod, reportYear, source]);
+  const indexChart = useMemo(() => capabilityIndexChartData(result), [result]);
+
+  const report = useMemo(
+    () => buildCapabilityReport(observations, {
+      period: reportPeriod,
+      year: reportYear,
+      month: reportPeriod === 'monthly' ? reportMonth : null,
+      source,
+      product,
+    }),
+    [observations, reportPeriod, reportYear, reportMonth, source, product],
+  );
+
+  const cpkComparison = useMemo(() => parameterCpkComparison(report.rows), [report.rows]);
 
   const saveAnalysis = async () => {
-    if (result.status === 'Insufficient Data') return toast.error('At least two batch observations are required');
+    if (result.status === 'Insufficient Data') return toast.error('At least two observations are required');
     await addDoc(collection(firestore, CPV_COLLECTIONS.capability), {
       recordType: 'analysis',
       source,
       product,
-      parameter: selectedParameter,
+      parameter: selectedParameter || parameter,
       lsl,
       usl,
       ...result,
@@ -251,14 +179,15 @@ export function CapabilityWorkspace() {
   };
 
   const saveReport = async () => {
-    if (!reportRows.length) return toast.error('No capability data is available for this report period');
+    if (!report.rows.length) return toast.error('No capability data for this report period');
     await addDoc(collection(firestore, CPV_COLLECTIONS.capability), {
       recordType: `${reportPeriod}_report`,
       source,
       product,
       reportYear,
       reportMonth: reportPeriod === 'monthly' ? reportMonth : null,
-      rows: reportRows,
+      summary: report.summary,
+      rows: report.rows,
       createdAt: new Date().toISOString(),
       createdBy: user?.uid || 'system',
       createdByName: profile?.full_name || 'System',
@@ -266,66 +195,359 @@ export function CapabilityWorkspace() {
     toast.success(`${reportPeriod === 'monthly' ? 'Monthly' : 'Yearly'} capability report saved`);
   };
 
-  return <div className="space-y-6">
-    <PageHeading
-      title="Pharmaceutical Process Capability"
-      description="Capability evaluation across batch yield, critical process parameters, and critical quality attributes using within-process and overall variation."
-      actions={<Button onClick={saveAnalysis} disabled={result.status === 'Insufficient Data'}><Save className="mr-2 h-4 w-4" />Save Analysis</Button>}
-    />
+  const analysisLabel = selectedParameter || 'Select parameter';
 
-    <Tabs defaultValue="analysis" className="space-y-5">
-      <TabsList className="grid h-auto w-full grid-cols-2">
-        <TabsTrigger value="analysis">Capability Analysis</TabsTrigger>
-        <TabsTrigger value="reports">Monthly / Yearly Reports</TabsTrigger>
-      </TabsList>
+  const onSourceChange = (v: SourceFilter) => {
+    setSource(v);
+    setParameter('');
+  };
 
-      <TabsContent value="analysis" className="space-y-5">
-        <Card><CardContent className="grid gap-4 p-5 sm:grid-cols-2 lg:grid-cols-4">
-          <div><Label>Input Data</Label><Select value={source} onValueChange={(value: CapabilitySource) => { setSource(value); setParameter(''); setProduct('all'); }}><SelectTrigger className="mt-2"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="batch">Batch Data</SelectItem><SelectItem value="cpp">CPP Data</SelectItem><SelectItem value="cqa">CQA Data</SelectItem></SelectContent></Select></div>
-          <div><Label>Product</Label><Select value={product} onValueChange={setProduct}><SelectTrigger className="mt-2"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All Products</SelectItem>{products.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent></Select></div>
-          <div><Label>Parameter</Label><Select value={selectedParameter} onValueChange={setParameter}><SelectTrigger className="mt-2"><SelectValue placeholder="Select parameter" /></SelectTrigger><SelectContent>{parameters.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent></Select></div>
-          <div><Label>Capability Status</Label><div className="mt-3"><StatusBadge status={result.status} /></div></div>
-        </CardContent></Card>
+  return (
+    <div className="space-y-6">
+      <PageHeading
+        title="Process Capability"
+        description="Statistical process capability from CPP and CQA data — Mean, Median, Range, Variance, Cp, Cpk, CPU, CPL, Pp, Ppk, Sigma Level, and capability status (Excellent / Acceptable / Needs Improvement)."
+        actions={(
+          <Button onClick={saveAnalysis} disabled={result.status === 'Insufficient Data'}>
+            <Save className="mr-2 h-4 w-4" />Save Analysis
+          </Button>
+        )}
+      />
 
-        <DataState loading={loading} empty={!selected.length} emptyText="Record batch, CPP, or CQA observations to calculate process capability." />
-        {!loading && selected.length > 0 && <>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <KpiCard label="Mean" value={result.mean} />
-            <KpiCard label="Median" value={result.median} />
-            <KpiCard label="Range" value={result.range} />
-            <KpiCard label="Variance" value={result.variance} />
-            <KpiCard label="Standard Deviation" value={result.standardDeviation} />
-            <KpiCard label="Cp" value={result.cp} />
-            <KpiCard label="Cpk" value={result.cpk} tone={result.cpk > 1.33 ? 'green' : result.cpk >= 1 ? 'amber' : 'red'} />
-            <KpiCard label="Pp" value={result.pp} />
-            <KpiCard label="Ppk" value={result.ppk} tone={result.ppk > 1.33 ? 'green' : result.ppk >= 1 ? 'amber' : 'red'} />
-            <KpiCard label="Sigma Level" value={result.sigmaLevel} />
-            <KpiCard label="Samples" value={result.count} />
-            <KpiCard label="Status" value={result.status} tone={result.status === 'Excellent' ? 'green' : result.status === 'Acceptable' ? 'amber' : 'red'} />
-          </div>
+      <Tabs defaultValue="analysis" className="space-y-5">
+        <TabsList className="grid h-auto w-full grid-cols-2 gap-1 p-1 lg:grid-cols-3">
+          <TabsTrigger value="analysis">Capability Analysis</TabsTrigger>
+          <TabsTrigger value="charts">Capability Charts</TabsTrigger>
+          <TabsTrigger value="report">Capability Report</TabsTrigger>
+        </TabsList>
 
-          <div className="grid gap-6 xl:grid-cols-2">
-            <Card><CardHeader><CardTitle>{selectedParameter} Capability Run Chart</CardTitle></CardHeader><CardContent className="h-[380px]"><ResponsiveContainer width="100%" height="100%"><LineChart data={runChart}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="batch" /><YAxis domain={['auto', 'auto']} /><Tooltip /><Legend /><ReferenceLine y={lsl} stroke={chartColors.red} strokeDasharray="5 5" label="LSL" /><ReferenceLine y={usl} stroke={chartColors.red} strokeDasharray="5 5" label="USL" /><ReferenceLine y={result.mean} stroke={chartColors.green} label="Mean" /><Line type="monotone" dataKey="value" name="Observed" stroke={chartColors.blue} strokeWidth={2} /></LineChart></ResponsiveContainer></CardContent></Card>
-            <Card><CardHeader><CardTitle>Capability Distribution</CardTitle></CardHeader><CardContent className="h-[380px]"><ResponsiveContainer width="100%" height="100%"><BarChart data={histogram}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="range" angle={-25} textAnchor="end" height={70} /><YAxis allowDecimals={false} /><Tooltip /><Bar dataKey="count" name="Frequency">{histogram.map((_, index) => <Cell key={index} fill={index % 2 ? chartColors.violet : chartColors.blue} />)}</Bar></BarChart></ResponsiveContainer></CardContent></Card>
-          </div>
-        </>}
-      </TabsContent>
+        {/* ── Analysis ── */}
+        <TabsContent value="analysis" className="space-y-5">
+          <Card>
+            <CardContent className="grid gap-4 p-5 sm:grid-cols-2 lg:grid-cols-4">
+              <div>
+                <Label>Input Data</Label>
+                <Select value={source} onValueChange={onSourceChange}>
+                  <SelectTrigger className="mt-2"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">CPP + CQA</SelectItem>
+                    <SelectItem value="cpp">CPP Data</SelectItem>
+                    <SelectItem value="cqa">CQA Data</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Product</Label>
+                <Select value={product} onValueChange={setProduct}>
+                  <SelectTrigger className="mt-2"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Products</SelectItem>
+                    {products.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Parameter</Label>
+                <Select value={selectedParameter} onValueChange={setParameter} disabled={!parameters.length}>
+                  <SelectTrigger className="mt-2"><SelectValue placeholder="Select parameter" /></SelectTrigger>
+                  <SelectContent>
+                    {parameters.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Specification</Label>
+                <p className="mt-3 font-mono text-sm">{analysisRecords.length ? `${lsl} – ${usl} ${analysisRecords[0]?.unit || ''}` : '—'}</p>
+                <div className="mt-2"><StatusBadge status={result.status} /></div>
+              </div>
+            </CardContent>
+          </Card>
 
-      <TabsContent value="reports" className="space-y-5">
-        <Card className="no-print"><CardContent className="grid gap-4 p-5 sm:grid-cols-2 lg:grid-cols-5">
-          <div><Label>Report Type</Label><Select value={reportPeriod} onValueChange={(value: ReportPeriod) => setReportPeriod(value)}><SelectTrigger className="mt-2"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="monthly">Monthly Report</SelectItem><SelectItem value="yearly">Yearly Report</SelectItem></SelectContent></Select></div>
-          <div><Label>Year</Label><Input className="mt-2" type="number" min="2000" max={new Date().getFullYear()} value={reportYear} onChange={(event) => setReportYear(Number(event.target.value))} /></div>
-          <div><Label>Month</Label><Select value={String(reportMonth)} onValueChange={(value) => setReportMonth(Number(value))} disabled={reportPeriod === 'yearly'}><SelectTrigger className="mt-2"><SelectValue /></SelectTrigger><SelectContent>{Array.from({ length: 12 }, (_, index) => <SelectItem key={index + 1} value={String(index + 1)}>{new Date(2000, index).toLocaleString('en-US', { month: 'long' })}</SelectItem>)}</SelectContent></Select></div>
-          <Button className="self-end" onClick={saveReport}><FileBarChart className="mr-2 h-4 w-4" />Generate Report</Button>
-          <Button className="self-end" variant="outline" onClick={printPage}><Download className="mr-2 h-4 w-4" />Export PDF</Button>
-        </CardContent></Card>
+          <DataState
+            loading={loading}
+            empty={!analysisRecords.length}
+            emptyText="Record CPP or CQA observations (minimum 2 per parameter) to calculate process capability."
+          />
 
-        <section className="space-y-5 bg-white print:p-4 dark:bg-transparent">
-          <div className="border-b pb-4"><p className="text-sm font-semibold text-blue-700">SKYMAP PHARMACEUTICALS</p><h2 className="mt-1 text-2xl font-bold">{reportPeriod === 'monthly' ? 'Monthly' : 'Yearly'} Process Capability Report</h2><p className="mt-1 text-sm text-muted-foreground">{reportPeriod === 'monthly' ? `${new Date(2000, reportMonth - 1).toLocaleString('en-US', { month: 'long' })} ` : ''}{reportYear} | {source.toUpperCase()} Data | {product === 'all' ? 'All Products' : product}</p></div>
-          <DataState loading={loading} empty={!reportRows.length} emptyText="No repeated observations are available for the selected reporting period." />
-          {!loading && reportRows.length > 0 && <Card><CardContent className="p-0"><div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Product</TableHead><TableHead>Parameter</TableHead><TableHead>Samples</TableHead><TableHead>Mean</TableHead><TableHead>Std Dev</TableHead><TableHead>Cp</TableHead><TableHead>Cpk</TableHead><TableHead>Pp</TableHead><TableHead>Ppk</TableHead><TableHead>Sigma</TableHead><TableHead>Status</TableHead></TableRow></TableHeader><TableBody>{reportRows.map((row) => <TableRow key={`${row.product}-${row.parameter}`}><TableCell>{row.product}</TableCell><TableCell>{row.parameter}</TableCell><TableCell>{row.count}</TableCell><TableCell>{row.mean}</TableCell><TableCell>{row.standardDeviation}</TableCell><TableCell>{row.cp}</TableCell><TableCell>{row.cpk}</TableCell><TableCell>{row.pp}</TableCell><TableCell>{row.ppk}</TableCell><TableCell>{row.sigmaLevel}</TableCell><TableCell><StatusBadge status={row.status} /></TableCell></TableRow>)}</TableBody></Table></div></CardContent></Card>}
-        </section>
-      </TabsContent>
-    </Tabs>
-  </div>;
+          {!loading && analysisRecords.length > 0 && (
+            <>
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">{analysisLabel} — Statistical Summary</CardTitle>
+                  <CardDescription>
+                    Cpk ≥ 1.33 = Excellent · Cpk ≥ 1.0 = Acceptable · Cpk &lt; 1.0 = Needs Improvement
+                  </CardDescription>
+                </CardHeader>
+                <CardContent><MetricGrid result={result} /></CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader><CardTitle>Observation Register</CardTitle></CardHeader>
+                <CardContent className="p-0">
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Source</TableHead>
+                          <TableHead>Product / Batch</TableHead>
+                          <TableHead>Parameter</TableHead>
+                          <TableHead>Date</TableHead>
+                          <TableHead className="text-right">Observed</TableHead>
+                          <TableHead>Spec (LSL – USL)</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {analysisRecords.map((item) => (
+                          <TableRow key={item.id}>
+                            <TableCell className="uppercase text-xs font-medium">{item.source}</TableCell>
+                            <TableCell>
+                              <p className="font-medium">{item.product}</p>
+                              <p className="text-xs font-mono text-muted-foreground">{item.batch}</p>
+                            </TableCell>
+                            <TableCell>{item.parameter}</TableCell>
+                            <TableCell className="text-sm">{item.date?.split('T')[0] || '—'}</TableCell>
+                            <TableCell className="text-right font-mono">{item.value} {item.unit}</TableCell>
+                            <TableCell className="text-sm">{item.lsl} – {item.usl}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </CardContent>
+              </Card>
+            </>
+          )}
+        </TabsContent>
+
+        {/* ── Charts ── */}
+        <TabsContent value="charts" className="space-y-5">
+          <DataState loading={loading} empty={!selected.length} emptyText="Select a specific parameter with at least 2 observations to view charts." />
+
+          {!loading && selected.length >= 2 && (
+            <>
+              <div className="grid gap-6 xl:grid-cols-2">
+                <Card>
+                  <CardHeader><CardTitle>{selectedParameter} Run Chart</CardTitle></CardHeader>
+                  <CardContent className="h-[380px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={runChart}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="batch" tick={{ fontSize: 11 }} />
+                        <YAxis domain={['auto', 'auto']} />
+                        <Tooltip />
+                        <Legend />
+                        <ReferenceLine y={lsl} stroke={chartColors.red} strokeDasharray="5 5" label="LSL" />
+                        <ReferenceLine y={usl} stroke={chartColors.red} strokeDasharray="5 5" label="USL" />
+                        <ReferenceLine y={result.mean} stroke={chartColors.green} label="Mean" />
+                        <Line type="monotone" dataKey="value" name="Observed" stroke={chartColors.blue} strokeWidth={2} dot={{ r: 4 }} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader><CardTitle>Distribution Histogram</CardTitle></CardHeader>
+                  <CardContent className="h-[380px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={histogram}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="range" angle={-25} textAnchor="end" height={70} tick={{ fontSize: 10 }} />
+                        <YAxis allowDecimals={false} />
+                        <Tooltip />
+                        <Bar dataKey="count" name="Frequency">
+                          {histogram.map((_, index) => (
+                            <Cell key={index} fill={index % 2 ? chartColors.violet : chartColors.blue} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+              </div>
+
+              <div className="grid gap-6 xl:grid-cols-2">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Capability Indices</CardTitle>
+                    <CardDescription>Cp, Cpk, CPU, CPL, Pp, Ppk vs target 1.33</CardDescription>
+                  </CardHeader>
+                  <CardContent className="h-[360px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={indexChart} layout="vertical" margin={{ left: 20 }}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis type="number" domain={[0, 'auto']} />
+                        <YAxis type="category" dataKey="index" width={50} />
+                        <Tooltip />
+                        <ReferenceLine x={1.33} stroke={chartColors.green} strokeDasharray="4 4" label="1.33" />
+                        <ReferenceLine x={1} stroke={chartColors.amber} strokeDasharray="4 4" label="1.0" />
+                        <Bar dataKey="value" name="Index" fill={chartColors.blue} radius={[0, 4, 4, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Cpk / Ppk Comparison</CardTitle>
+                    <CardDescription>Report period parameters with sufficient data</CardDescription>
+                  </CardHeader>
+                  <CardContent className="h-[360px]">
+                    {!cpkComparison.length ? (
+                      <DataState loading={false} empty emptyText="Generate a report period with repeated observations." />
+                    ) : (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={cpkComparison} margin={{ bottom: 60 }}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="label" angle={-30} textAnchor="end" height={80} tick={{ fontSize: 10 }} />
+                          <YAxis domain={[0, 'auto']} />
+                          <Tooltip />
+                          <Legend />
+                          <ReferenceLine y={1.33} stroke={chartColors.green} strokeDasharray="4 4" />
+                          <ReferenceLine y={1} stroke={chartColors.amber} strokeDasharray="4 4" />
+                          <Bar dataKey="cpk" name="Cpk" fill={chartColors.blue} />
+                          <Bar dataKey="ppk" name="Ppk" fill={chartColors.violet} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            </>
+          )}
+        </TabsContent>
+
+        {/* ── Report ── */}
+        <TabsContent value="report" className="space-y-5">
+          <Card className="no-print">
+            <CardContent className="grid gap-4 p-5 sm:grid-cols-2 lg:grid-cols-6">
+              <div>
+                <Label>Report Type</Label>
+                <Select value={reportPeriod} onValueChange={(v: ReportPeriod) => setReportPeriod(v)}>
+                  <SelectTrigger className="mt-2"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="monthly">Monthly Report</SelectItem>
+                    <SelectItem value="yearly">Yearly Report</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Data Source</Label>
+                <Select value={source} onValueChange={(v: SourceFilter) => setSource(v)}>
+                  <SelectTrigger className="mt-2"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">CPP + CQA</SelectItem>
+                    <SelectItem value="cpp">CPP Only</SelectItem>
+                    <SelectItem value="cqa">CQA Only</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Year</Label>
+                <Input className="mt-2" type="number" min="2000" max={new Date().getFullYear()} value={reportYear} onChange={(e) => setReportYear(Number(e.target.value))} />
+              </div>
+              <div>
+                <Label>Month</Label>
+                <Select value={String(reportMonth)} onValueChange={(v) => setReportMonth(Number(v))} disabled={reportPeriod === 'yearly'}>
+                  <SelectTrigger className="mt-2"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {Array.from({ length: 12 }, (_, i) => (
+                      <SelectItem key={i + 1} value={String(i + 1)}>
+                        {new Date(2000, i).toLocaleString('en-US', { month: 'long' })}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button className="self-end" onClick={saveReport}>
+                <FileBarChart className="mr-2 h-4 w-4" />Save Report
+              </Button>
+              <Button className="self-end" variant="outline" onClick={() => printPage()}>
+                <Printer className="mr-2 h-4 w-4" />Print
+              </Button>
+              <Button className="self-end" variant="outline" onClick={() => exportReportCsv(report.rows, `capability-report-${reportYear}.csv`)}>
+                <Download className="mr-2 h-4 w-4" />Export CSV
+              </Button>
+            </CardContent>
+          </Card>
+
+          <section id="capability-report" className="space-y-5 bg-white print:p-4 dark:bg-transparent">
+            <div className="border-b pb-4">
+              <p className="text-sm font-semibold text-blue-700">SKYMAP PHARMACEUTICALS</p>
+              <h2 className="mt-1 text-2xl font-bold">Process Capability Report</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {reportPeriod === 'monthly'
+                  ? `${new Date(2000, reportMonth - 1).toLocaleString('en-US', { month: 'long' })} `
+                  : ''}
+                {reportYear} · {source === 'all' ? 'CPP + CQA' : source.toUpperCase()} · {product === 'all' ? 'All Products' : product}
+              </p>
+            </div>
+
+            <div className="grid gap-3 grid-cols-2 lg:grid-cols-6">
+              <KpiCard label="Parameters" value={report.summary.total} />
+              <KpiCard label="Excellent" value={report.summary.excellent} tone="green" />
+              <KpiCard label="Acceptable" value={report.summary.acceptable} tone="amber" />
+              <KpiCard label="Needs Improvement" value={report.summary.needsImprovement} tone="red" />
+              <KpiCard label="Avg Cpk" value={report.summary.averageCpk.toFixed(2)} tone={report.summary.averageCpk >= 1.33 ? 'green' : report.summary.averageCpk >= 1 ? 'amber' : 'red'} />
+              <KpiCard label="Avg Ppk" value={report.summary.averagePpk.toFixed(2)} />
+            </div>
+
+            <DataState loading={loading} empty={!report.rows.length} emptyText="No repeated CPP/CQA observations for the selected reporting period." />
+
+            {!loading && report.rows.length > 0 && (
+              <Card>
+                <CardContent className="p-0">
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Source</TableHead>
+                          <TableHead>Product</TableHead>
+                          <TableHead>Parameter</TableHead>
+                          <TableHead>n</TableHead>
+                          <TableHead>Mean</TableHead>
+                          <TableHead>Median</TableHead>
+                          <TableHead>Range</TableHead>
+                          <TableHead>Std Dev</TableHead>
+                          <TableHead>Cp</TableHead>
+                          <TableHead>Cpk</TableHead>
+                          <TableHead>CPU</TableHead>
+                          <TableHead>CPL</TableHead>
+                          <TableHead>Pp</TableHead>
+                          <TableHead>Ppk</TableHead>
+                          <TableHead>Sigma</TableHead>
+                          <TableHead>Status</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {report.rows.map((row) => (
+                          <TableRow key={`${row.source}-${row.product}-${row.parameter}`}>
+                            <TableCell className="uppercase text-xs">{row.source}</TableCell>
+                            <TableCell>{row.product}</TableCell>
+                            <TableCell>{row.parameter}</TableCell>
+                            <TableCell>{row.count}</TableCell>
+                            <TableCell>{row.mean}</TableCell>
+                            <TableCell>{row.median}</TableCell>
+                            <TableCell>{row.range}</TableCell>
+                            <TableCell>{row.standardDeviation}</TableCell>
+                            <TableCell>{row.cp}</TableCell>
+                            <TableCell>{row.cpk}</TableCell>
+                            <TableCell>{row.cpu}</TableCell>
+                            <TableCell>{row.cpl}</TableCell>
+                            <TableCell>{row.pp}</TableCell>
+                            <TableCell>{row.ppk}</TableCell>
+                            <TableCell>{row.sigmaLevel}</TableCell>
+                            <TableCell><StatusBadge status={row.status} /></TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </section>
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
 }

@@ -2,63 +2,26 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
-  CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
+  CartesianGrid, Legend, Line, LineChart, ReferenceLine,
+  ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
-import { Download } from 'lucide-react';
+import { Printer, RotateCcw } from 'lucide-react';
+import Link from 'next/link';
 import {
-  AssayRecord, CPV_COLLECTIONS, ParticulateRecord, PhysicalRecord,
-  PreservativeRecord, SterilityRecord, YieldRecord,
+  CPV_COLLECTIONS, CppRecord, CqaRecord, YieldRecord,
 } from '@/lib/cpv';
+import {
+  TREND_METRICS, TrendChartPoint, TrendMetric, buildTrendChartData,
+  mergeTrendObservations, trendFilterOptions, trendSummary,
+} from '@/lib/cpv-trend-analysis';
 import { listCpvRecords } from '@/lib/cpv-service';
 import { printPage } from '@/lib/export-utils';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { DataState, KpiCard, PageHeading } from '@/components/cpv/cpv-ui';
-
-type Metric =
-  | 'Assay'
-  | 'pH'
-  | 'Extractable Volume'
-  | 'Yield'
-  | 'Particulate Matter'
-  | 'Methyl Paraben'
-  | 'Propyl Paraben'
-  | 'Sterility';
-
-interface TrendObservation {
-  id: string;
-  metric: Metric;
-  product: string;
-  batch: string;
-  date: string;
-  observed: number;
-  lower?: number;
-  upper?: number;
-  unit: string;
-}
-
-interface ChartPoint extends TrendObservation {
-  label: string;
-  mean: number;
-  trendLine: number;
-  movingAverage: number;
-  lowerLimit: number;
-  upperLimit: number;
-}
-
-const metrics: Metric[] = [
-  'Assay',
-  'pH',
-  'Extractable Volume',
-  'Yield',
-  'Particulate Matter',
-  'Methyl Paraben',
-  'Propyl Paraben',
-  'Sterility',
-];
 
 const colors = {
   observed: '#2563eb',
@@ -69,217 +32,197 @@ const colors = {
   moving: '#d97706',
 };
 
-const safeDate = (value: string) => {
-  const parsed = value ? new Date(value) : new Date();
-  return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
-};
+function TrendChart({ metric, data }: { metric: TrendMetric; data: TrendChartPoint[] }) {
+  const unit = data[0]?.unit || '';
+  const latest = data[data.length - 1];
 
-const round = (value: number) => Number(value.toFixed(3));
-
-function enrichTrend(records: TrendObservation[]): ChartPoint[] {
-  if (!records.length) return [];
-  const sorted = records.slice().sort((a, b) => safeDate(a.date).getTime() - safeDate(b.date).getTime());
-  const values = sorted.map((item) => item.observed);
-  const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
-  const variance = values.length > 1
-    ? values.reduce((sum, value) => sum + ((value - mean) ** 2), 0) / (values.length - 1)
-    : 0;
-  const sigma = Math.sqrt(variance);
-  const calculatedLower = mean - (3 * sigma);
-  const calculatedUpper = mean + (3 * sigma);
-  const n = values.length;
-  const sumX = values.reduce((sum, _, index) => sum + index, 0);
-  const sumY = values.reduce((sum, value) => sum + value, 0);
-  const sumXY = values.reduce((sum, value, index) => sum + (index * value), 0);
-  const sumXX = values.reduce((sum, _, index) => sum + (index * index), 0);
-  const denominator = (n * sumXX) - (sumX ** 2);
-  const slope = denominator ? ((n * sumXY) - (sumX * sumY)) / denominator : 0;
-  const intercept = (sumY - (slope * sumX)) / n;
-
-  return sorted.map((item, index) => {
-    const window = values.slice(Math.max(0, index - 2), index + 1);
-    const movingAverage = window.reduce((sum, value) => sum + value, 0) / window.length;
-    return {
-      ...item,
-      label: item.batch,
-      mean: round(mean),
-      trendLine: round(intercept + (slope * index)),
-      movingAverage: round(movingAverage),
-      lowerLimit: round(item.lower ?? calculatedLower),
-      upperLimit: round(item.upper ?? calculatedUpper),
-    };
-  });
+  return (
+    <Card className="break-inside-avoid shadow-sm">
+      <CardHeader className="border-b bg-slate-50/70 py-4 dark:bg-slate-900/30">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <CardTitle className="text-base">{metric} Trend</CardTitle>
+            <CardDescription className="mt-0.5">
+              {data.length} batch{data.length !== 1 ? 'es' : ''}
+              {unit ? ` · ${unit}` : ''}
+              {latest ? ` · Mean ${latest.mean}` : ''}
+            </CardDescription>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="h-[380px] pt-5">
+        {!data.length ? (
+          <DataState loading={false} empty emptyText={`No ${metric} records match the selected filters.`} />
+        ) : (
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={data} margin={{ top: 10, right: 25, left: 5, bottom: 30 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#cbd5e1" opacity={0.65} />
+              <XAxis dataKey="label" angle={-30} textAnchor="end" height={55} tick={{ fontSize: 11 }} />
+              <YAxis domain={['auto', 'auto']} tick={{ fontSize: 11 }} />
+              <Tooltip
+                formatter={(value: number, name: string) => [
+                  `${value}${unit && name === 'Observed Value' ? ` ${unit}` : ''}`,
+                  name,
+                ]}
+              />
+              <Legend verticalAlign="top" height={36} />
+              {latest && (
+                <>
+                  <ReferenceLine y={latest.lowerLimit} stroke={colors.lower} strokeDasharray="6 4" label="LSL" />
+                  <ReferenceLine y={latest.upperLimit} stroke={colors.upper} strokeDasharray="6 4" label="USL" />
+                </>
+              )}
+              <Line type="monotone" dataKey="observed" name="Observed Value" stroke={colors.observed} strokeWidth={2.5} dot={{ r: 4 }} connectNulls />
+              <Line type="stepAfter" dataKey="upperLimit" name="Upper Limit" stroke={colors.upper} strokeWidth={1.5} strokeDasharray="6 4" dot={false} connectNulls />
+              <Line type="stepAfter" dataKey="lowerLimit" name="Lower Limit" stroke={colors.lower} strokeWidth={1.5} strokeDasharray="6 4" dot={false} connectNulls />
+              <Line type="monotone" dataKey="mean" name="Mean" stroke={colors.mean} strokeWidth={1.5} dot={false} connectNulls />
+              <Line type="linear" dataKey="trendLine" name="Trend Line" stroke={colors.trend} strokeWidth={2} dot={false} connectNulls />
+              <Line type="monotone" dataKey="movingAverage" name="Moving Average" stroke={colors.moving} strokeWidth={2} dot={false} connectNulls />
+            </LineChart>
+          </ResponsiveContainer>
+        )}
+      </CardContent>
+    </Card>
+  );
 }
 
-function PqrTrendChart({ metric, data }: { metric: Metric; data: ChartPoint[] }) {
-  const unit = data[0]?.unit || '';
-  return <Card className="break-inside-avoid shadow-sm">
-    <CardHeader className="border-b bg-slate-50/70 py-4 dark:bg-slate-900/30">
-      <div className="flex items-center justify-between gap-3">
-        <CardTitle className="text-base">{metric} Trend</CardTitle>
-        <span className="text-xs text-muted-foreground">{data.length} records {unit ? `| ${unit}` : ''}</span>
-      </div>
-    </CardHeader>
-    <CardContent className="h-[370px] pt-5">
-      {!data.length ? <DataState loading={false} empty emptyText={`No ${metric} records match the selected filters.`} /> :
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data} margin={{ top: 10, right: 25, left: 5, bottom: 30 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#cbd5e1" opacity={0.65} />
-            <XAxis dataKey="label" angle={-30} textAnchor="end" height={55} tick={{ fontSize: 11 }} />
-            <YAxis domain={['auto', 'auto']} tick={{ fontSize: 11 }} />
-            <Tooltip formatter={(value: number, name: string) => [`${value}${unit ? ` ${unit}` : ''}`, name]} />
-            <Legend verticalAlign="top" height={34} />
-            <Line type="monotone" dataKey="observed" name="Observed Value" stroke={colors.observed} strokeWidth={2.5} dot={{ r: 4 }} />
-            <Line type="stepAfter" dataKey="upperLimit" name="Upper Limit" stroke={colors.upper} strokeWidth={1.5} strokeDasharray="6 4" dot={false} />
-            <Line type="stepAfter" dataKey="lowerLimit" name="Lower Limit" stroke={colors.lower} strokeWidth={1.5} strokeDasharray="6 4" dot={false} />
-            <Line type="monotone" dataKey="mean" name="Mean" stroke={colors.mean} strokeWidth={1.5} dot={false} />
-            <Line type="linear" dataKey="trendLine" name="Trend Line" stroke={colors.trend} strokeWidth={2} dot={false} />
-            <Line type="monotone" dataKey="movingAverage" name="Moving Average" stroke={colors.moving} strokeWidth={2} dot={false} />
-          </LineChart>
-        </ResponsiveContainer>}
-    </CardContent>
-  </Card>;
+function FilterBar({
+  product, batch, year, month, quarter,
+  products, batches, years,
+  onProduct, onBatch, onYear, onMonth, onQuarter, onReset,
+}: {
+  product: string;
+  batch: string;
+  year: string;
+  month: string;
+  quarter: string;
+  products: string[];
+  batches: string[];
+  years: number[];
+  onProduct: (v: string) => void;
+  onBatch: (v: string) => void;
+  onYear: (v: string) => void;
+  onMonth: (v: string) => void;
+  onQuarter: (v: string) => void;
+  onReset: () => void;
+}) {
+  return (
+    <Card className="no-print">
+      <CardContent className="grid gap-4 p-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+        <div>
+          <Label>Product</Label>
+          <Select value={product} onValueChange={(v) => { onProduct(v); onBatch('all'); }}>
+            <SelectTrigger className="mt-2"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Products</SelectItem>
+              {products.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <Label>Batch</Label>
+          <Select value={batch} onValueChange={onBatch}>
+            <SelectTrigger className="mt-2"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Batches</SelectItem>
+              {batches.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <Label>Year</Label>
+          <Select value={year} onValueChange={onYear}>
+            <SelectTrigger className="mt-2"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Years</SelectItem>
+              {years.map((item) => <SelectItem key={item} value={String(item)}>{item}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <Label>Month</Label>
+          <Select value={month} onValueChange={onMonth}>
+            <SelectTrigger className="mt-2"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Months</SelectItem>
+              {Array.from({ length: 12 }, (_, i) => {
+                const val = String(i + 1).padStart(2, '0');
+                return (
+                  <SelectItem key={val} value={val}>
+                    {new Date(2000, i).toLocaleString('en-US', { month: 'long' })}
+                  </SelectItem>
+                );
+              })}
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <Label>Quarter</Label>
+          <Select value={quarter} onValueChange={onQuarter}>
+            <SelectTrigger className="mt-2"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Quarters</SelectItem>
+              {[1, 2, 3, 4].map((item) => <SelectItem key={item} value={String(item)}>Q{item}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <Button variant="outline" className="self-end" onClick={onReset}>
+          <RotateCcw className="mr-2 h-4 w-4" />Reset
+        </Button>
+      </CardContent>
+    </Card>
+  );
 }
 
 export function TrendWorkspace() {
   const [loading, setLoading] = useState(true);
-  const [observations, setObservations] = useState<TrendObservation[]>([]);
+  const [observations, setObservations] = useState<ReturnType<typeof mergeTrendObservations>>([]);
   const [product, setProduct] = useState('all');
   const [batch, setBatch] = useState('all');
   const [year, setYear] = useState('all');
   const [month, setMonth] = useState('all');
   const [quarter, setQuarter] = useState('all');
+  const [activeMetric, setActiveMetric] = useState<TrendMetric>('Assay');
 
   useEffect(() => {
     const load = async () => {
       setLoading(true);
-      const [assays, physical, yields, particulate, preservatives, sterility] = await Promise.all([
-        listCpvRecords<AssayRecord>(CPV_COLLECTIONS.cqaAssay),
-        listCpvRecords<PhysicalRecord>(CPV_COLLECTIONS.cqaPhysical),
+      const [yields, cpp, cqa] = await Promise.all([
         listCpvRecords<YieldRecord>(CPV_COLLECTIONS.yield),
-        listCpvRecords<ParticulateRecord>(CPV_COLLECTIONS.cqaParticulate),
-        listCpvRecords<PreservativeRecord>(CPV_COLLECTIONS.cqaPreservative),
-        listCpvRecords<SterilityRecord>(CPV_COLLECTIONS.cqaSterility),
+        listCpvRecords<CppRecord>(CPV_COLLECTIONS.cpp),
+        listCpvRecords<CqaRecord>(CPV_COLLECTIONS.cqa),
       ]);
-
-      const normalized: TrendObservation[] = [
-        ...assays.map((item) => ({
-          id: item.id || `${item.batchNo}-assay`,
-          metric: 'Assay' as const,
-          product: item.productName,
-          batch: item.batchNo,
-          date: item.createdAt || '',
-          observed: item.observedValue,
-          lower: item.lowerLimit,
-          upper: item.upperLimit,
-          unit: '%',
-        })),
-        ...physical.flatMap((item) => [
-          {
-            id: `${item.id}-ph`,
-            metric: 'pH' as const,
-            product: item.productName,
-            batch: item.batchNo,
-            date: item.testDate || item.createdAt || '',
-            observed: item.ph,
-            unit: 'pH',
-          },
-          {
-            id: `${item.id}-volume`,
-            metric: 'Extractable Volume' as const,
-            product: item.productName,
-            batch: item.batchNo,
-            date: item.testDate || item.createdAt || '',
-            observed: item.extractableVolume,
-            unit: 'mL',
-          },
-        ]),
-        ...yields.map((item) => ({
-          id: item.id || `${item.batchNo}-yield`,
-          metric: 'Yield' as const,
-          product: item.productName,
-          batch: item.batchNo,
-          date: item.manufacturingDate || item.createdAt || '',
-          observed: item.observedValue,
-          lower: item.lowerLimit,
-          upper: item.upperLimit,
-          unit: '%',
-        })),
-        ...particulate.map((item) => ({
-          id: item.id || `${item.batchNo}-particulate`,
-          metric: 'Particulate Matter' as const,
-          product: item.productName,
-          batch: item.batchNo,
-          date: item.createdAt || '',
-          observed: item.observedValue,
-          lower: 0,
-          upper: item.limit,
-          unit: 'particles',
-        })),
-        ...preservatives.flatMap((item) => [
-          {
-            id: `${item.id}-methyl`,
-            metric: 'Methyl Paraben' as const,
-            product: item.productName,
-            batch: item.batchNo,
-            date: item.createdAt || '',
-            observed: item.methylParaben,
-            lower: item.lsl,
-            upper: item.usl,
-            unit: item.unit,
-          },
-          {
-            id: `${item.id}-propyl`,
-            metric: 'Propyl Paraben' as const,
-            product: item.productName,
-            batch: item.batchNo,
-            date: item.createdAt || '',
-            observed: item.propylParaben,
-            lower: item.lsl,
-            upper: item.usl,
-            unit: item.unit,
-          },
-        ]),
-        ...sterility.map((item) => ({
-          id: item.id || `${item.batchNo}-sterility`,
-          metric: 'Sterility' as const,
-          product: item.productName,
-          batch: item.batchNo,
-          date: item.testDate || item.createdAt || '',
-          observed: item.status === 'Pass' ? 1 : 0,
-          lower: 1,
-          upper: 1,
-          unit: 'Pass=1',
-        })),
-      ];
-      setObservations(normalized);
+      setObservations(mergeTrendObservations(yields, cpp, cqa));
       setLoading(false);
     };
     void load();
   }, []);
 
-  const products = Array.from(new Set(observations.map((item) => item.product))).sort();
-  const productRecords = observations.filter((item) => product === 'all' || item.product === product);
-  const batches = Array.from(new Set(productRecords.map((item) => item.batch))).sort();
-  const years = Array.from(new Set(productRecords.map((item) => safeDate(item.date).getFullYear()))).sort((a, b) => b - a);
+  const filters = useMemo(
+    () => ({ product, batch, year, month, quarter }),
+    [product, batch, year, month, quarter],
+  );
 
-  const filtered = observations.filter((item) => {
-    const date = safeDate(item.date);
-    if (product !== 'all' && item.product !== product) return false;
-    if (batch !== 'all' && item.batch !== batch) return false;
-    if (year !== 'all' && date.getFullYear() !== Number(year)) return false;
-    if (month !== 'all' && date.getMonth() + 1 !== Number(month)) return false;
-    if (quarter !== 'all' && Math.floor(date.getMonth() / 3) + 1 !== Number(quarter)) return false;
-    return true;
-  });
+  const { products, batches, years } = useMemo(
+    () => trendFilterOptions(observations, product),
+    [observations, product],
+  );
 
-  const chartData = useMemo(() => Object.fromEntries(
-    metrics.map((metric) => [metric, enrichTrend(filtered.filter((item) => item.metric === metric))]),
-  ) as Record<Metric, ChartPoint[]>, [filtered]);
+  const chartData = useMemo(
+    () => buildTrendChartData(observations, filters),
+    [observations, filters],
+  );
 
-  const activeMetrics = metrics.filter((metric) => chartData[metric].length > 0);
-  const totalRecords = filtered.length;
-  const failedSterility = filtered.filter((item) => item.metric === 'Sterility' && item.observed === 0).length;
+  const summary = useMemo(
+    () => trendSummary(observations, filters, chartData),
+    [observations, filters, chartData],
+  );
+
+  useEffect(() => {
+    if (chartData[activeMetric]?.length) return;
+    const first = TREND_METRICS.find((m) => chartData[m].length > 0);
+    if (first) setActiveMetric(first);
+  }, [chartData, activeMetric]);
 
   const resetFilters = () => {
     setProduct('all');
@@ -289,55 +232,115 @@ export function TrendWorkspace() {
     setQuarter('all');
   };
 
-  return <div className="space-y-6">
-    <div className="no-print">
+  const filterProps = {
+    product, batch, year, month, quarter,
+    products, batches, years,
+    onProduct: setProduct,
+    onBatch: setBatch,
+    onYear: setYear,
+    onMonth: setMonth,
+    onQuarter: setQuarter,
+    onReset: resetFilters,
+  };
+
+  const periodLabel = [
+    year !== 'all' ? year : null,
+    month !== 'all' ? new Date(2000, parseInt(month, 10) - 1).toLocaleString('en-US', { month: 'long' }) : null,
+    quarter !== 'all' ? `Q${quarter}` : null,
+  ].filter(Boolean).join(' · ') || 'All Periods';
+
+  return (
+    <div className="space-y-6">
       <PageHeading
         title="Trend Analysis"
-        description="PQR-style longitudinal review of key quality and process indicators with specification limits, mean, linear trend, and three-point moving average."
-        actions={<Button variant="outline" onClick={printPage}><Download className="mr-2 h-4 w-4" />Export PDF</Button>}
+        description="Longitudinal CPV trend graphs for Assay, pH, Extractable Volume, Yield, Fill Volume, Particulate Matter, Methyl/Propyl Paraben, and Sterility — with specification limits, mean, linear trend, and moving average."
+        actions={(
+          <Button variant="outline" onClick={() => printPage()}>
+            <Printer className="mr-2 h-4 w-4" />Export PDF
+          </Button>
+        )}
       />
-    </div>
 
-    <Card className="no-print">
-      <CardContent className="grid gap-4 p-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-        <div><Label>Product</Label><Select value={product} onValueChange={(value) => { setProduct(value); setBatch('all'); }}><SelectTrigger className="mt-2"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All Products</SelectItem>{products.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent></Select></div>
-        <div><Label>Batch</Label><Select value={batch} onValueChange={setBatch}><SelectTrigger className="mt-2"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All Batches</SelectItem>{batches.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent></Select></div>
-        <div><Label>Year</Label><Select value={year} onValueChange={setYear}><SelectTrigger className="mt-2"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All Years</SelectItem>{years.map((item) => <SelectItem key={item} value={String(item)}>{item}</SelectItem>)}</SelectContent></Select></div>
-        <div><Label>Month</Label><Select value={month} onValueChange={setMonth}><SelectTrigger className="mt-2"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All Months</SelectItem>{Array.from({ length: 12 }, (_, index) => <SelectItem key={index + 1} value={String(index + 1)}>{new Date(2000, index).toLocaleString('en-US', { month: 'long' })}</SelectItem>)}</SelectContent></Select></div>
-        <div><Label>Quarter</Label><Select value={quarter} onValueChange={setQuarter}><SelectTrigger className="mt-2"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All Quarters</SelectItem>{[1, 2, 3, 4].map((item) => <SelectItem key={item} value={String(item)}>Q{item}</SelectItem>)}</SelectContent></Select></div>
-        <Button variant="outline" className="self-end" onClick={resetFilters}>Reset Filters</Button>
-      </CardContent>
-    </Card>
+      <Card className="no-print border-blue-200 bg-blue-50/50 dark:bg-blue-950/20">
+        <CardContent className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 py-4">
+          <p className="text-sm text-muted-foreground">Environmental & utility monitoring trends (Temperature, RH, DP, microbial, water systems) are available in QMS Monitoring.</p>
+          <Link href="/qms/monitoring/trends"><Button variant="outline" size="sm">View Monitoring Trends →</Button></Link>
+        </CardContent>
+      </Card>
 
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-      <KpiCard label="Records in Scope" value={totalRecords} />
-      <KpiCard label="Parameters Available" value={activeMetrics.length} />
-      <KpiCard label="Products" value={new Set(filtered.map((item) => item.product)).size} />
-      <KpiCard label="Sterility Failures" value={failedSterility} tone={failedSterility ? 'red' : 'green'} />
-    </div>
+      <FilterBar {...filterProps} />
 
-    <section className="space-y-5 bg-white print:p-4 dark:bg-transparent">
-      <div className="hidden border-b-2 border-blue-800 pb-4 print:block">
-        <p className="text-sm font-bold text-blue-800">SKYMAP PHARMACEUTICALS</p>
-        <h1 className="mt-1 text-2xl font-bold">Continued Process Verification Trend Report</h1>
-        <p className="mt-1 text-sm">Generated: {new Date().toLocaleDateString()} | Product: {product === 'all' ? 'All Products' : product} | Batch: {batch === 'all' ? 'All Batches' : batch}</p>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5 no-print">
+        <KpiCard label="Records in Scope" value={summary.totalRecords} />
+        <KpiCard label="Active Parameters" value={summary.activeMetrics} />
+        <KpiCard label="Products" value={summary.products} />
+        <KpiCard label="Batches" value={summary.batches} />
+        <KpiCard label="Sterility Failures" value={summary.failedSterility} tone={summary.failedSterility ? 'red' : 'green'} />
       </div>
-      <DataState loading={loading} empty={!filtered.length} emptyText="No assay, physical, yield, particulate, preservative, or sterility records match these filters." />
-      {!loading && filtered.length > 0 && <div className="grid gap-6 xl:grid-cols-2">
-        {metrics.map((metric) => <PqrTrendChart key={metric} metric={metric} data={chartData[metric]} />)}
-      </div>}
-    </section>
 
-    <Card>
-      <CardHeader><CardTitle>Chart Interpretation</CardTitle></CardHeader>
-      <CardContent className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
-        <p><strong className="text-blue-700">Observed Value:</strong> recorded result for each batch.</p>
-        <p><strong className="text-red-700">Upper / Lower Limit:</strong> stored specification limits where available; otherwise three-sigma analytical limits.</p>
-        <p><strong className="text-emerald-700">Mean:</strong> arithmetic mean of filtered observations.</p>
-        <p><strong className="text-violet-700">Trend Line:</strong> least-squares linear regression across batches.</p>
-        <p><strong className="text-amber-700">Moving Average:</strong> rolling average of the current and previous two observations.</p>
-        <p><strong>Sterility:</strong> Pass = 1 and Fail = 0 for visual trending.</p>
-      </CardContent>
-    </Card>
-  </div>;
+      <Tabs defaultValue="overview" className="space-y-5">
+        <TabsList className="no-print grid h-auto w-full grid-cols-2 gap-1 p-1 lg:grid-cols-2">
+          <TabsTrigger value="overview">All Trend Graphs</TabsTrigger>
+          <TabsTrigger value="single">Single Parameter</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="overview" className="space-y-5">
+          <section id="trend-report" className="space-y-5 bg-white print:p-4 dark:bg-transparent">
+            <div className="hidden border-b-2 border-blue-800 pb-4 print:block">
+              <p className="text-sm font-bold text-blue-800">SKYMAP PHARMACEUTICALS</p>
+              <h1 className="mt-1 text-2xl font-bold">CPV Trend Analysis Report</h1>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Generated: {new Date().toLocaleDateString()} · Product: {product === 'all' ? 'All' : product} · Batch: {batch === 'all' ? 'All' : batch} · {periodLabel}
+              </p>
+            </div>
+
+            <DataState
+              loading={loading}
+              empty={!summary.totalRecords}
+              emptyText="No CPP, CQA, or yield records match these filters. Record data in CPP/CQA monitoring first."
+            />
+
+            {!loading && summary.totalRecords > 0 && (
+              <div className="grid gap-6 xl:grid-cols-2">
+                {TREND_METRICS.map((metric) => (
+                  <TrendChart key={metric} metric={metric} data={chartData[metric]} />
+                ))}
+              </div>
+            )}
+          </section>
+        </TabsContent>
+
+        <TabsContent value="single" className="space-y-5">
+          <Card className="no-print">
+            <CardContent className="p-5">
+              <Label>Select Parameter</Label>
+              <Select value={activeMetric} onValueChange={(v) => setActiveMetric(v as TrendMetric)}>
+                <SelectTrigger className="mt-2 max-w-sm"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {TREND_METRICS.map((metric) => (
+                    <SelectItem key={metric} value={metric} disabled={!chartData[metric].length}>
+                      {metric}{chartData[metric].length ? ` (${chartData[metric].length})` : ''}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </CardContent>
+          </Card>
+          <TrendChart metric={activeMetric} data={chartData[activeMetric]} />
+        </TabsContent>
+      </Tabs>
+
+      <Card className="no-print">
+        <CardHeader><CardTitle>Chart Legend</CardTitle></CardHeader>
+        <CardContent className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
+          <p><strong className="text-blue-700">Observed Value:</strong> recorded result per batch.</p>
+          <p><strong className="text-red-700">Lower / Upper Limit:</strong> LSL and USL from specification; 3σ limits if not stored.</p>
+          <p><strong className="text-emerald-700">Mean:</strong> arithmetic mean of filtered observations.</p>
+          <p><strong className="text-violet-700">Trend Line:</strong> least-squares linear regression.</p>
+          <p><strong className="text-amber-700">Moving Average:</strong> rolling 3-point average.</p>
+          <p><strong>Sterility:</strong> Pass = 1, Fail = 0 for trend visualization.</p>
+        </CardContent>
+      </Card>
+    </div>
+  );
 }

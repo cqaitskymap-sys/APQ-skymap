@@ -1,6 +1,7 @@
 'use client';
 
 import { Bell, Search, Sun, Moon, ChevronRight, Settings, LogOut } from 'lucide-react';
+import { MobileNav } from '@/components/layout/mobile-nav';
 import { useTheme } from 'next-themes';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -42,6 +43,7 @@ export function Header() {
 
   return (
     <header className="h-16 border-b bg-background/95 backdrop-blur-sm flex items-center px-4 gap-4 sticky top-0 z-30">
+      <MobileNav />
       {/* Company Logo & Name */}
       <div className="flex items-center gap-2 min-w-fit">
         <div className="relative w-8 h-8">

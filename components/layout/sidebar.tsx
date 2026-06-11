@@ -7,10 +7,11 @@ import Image from 'next/image';
 import {
   LayoutDashboard, FlaskConical, Package, AlertTriangle, TestTube, CheckSquare,
   RefreshCw, LineChart, Cog, BookOpen, Users, FileText, TruckIcon, ShieldCheck,
+  ClipboardCheck,
   Bell, Brain, ClipboardList, BarChart3, ChevronDown, ChevronRight, PanelLeftClose,
   PanelLeftOpen, LogOut, Settings, UserCircle, PackageSearch, Beaker, Award,
   AlertCircle, Building2, Activity,   Hash, GitBranch, PenLine, Database, SlidersHorizontal,
-  BadgeCheck, Factory, FileSearch, Plus, CheckCircle, FileDown,
+  BadgeCheck, Factory, FileSearch, Plus, CheckCircle, FileDown, Search, Link2, Microscope, Calendar, MessageSquare, RotateCcw, Library, Grid3X3, ListChecks, FileSignature, TrendingUp, FileCheck, PlayCircle, Monitor, Sparkles, Server, Code, PenTool, Lock, Wrench, MapPin, Thermometer, Droplets, PackagePlus, ShieldAlert, Boxes,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
@@ -32,24 +33,24 @@ const navItems: NavItem[] = [
   {
     label: 'Admin',
     icon: ShieldCheck,
-    matchPrefix: '/dashboard/admin',
+    matchPrefix: '/admin',
     children: [
-      { label: 'Admin Dashboard', href: '/dashboard/admin', icon: LayoutDashboard },
-      { label: 'User Management', href: '/dashboard/admin/users', icon: Users },
-      { label: 'Role & Permission', href: '/dashboard/admin/roles', icon: ShieldCheck },
-      { label: 'Department Master', href: '/dashboard/admin/departments', icon: Building2 },
-      { label: 'Designation Master', href: '/dashboard/admin/designations', icon: BadgeCheck },
-      { label: 'Company / Site Master', href: '/dashboard/admin/company-sites', icon: Factory },
-      { label: 'Product Master', href: '/dashboard/admin/products', icon: FlaskConical },
-      { label: 'Parameter Master', href: '/dashboard/admin/parameters', icon: SlidersHorizontal },
-      { label: 'Workflow Configuration', href: '/dashboard/admin/workflows', icon: GitBranch },
-      { label: 'Approval Matrix', href: '/dashboard/admin/approval-matrix', icon: CheckSquare },
-      { label: 'Document Numbering', href: '/dashboard/admin/document-numbering', icon: Hash },
-      { label: 'Audit Trail', href: '/dashboard/admin/audit-trail', icon: FileSearch },
-      { label: 'E-Signature Settings', href: '/dashboard/admin/esign-settings', icon: PenLine },
-      { label: 'Notification Settings', href: '/dashboard/admin/notifications', icon: Bell },
-      { label: 'Backup & Restore', href: '/dashboard/admin/backup', icon: Database },
-      { label: 'System Settings', href: '/dashboard/admin/system-settings', icon: Settings },
+      { label: 'Admin Dashboard', href: '/admin', icon: LayoutDashboard },
+      { label: 'User Management', href: '/admin/users', icon: Users },
+      { label: 'Role & Permission', href: '/admin/roles', icon: ShieldCheck },
+      { label: 'Department Master', href: '/admin/departments', icon: Building2 },
+      { label: 'Designation Master', href: '/admin/designations', icon: BadgeCheck },
+      { label: 'Company / Site Master', href: '/admin/company-site', icon: Factory },
+      { label: 'Product Master', href: '/admin/products', icon: FlaskConical },
+      { label: 'Parameter Master', href: '/admin/parameters', icon: SlidersHorizontal },
+      { label: 'Workflow Configuration', href: '/admin/workflows', icon: GitBranch },
+      { label: 'Approval Matrix', href: '/admin/approval-matrix', icon: CheckSquare },
+      { label: 'Document Numbering', href: '/admin/document-numbering', icon: Hash },
+      { label: 'Audit Trail', href: '/admin/audit-trail', icon: FileSearch },
+      { label: 'E-Signature Settings', href: '/admin/esign-settings', icon: PenLine },
+      { label: 'Notification Settings', href: '/admin/notifications', icon: Bell },
+      { label: 'Backup & Restore', href: '/admin/backup', icon: Database },
+      { label: 'System Settings', href: '/admin/system-settings', icon: Settings },
     ],
   },
   {
@@ -57,48 +58,57 @@ const navItems: NavItem[] = [
     icon: LineChart,
     matchPrefix: '/cpv',
     children: [
-      { label: 'CPV Dashboard', href: '/cpv', icon: LayoutDashboard },
+      { label: 'CPV Dashboard', href: '/cpv/dashboard', icon: LayoutDashboard },
       { label: 'CPP Monitoring', href: '/cpv/cpp', icon: Activity },
       { label: 'CQA Monitoring', href: '/cpv/cqa', icon: TestTube },
       { label: 'Process Capability', href: '/cpv/process-capability', icon: BarChart3 },
-      { label: 'Trend Analysis', href: '/cpv/trends', icon: LineChart },
+      { label: 'Trend Analysis', href: '/cpv/trend-analysis', icon: LineChart },
       { label: 'Control Charts', href: '/cpv/control-charts', icon: BarChart3 },
       { label: 'Risk Assessment', href: '/cpv/risk-assessment', icon: ShieldCheck },
       { label: 'Annual CPV Review', href: '/cpv/annual-review', icon: FileText },
+      { label: 'CPV Configuration', href: '/cpv/configuration', icon: Settings },
+      { label: 'AI Analytics', href: '/cpv/ai-analytics', icon: Brain },
     ],
   },
   {
     label: 'PQR Management',
     icon: ClipboardList,
-    matchPrefix: '/dashboard/pqr',
+    matchPrefix: '/pqr',
     children: [
-      { label: 'Create PQR', href: '/dashboard/pqr/create', icon: Plus },
-      { label: 'PQR Dashboard', href: '/dashboard/pqr', icon: LayoutDashboard },
-      { label: 'Batch Review', href: '/dashboard/pqr', icon: Package },
-      { label: 'Material Review', href: '/dashboard/pqr', icon: Beaker },
-      { label: 'Packaging Review', href: '/dashboard/pqr', icon: PackageSearch },
-      { label: 'Equipment Review', href: '/dashboard/pqr', icon: Cog },
-      { label: 'Stability Review', href: '/dashboard/pqr', icon: LineChart },
-      { label: 'Deviations Review', href: '/dashboard/pqr', icon: AlertTriangle },
-      { label: 'OOS Review', href: '/dashboard/pqr', icon: TestTube },
-      { label: 'CAPA Review', href: '/dashboard/pqr', icon: CheckSquare },
-      { label: 'Change Control Review', href: '/dashboard/pqr', icon: RefreshCw },
-      { label: 'Trend Analysis', href: '/dashboard/pqr', icon: BarChart3 },
-      { label: 'Summary & Conclusion', href: '/dashboard/pqr', icon: FileText },
-      { label: 'Approval Workflow', href: '/dashboard/pqr', icon: CheckCircle },
-      { label: 'PDF Generation', href: '/dashboard/pqr', icon: FileDown },
+      { label: 'PQR Dashboard', href: '/pqr/dashboard', icon: LayoutDashboard },
+      { label: 'Create PQR', href: '/pqr/create', icon: Plus },
+      { label: 'Batch Review', href: '/pqr/batches', icon: Package },
+      { label: 'Material Review', href: '/pqr/materials', icon: Beaker },
+      { label: 'Packaging Review', href: '/pqr/packaging', icon: PackageSearch },
+      { label: 'Equipment Review', href: '/pqr/equipment-review', icon: Cog },
+      { label: 'Utility Review', href: '/pqr/utility-review', icon: Droplets },
+      { label: 'Stability Review', href: '/pqr/stability', icon: LineChart },
+      { label: 'Summary & Conclusion', href: '/pqr/summary', icon: FileText },
+      { label: 'Approval', href: '/pqr/approval', icon: CheckCircle },
     ],
   },
   {
-    label: 'Quality Management',
+    label: 'QMS',
     icon: ShieldCheck,
-    matchPrefix: '/dashboard/deviations',
+    matchPrefix: '/qms',
     children: [
-      { label: 'Deviations', href: '/dashboard/deviations', icon: AlertTriangle, badge: 12, badgeVariant: 'warning' },
-      { label: 'OOS Records', href: '/dashboard/oos', icon: TestTube, badge: 5, badgeVariant: 'destructive' },
-      { label: 'CAPA Management', href: '/dashboard/capa', icon: CheckSquare, badge: 18 },
-      { label: 'Change Control', href: '/dashboard/change-control', icon: RefreshCw },
-      { label: 'Complaints', href: '/dashboard/complaints', icon: AlertCircle, badge: 7, badgeVariant: 'warning' },
+      { label: 'Deviation Management', href: '/qms/deviation', icon: AlertTriangle },
+      { label: 'OOS Management', href: '/qms/oos', icon: TestTube },
+      { label: 'CAPA Management', href: '/qms/capa', icon: CheckSquare },
+      { label: 'Change Control', href: '/qms/change-control', icon: RefreshCw },
+      { label: 'Stability Management', href: '/qms/stability', icon: LineChart },
+      { label: 'Complaint Management', href: '/qms/complaints', icon: MessageSquare },
+      { label: 'Product Recall', href: '/qms/recall', icon: RotateCcw },
+      { label: 'Document Management', href: '/qms/dms', icon: BookOpen },
+      { label: 'Training Management', href: '/qms/training', icon: Users },
+      { label: 'Audit Management', href: '/qms/audit', icon: ClipboardList },
+      { label: 'Vendor Management', href: '/qms/vendors', icon: TruckIcon },
+      { label: 'Validation Management', href: '/qms/validation', icon: FileCheck },
+      { label: 'CSV Management', href: '/qms/csv', icon: Monitor },
+      { label: 'Equipment Management', href: '/qms/equipment', icon: Wrench },
+      { label: 'Environmental & Utility Monitoring', href: '/qms/monitoring', icon: Thermometer },
+      { label: 'Warehouse Management', href: '/qms/warehouse', icon: PackageSearch },
+      { label: 'eBMR', href: '/qms/ebmr', icon: Factory },
     ],
   },
   {
@@ -114,17 +124,18 @@ const navItems: NavItem[] = [
     icon: Award,
     children: [
       { label: 'Audit Trail', href: '/dashboard/audit-trail', icon: FileText },
-      { label: 'Document Management', href: '/dashboard/documents', icon: BookOpen },
-      { label: 'Training Records', href: '/dashboard/training', icon: Users },
+      { label: 'Document Management', href: '/qms/dms', icon: BookOpen },
+      { label: 'Training Records', href: '/qms/training', icon: Users },
     ],
   },
   {
     label: 'Operations',
     icon: Cog,
     children: [
-      { label: 'Equipment Qualification', href: '/dashboard/equipment', icon: Beaker },
-      { label: 'Vendor Management', href: '/dashboard/vendors', icon: TruckIcon },
-      { label: 'Warehouse Traceability', href: '/dashboard/warehouse', icon: PackageSearch },
+      { label: 'Equipment Management', href: '/qms/equipment', icon: Wrench },
+      { label: 'Environmental Monitoring', href: '/qms/monitoring', icon: Thermometer },
+      { label: 'Vendor Management', href: '/qms/vendors', icon: TruckIcon },
+      { label: 'Warehouse Traceability', href: '/qms/warehouse', icon: PackageSearch },
     ],
   },
   {
@@ -145,9 +156,10 @@ const navItems: NavItem[] = [
 interface SidebarProps {
   collapsed: boolean;
   onToggle: () => void;
+  embedded?: boolean;
 }
 
-export function Sidebar({ collapsed, onToggle }: SidebarProps) {
+export function Sidebar({ collapsed, onToggle, embedded = false }: SidebarProps) {
   const pathname = usePathname();
   const { profile, signOut } = useAuth();
   const [openGroups, setOpenGroups] = useState<string[]>([
@@ -164,13 +176,19 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
 
   const isLinkActive = (href?: string) => {
     if (!href) return false;
-    if (href === '/dashboard' || href === '/cpv' || href === '/dashboard/admin' || href === '/dashboard/pqr') {
-      return pathname === href;
+    if (href === '/dashboard' || href === '/cpv' || href === '/cpv/dashboard' || href === '/admin' || href === '/pqr/dashboard') {
+      return pathname === href || (href === '/cpv/dashboard' && pathname === '/cpv');
     }
     return pathname === href || pathname.startsWith(href + '/');
   };
 
   const isGroupActive = (item: NavItem) => {
+    if (item.label === 'PQR Management') {
+      return pathname.startsWith('/pqr') || pathname.startsWith('/dashboard/pqr');
+    }
+    if (item.label === 'Admin') {
+      return pathname.startsWith('/admin') || pathname.startsWith('/dashboard/admin');
+    }
     if (item.matchPrefix) {
       return pathname === item.matchPrefix || pathname.startsWith(item.matchPrefix + '/');
     }
@@ -194,8 +212,9 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   return (
     <TooltipProvider delayDuration={0}>
       <aside className={cn(
-        'h-screen flex flex-col sidebar-bg border-r transition-all duration-300 ease-in-out flex-shrink-0 border-r',
-        collapsed ? 'w-[64px]' : 'w-[260px]'
+        'h-screen flex-col sidebar-bg border-r transition-all duration-300 ease-in-out flex-shrink-0 border-r',
+        embedded ? 'flex w-full' : 'hidden lg:flex',
+        !embedded && (collapsed ? 'w-[64px]' : 'w-[260px]')
       )} style={{ borderColor: 'hsl(var(--sidebar-border))' }}>
         <div className="flex items-center h-16 border-b px-4 flex-shrink-0" style={{ borderColor: 'hsl(var(--sidebar-border))' }}>
           <div className="flex items-center gap-2.5 flex-shrink-0 w-full">

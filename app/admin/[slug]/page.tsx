@@ -6,6 +6,7 @@ const ADMIN_ROUTES: Record<string, string> = {
   departments: '/dashboard/admin/departments',
   designations: '/dashboard/admin/designations',
   'company-site': '/dashboard/admin/company-sites',
+  'company-sites': '/dashboard/admin/company-sites',
   products: '/dashboard/admin/products',
   parameters: '/dashboard/admin/parameters',
   workflows: '/dashboard/admin/workflows',

@@ -126,4 +126,46 @@ export function canViewDepartmentUsers(role?: string | null): boolean {
     'production_manager', 'warehouse_manager', 'engineering_manager'].includes(r);
 }
 
+export type AppModule =
+  | 'admin' | 'cpv' | 'pqr' | 'qms' | 'deviation' | 'oos' | 'capa' | 'change_control'
+  | 'stability' | 'complaints' | 'recall' | 'dms' | 'training' | 'audit' | 'vendors'
+  | 'validation' | 'csv' | 'equipment' | 'monitoring' | 'warehouse' | 'ebmr';
+
+const MODULE_ROLE_ACCESS: Record<AppModule, AdminRoleId[]> = {
+  admin: ['super_admin', 'admin'],
+  cpv: ['super_admin', 'admin', 'head_qa', 'qa_manager', 'qc_manager', 'production_manager'],
+  pqr: ['super_admin', 'admin', 'head_qa', 'qa_manager', 'qc_manager', 'regulatory_affairs'],
+  qms: ['super_admin', 'admin', 'head_qa', 'qa_manager', 'qc_manager', 'production_manager',
+    'warehouse_manager', 'engineering_manager', 'regulatory_affairs'],
+  deviation: ['super_admin', 'admin', 'head_qa', 'qa_manager', 'production_manager', 'regulatory_affairs'],
+  oos: ['super_admin', 'admin', 'head_qa', 'qa_manager', 'qc_manager'],
+  capa: ['super_admin', 'admin', 'head_qa', 'qa_manager', 'qc_manager', 'production_manager'],
+  change_control: ['super_admin', 'admin', 'head_qa', 'qa_manager', 'regulatory_affairs'],
+  stability: ['super_admin', 'admin', 'head_qa', 'qa_manager', 'qc_manager'],
+  complaints: ['super_admin', 'admin', 'head_qa', 'qa_manager', 'regulatory_affairs'],
+  recall: ['super_admin', 'admin', 'head_qa', 'qa_manager', 'regulatory_affairs'],
+  dms: ['super_admin', 'admin', 'head_qa', 'qa_manager', 'regulatory_affairs'],
+  training: ['super_admin', 'admin', 'head_qa', 'qa_manager'],
+  audit: ['super_admin', 'admin', 'head_qa', 'qa_manager', 'auditor'],
+  vendors: ['super_admin', 'admin', 'head_qa', 'qa_manager', 'warehouse_manager'],
+  validation: ['super_admin', 'admin', 'head_qa', 'qa_manager', 'engineering_manager'],
+  csv: ['super_admin', 'admin', 'head_qa', 'qa_manager', 'engineering_manager'],
+  equipment: ['super_admin', 'admin', 'engineering_manager', 'production_manager'],
+  monitoring: ['super_admin', 'admin', 'engineering_manager', 'qc_manager'],
+  warehouse: ['super_admin', 'admin', 'warehouse_manager', 'production_manager'],
+  ebmr: ['super_admin', 'admin', 'production_manager', 'warehouse_manager', 'head_qa', 'qa_manager', 'qc_manager', 'engineering_manager'],
+};
+
+export function canAccessModule(role: string | null | undefined, module: AppModule): boolean {
+  const r = normalizeRole(role);
+  if (r === 'super_admin') return true;
+  if (['auditor', 'viewer'].includes(r)) return module === 'audit' || module === 'qms' || module === 'pqr';
+  return MODULE_ROLE_ACCESS[module]?.includes(r) ?? false;
+}
+
+export function canEditModule(role: string | null | undefined, module: AppModule): boolean {
+  if (isReadOnlyRole(role)) return false;
+  return canAccessModule(role, module);
+}
+
 export { ADMIN_COLLECTIONS, ADMIN_MODULES, PERMISSION_ACTIONS, ADMIN_ROLES };

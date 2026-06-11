@@ -116,10 +116,15 @@ export function demoSignOut() {
 }
 
 export function demoGetSession(): Profile | null {
-  const uid = localStorage.getItem(DEMO_SESSION_KEY);
-  if (!uid) return null;
-  const users = loadUsers();
-  return users.find((u) => u.uid === uid)?.profile ?? null;
+  if (typeof window === 'undefined') return null;
+  try {
+    const uid = localStorage.getItem(DEMO_SESSION_KEY);
+    if (!uid) return null;
+    const users = loadUsers();
+    return users.find((u) => u.uid === uid)?.profile ?? null;
+  } catch {
+    return null;
+  }
 }
 
 export function isAuthNetworkError(error: unknown): boolean {

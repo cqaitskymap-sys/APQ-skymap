@@ -62,8 +62,8 @@ export function KpiCard({
 
 export function StatusBadge({ status }: { status: string }) {
   const normalized = status.toLowerCase();
-  const complies = ['complies', 'pass', 'excellent', 'low', 'stable'].includes(normalized);
-  const warning = ['oot', 'acceptable', 'medium'].includes(normalized);
+  const complies = ['complies', 'pass', 'excellent', 'low', 'stable', 'in control'].includes(normalized);
+  const warning = ['oot', 'acceptable', 'medium', 'needs improvement', 'insufficient data', 'high', 'under review'].includes(normalized);
   const classes = complies
     ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
     : warning

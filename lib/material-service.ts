@@ -168,6 +168,7 @@ export async function getVendorMasters(
     avlStatus?: string;
     status?: string;
     search?: string;
+    materialService?: string;
   }
 ) {
   const constraints: any[] = [];
@@ -190,6 +191,44 @@ export async function getVendorMasters(
   const querySnapshot = await getDocs(q);
 
   let results = querySnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as VendorMaster));
+
+  // Merge approved vendors from QMS Vendor Management module
+  const wantsApproved = !filters?.avlStatus || ['Approved', 'Conditional Approved'].includes(filters.avlStatus);
+  if (wantsApproved) {
+    try {
+      const { listSelectableVendors } = await import('./vendor-mgmt-service');
+      const qmsVendors = await listSelectableVendors(filters?.materialService);
+      const mapped: VendorMaster[] = qmsVendors.map((v) => ({
+        id: v.id,
+        vendorCode: v.vendor_code,
+        vendorName: v.vendor_name,
+        vendorType: 'Supplier',
+        materialSupplied: v.material_service_supplied,
+        manufacturerName: v.manufacturer_name,
+        supplierName: v.supplier_name,
+        address: v.address,
+        country: v.country,
+        avlStatus: v.approval_status === 'Conditionally Approved' ? 'Conditional Approved' : 'Approved',
+        approvalDate: null,
+        approvalExpiryDate: null,
+        lastAuditDate: null,
+        nextAuditDueDate: v.next_audit_due,
+        riskCategory: (['Low', 'Medium', 'High'].includes(v.risk_category) ? v.risk_category : 'High') as VendorMaster['riskCategory'],
+        status: v.vendor_status === 'Blocked' ? 'Blocked' : v.vendor_status === 'Inactive' ? 'Inactive' : 'Active',
+        remarks: v.remarks,
+      }));
+      const existingCodes = new Set(results.map((r) => r.vendorCode));
+      for (const m of mapped) {
+        if (!existingCodes.has(m.vendorCode)) results.push(m);
+      }
+    } catch {
+      // QMS vendor module unavailable — legacy vendors only
+    }
+  }
+
+  if (filters?.avlStatus === 'Approved') {
+    results = results.filter((v) => v.avlStatus === 'Approved' || v.avlStatus === 'Conditional Approved');
+  }
 
   // Client-side search if provided
   if (filters?.search) {

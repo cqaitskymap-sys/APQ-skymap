@@ -45,6 +45,7 @@ export const cppSchema = z.object({
 export const cqaSchema = z.object({
   productName: requiredText,
   batchNo: requiredText,
+  testDate: requiredText,
   testParameter: requiredText,
   observedValue: finiteNumber,
   target: finiteNumber,
@@ -52,9 +53,9 @@ export const cqaSchema = z.object({
   usl: finiteNumber,
   unit: requiredText,
   recordedBy: requiredText,
-  reviewedBy: z.string().trim(),
-}).refine((value) => value.lsl < value.usl, {
-  message: 'USL must be greater than LSL',
+  reviewedBy: z.string().trim().optional(),
+}).refine((value) => value.lsl <= value.usl, {
+  message: 'USL must be greater than or equal to LSL',
   path: ['usl'],
 });
 
@@ -149,16 +150,17 @@ export const particulateSchema = z.object({
 });
 
 export const riskSchema = z.object({
+  riskId: z.string().trim().optional(),
   productName: requiredText,
-  batchNo: z.string().trim(),
+  batchNo: z.string().trim().optional().default(''),
   factor: requiredText,
-  likelihood: z.coerce.number().int().min(1).max(5),
+  riskDescription: requiredText,
   severity: z.coerce.number().int().min(1).max(5),
+  occurrence: z.coerce.number().int().min(1).max(5),
   detectability: z.coerce.number().int().min(1).max(5),
-  rationale: requiredText,
-  mitigation: requiredText,
+  mitigation: z.string().trim().optional().default(''),
   owner: requiredText,
-  dueDate: requiredText,
+  dueDate: z.string().trim().optional().default(''),
 });
 
 export type CppInput = z.infer<typeof cppSchema>;
@@ -189,6 +191,10 @@ export interface CppRecord extends CppInput, Partial<CpvRecordMeta> {
 export interface CqaRecord extends CqaInput, Partial<CpvRecordMeta> {
   status: CpvStatus;
   deviationPercent: number;
+  batchId?: string | null;
+  batchLinked?: boolean;
+  pqrId?: string | null;
+  pqr_id?: string | null;
 }
 
 export interface YieldRecord extends YieldInput, Partial<CpvRecordMeta> {
@@ -221,6 +227,10 @@ export interface ParticulateRecord extends ParticulateInput, Partial<CpvRecordMe
 export interface RiskRecord extends RiskInput, Partial<CpvRecordMeta> {
   rpn: number;
   riskLevel: RiskLevel;
+  /** @deprecated legacy field — use occurrence */
+  likelihood?: number;
+  /** @deprecated legacy field — use riskDescription */
+  rationale?: string;
 }
 
 export interface CapabilityResult {
@@ -238,25 +248,62 @@ export interface CapabilityResult {
   ppk: number;
   sigmaLevel: number;
   performanceIndex: number;
-  status: 'Excellent' | 'Acceptable' | 'Poor' | 'Insufficient Data';
+  status: 'Excellent' | 'Acceptable' | 'Needs Improvement' | 'Insufficient Data';
 }
 
-export const CPP_PARAMETERS = [
-  'Mixing Time', 'Mixing RPM', 'Mixing Temperature', 'Bulk Hold Time',
-  'Filtration Pressure', 'Filtration Time', 'Sterilization Temperature',
-  'Sterilization Time', 'Depyrogenation Temperature', 'Fill Volume',
-  'Filling Speed', 'Nitrogen Pressure', 'Room Temperature',
-  'Relative Humidity', 'Differential Pressure',
-];
+export type CapabilityStatus = CapabilityResult['status'];
+
+export function capabilityStatusTone(status: CapabilityStatus): 'green' | 'amber' | 'red' {
+  if (status === 'Excellent') return 'green';
+  if (status === 'Acceptable') return 'amber';
+  return 'red';
+}
+
+export const YIELD_PARAMETERS = ['Bulk Yield', 'Filling Yield', 'Packing Yield'] as const;
 
 export const PROCESS_PARAMETERS = [
-  'Mixing Time', 'Mixing RPM', 'Mixing Temperature', 'Filtration Pressure',
-  'Filtration Time', 'Sterilization Temperature', 'Sterilization Time',
-  'Fill Volume', 'Nitrogen Pressure',
+  'Fill Volume', 'Mixing Time', 'Mixing RPM', 'Mixing Temperature',
+  'Sterilization Time', 'Sterilization Temperature', 'Filtration Pressure',
+  'Hold Time', 'Nitrogen Pressure',
+] as const;
+
+export const UTILITY_PARAMETERS = [
+  'Room Temperature', 'Relative Humidity', 'Differential Pressure',
+] as const;
+
+export const CPP_PARAMETERS = [
+  ...YIELD_PARAMETERS,
+  ...PROCESS_PARAMETERS,
+  ...UTILITY_PARAMETERS,
 ];
 
+/** @deprecated use PROCESS_PARAMETERS */
+export const PROCESS_PARAMETERS_LEGACY = PROCESS_PARAMETERS;
+
+export const PARAMETER_SPECS: Record<string, { target: number; lsl: number; usl: number; unit: string }> = {
+  'Fill Volume': { target: 10, lsl: 9.8, usl: 10.2, unit: 'mL' },
+  'Mixing Time': { target: 30, lsl: 25, usl: 35, unit: 'min' },
+  'Mixing RPM': { target: 120, lsl: 110, usl: 130, unit: 'RPM' },
+  'Mixing Temperature': { target: 25, lsl: 23, usl: 27, unit: '°C' },
+  'Sterilization Time': { target: 30, lsl: 28, usl: 32, unit: 'min' },
+  'Sterilization Temperature': { target: 121, lsl: 119, usl: 123, unit: '°C' },
+  'Filtration Pressure': { target: 2.5, lsl: 2.0, usl: 3.0, unit: 'bar' },
+  'Hold Time': { target: 24, lsl: 20, usl: 28, unit: 'hr' },
+  'Nitrogen Pressure': { target: 0.5, lsl: 0.4, usl: 0.6, unit: 'bar' },
+  'Bulk Yield': { target: 98, lsl: 95, usl: 100, unit: '%' },
+  'Filling Yield': { target: 99, lsl: 97, usl: 100, unit: '%' },
+  'Packing Yield': { target: 99.5, lsl: 98, usl: 100, unit: '%' },
+};
+
+export function displayCpvStatus(status: CpvStatus | string): 'Pass' | 'OOT' | 'OOS' {
+  if (status === 'Complies' || status === 'Within Limit' || status === 'Pass') return 'Pass';
+  if (status === 'OOT') return 'OOT';
+  return 'OOS';
+}
+
+
 export const UTILITY_LIMITS = {
-  hvacTemperature: { label: 'HVAC Temperature', lsl: 18, usl: 25, unit: '°C' },
+  hvacTemperature: { label: 'Room Temperature', lsl: 18, usl: 25, unit: '°C' },
   relativeHumidity: { label: 'Relative Humidity', lsl: 30, usl: 65, unit: '%' },
   differentialPressure: { label: 'Differential Pressure', lsl: 10, usl: 20, unit: 'Pa' },
   compressedAirPressure: { label: 'Compressed Air Pressure', lsl: 5, usl: 7, unit: 'bar' },
@@ -265,15 +312,77 @@ export const UTILITY_LIMITS = {
 } as const;
 
 export const CQA_PARAMETERS = [
-  'Assay', 'pH', 'Description', 'Colour', 'Extractable Volume',
-  'Particulate Matter >=10 um', 'Particulate Matter >=25 um', 'Sterility',
-  'Bacterial Endotoxin', 'Methyl Paraben Assay', 'Propyl Paraben Assay',
-];
+  'Assay',
+  'pH',
+  'Extractable Volume',
+  'Description',
+  'Colour',
+  'Sterility',
+  'Bacterial Endotoxin',
+  'Particles >=10µm',
+  'Particles >=25µm',
+  'Methyl Paraben',
+  'Propyl Paraben',
+] as const;
 
-export const RISK_FACTORS = [
-  'CPP Drift', 'CQA Drift', 'Yield Loss', 'Repeated OOS', 'Repeated OOT',
-  'Repeated Deviations', 'Vendor Issues', 'Equipment Issues',
-];
+export type CqaParameterName = (typeof CQA_PARAMETERS)[number];
+export type CqaParameterType = 'numeric' | 'qualitative' | 'limit';
+
+export const CQA_PARAMETER_SPECS: Record<CqaParameterName, {
+  target: number;
+  lsl: number;
+  usl: number;
+  unit: string;
+  type: CqaParameterType;
+}> = {
+  Assay: { target: 100, lsl: 98, usl: 102, unit: '%', type: 'numeric' },
+  pH: { target: 7.0, lsl: 6.8, usl: 7.2, unit: '', type: 'numeric' },
+  'Extractable Volume': { target: 2.0, lsl: 1.9, usl: 2.1, unit: 'mL', type: 'numeric' },
+  Description: { target: 1, lsl: 1, usl: 1, unit: 'Pass/Fail', type: 'qualitative' },
+  Colour: { target: 1, lsl: 1, usl: 1, unit: 'Pass/Fail', type: 'qualitative' },
+  Sterility: { target: 1, lsl: 1, usl: 1, unit: 'Pass/Fail', type: 'qualitative' },
+  'Bacterial Endotoxin': { target: 0.25, lsl: 0, usl: 0.5, unit: 'EU/mL', type: 'numeric' },
+  'Particles >=10µm': { target: 3000, lsl: 0, usl: 6000, unit: 'particles/container', type: 'limit' },
+  'Particles >=25µm': { target: 300, lsl: 0, usl: 600, unit: 'particles/container', type: 'limit' },
+  'Methyl Paraben': { target: 0.15, lsl: 0.12, usl: 0.18, unit: '%', type: 'numeric' },
+  'Propyl Paraben': { target: 0.02, lsl: 0.015, usl: 0.025, unit: '%', type: 'numeric' },
+};
+
+export function isQualitativeCqaParameter(parameter: string): boolean {
+  const spec = CQA_PARAMETER_SPECS[parameter as CqaParameterName];
+  return spec?.type === 'qualitative';
+}
+
+export function classifyCqaStatus(
+  parameter: string,
+  observed: number,
+  target: number,
+  lsl: number,
+  usl: number,
+): CpvStatus {
+  const spec = CQA_PARAMETER_SPECS[parameter as CqaParameterName];
+  if (spec?.type === 'qualitative') {
+    return observed >= 1 ? 'Complies' : 'OOS';
+  }
+  return classifySpecification(observed, target, lsl, usl);
+}
+
+export const RISK_SOURCES = [
+  'CPP Drift',
+  'CQA Drift',
+  'OOT',
+  'OOS',
+  'Deviation',
+  'CAPA',
+  'Equipment Failure',
+  'Utility Failure',
+  'Vendor Issues',
+] as const;
+
+export type RiskSource = (typeof RISK_SOURCES)[number];
+
+/** @deprecated use RISK_SOURCES */
+export const RISK_FACTORS = RISK_SOURCES;
 
 const round = (value: number, digits = 3) =>
   Number.isFinite(value) ? Number(value.toFixed(digits)) : 0;
@@ -342,7 +451,7 @@ export function calculateCapability(values: number[], lsl: number, usl: number):
   const ppu = (usl - mean) / (3 * overallSigma);
   const ppl = (mean - lsl) / (3 * overallSigma);
   const ppk = Math.min(ppu, ppl);
-  const status = cpk > 1.33 ? 'Excellent' : cpk >= 1 ? 'Acceptable' : 'Poor';
+  const status: CapabilityStatus = cpk > 1.33 ? 'Excellent' : cpk >= 1 ? 'Acceptable' : 'Needs Improvement';
 
   return {
     count: clean.length,
@@ -388,10 +497,31 @@ export function calculateControlLimits(values: number[]) {
   };
 }
 
-export function calculateRisk(likelihood: number, severity: number, detectability: number) {
-  const rpn = likelihood * severity * detectability;
+export function calculateRisk(occurrence: number, severity: number, detectability: number) {
+  const rpn = occurrence * severity * detectability;
   const riskLevel: RiskLevel = rpn >= 80 ? 'Critical' : rpn >= 50 ? 'High' : rpn >= 20 ? 'Medium' : 'Low';
   return { rpn, riskLevel };
+}
+
+export function riskOccurrence(record: Pick<RiskRecord, 'occurrence' | 'likelihood'>): number {
+  return record.occurrence ?? record.likelihood ?? 1;
+}
+
+export function riskDescriptionText(record: Pick<RiskRecord, 'riskDescription' | 'rationale'>): string {
+  return record.riskDescription || record.rationale || '';
+}
+
+export function generateRiskId(existingCount: number): string {
+  const year = new Date().getFullYear();
+  return `RISK-${year}-${String(existingCount + 1).padStart(4, '0')}`;
+}
+
+export function matrixCellLevel(severity: number, occurrence: number): RiskLevel {
+  const score = severity * occurrence;
+  if (score >= 20) return 'Critical';
+  if (score >= 12) return 'High';
+  if (score >= 6) return 'Medium';
+  return 'Low';
 }
 
 export function calculateAiRiskScore(input: {
@@ -416,6 +546,7 @@ export const cpvPermissions = {
   canEnterCpp: (role?: string) => ['super_admin', 'qa', 'production', 'engineering'].includes(role || ''),
   canEnterCqa: (role?: string) => ['super_admin', 'qa', 'qc'].includes(role || ''),
   canReview: (role?: string) => ['super_admin', 'qa'].includes(role || ''),
+  canConfigure: (role?: string) => ['super_admin', 'qa'].includes(role || ''),
   canView: (role?: string) => Boolean(role),
   isReadOnly: (role?: string) => ['viewer', 'auditor'].includes(role || ''),
 };

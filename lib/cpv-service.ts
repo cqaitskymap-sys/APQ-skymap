@@ -6,6 +6,7 @@ import {
   orderBy,
   query,
   serverTimestamp,
+  where,
 } from 'firebase/firestore';
 import { firestore } from '@/lib/firebase';
 import {
@@ -32,8 +33,10 @@ import {
   RiskInput,
   RiskRecord,
   calculateRisk,
+  generateRiskId,
   classifyUtility,
   classifySpecification,
+  classifyCqaStatus,
   deviationPercent,
 } from '@/lib/cpv';
 
@@ -77,15 +80,82 @@ async function writeAudit(
   });
 }
 
+async function resolveBatchLink(batchNo: string, productName?: string) {
+  if (!batchNo) {
+    return {
+      batchId: null as string | null,
+      pqrId: null as string | null,
+      productName: productName || '',
+      batchLinked: false,
+    };
+  }
+  try {
+    for (const coll of ['batches', 'pqr_batches']) {
+      const snap = await getDocs(query(
+        collection(firestore, coll),
+        where('batch_number', '==', batchNo),
+        limit(1),
+      ));
+      if (!snap.empty) {
+        const data = snap.docs[0].data();
+        return {
+          batchId: snap.docs[0].id,
+          pqrId: String(data.pqr_id || data.pqrId || '') || null,
+          productName: productName || String(data.product_name || data.productName || ''),
+          batchLinked: true,
+        };
+      }
+    }
+  } catch { /* batch collection may not exist */ }
+  return { batchId: null, pqrId: null, productName: productName || '', batchLinked: false };
+}
+
+export async function loadCppBatches(): Promise<Array<{ id: string; batch_number: string; product_name: string }>> {
+  const results: Array<{ id: string; batch_number: string; product_name: string }> = [];
+  for (const coll of ['batches', 'pqr_batches']) {
+    try {
+      const snap = await getDocs(query(collection(firestore, coll), orderBy('created_at', 'desc'), limit(200)));
+      snap.docs.forEach((d) => {
+        const data = d.data();
+        const bn = String(data.batch_number || data.batchNo || data.batchNumber || '');
+        if (bn) results.push({ id: d.id, batch_number: bn, product_name: String(data.product_name || data.productName || '') });
+      });
+      if (results.length) break;
+    } catch {
+      try {
+        const snap = await getDocs(query(collection(firestore, coll), limit(200)));
+        snap.docs.forEach((d) => {
+          const data = d.data();
+          const bn = String(data.batch_number || data.batchNo || '');
+          if (bn) results.push({ id: d.id, batch_number: bn, product_name: String(data.product_name || '') });
+        });
+        if (results.length) break;
+      } catch { /* continue */ }
+    }
+  }
+  return results;
+}
+
 async function createCpvRecord<T>(
   collectionName: string,
   module: string,
-  data: T,
+  data: T & { batchNo?: string; productName?: string },
   actor: Actor,
 ) {
   const now = new Date().toISOString();
+  const batchLink = data.batchNo
+    ? await resolveBatchLink(data.batchNo, data.productName)
+    : { batchId: null, pqrId: null, productName: data.productName || '', batchLinked: false };
+
   const payload = {
     ...serialized(data),
+    productName: batchLink.productName || (data as { productName?: string }).productName,
+    product_name: batchLink.productName || (data as { productName?: string }).productName,
+    batch_number: (data as { batchNo?: string }).batchNo,
+    batchId: batchLink.batchId,
+    batchLinked: batchLink.batchLinked,
+    pqrId: batchLink.pqrId,
+    pqr_id: batchLink.pqrId,
     createdAt: now,
     updatedAt: now,
     createdBy: actor.id || 'system',
@@ -104,17 +174,65 @@ export function createCpp(input: CppInput, actor: Actor) {
     'CPP Monitoring',
     { ...input, status, deviationPercent: deviationPercent(input.observedValue, input.targetValue) },
     actor,
-  );
+  ).then(async (record) => {
+    if (['OOT', 'OOS'].includes(status)) {
+      const { createDeviationFromCpv } = await import('@/lib/deviation-service');
+      await createDeviationFromCpv('cpv_cpp', {
+        id: record.id,
+        product: input.productName,
+        batchNumber: input.batchNo,
+        parameter: input.parameterName,
+        observedValue: input.observedValue,
+        status,
+        department: 'Production',
+      }, { id: actor.id || 'system', name: actor.name || 'System', role: actor.role || 'qa' });
+    }
+    return record;
+  });
 }
 
 export function createCqa(input: CqaInput, actor: Actor) {
-  const status = classifySpecification(input.observedValue, input.target, input.lsl, input.usl);
+  const status = classifyCqaStatus(input.testParameter, input.observedValue, input.target, input.lsl, input.usl);
   return createCpvRecord<CqaRecord>(
     CPV_COLLECTIONS.cqa,
     'CQA Monitoring',
-    { ...input, status, deviationPercent: deviationPercent(input.observedValue, input.target) },
+    {
+      ...input,
+      status,
+      deviationPercent: deviationPercent(input.observedValue, input.target),
+      test_parameter: input.testParameter,
+      test_date: input.testDate,
+    } as CqaRecord & { test_parameter?: string; test_date?: string },
     actor,
-  );
+  ).then(async (record) => {
+    if (['OOT', 'OOS'].includes(status)) {
+      const { createDeviationFromCpv } = await import('@/lib/deviation-service');
+      await createDeviationFromCpv('cpv_cqa', {
+        id: record.id,
+        product: input.productName,
+        batchNumber: input.batchNo,
+        parameter: input.testParameter,
+        observedValue: input.observedValue,
+        status,
+        department: 'QC',
+      }, { id: actor.id || 'system', name: actor.name || 'System', role: actor.role || 'qc' });
+    }
+    if (status === 'OOS') {
+      const { createOosFromCpv } = await import('@/lib/oos-service');
+      await createOosFromCpv({
+        id: record.id,
+        product: input.productName,
+        batchNumber: input.batchNo,
+        parameter: input.testParameter,
+        observedValue: input.observedValue,
+        lower: input.lsl,
+        upper: input.usl,
+        unit: input.unit,
+        status,
+      }, { id: actor.id || 'system', name: actor.name || 'System', role: actor.role || 'qc' });
+    }
+    return record;
+  });
 }
 
 export function createYield(input: YieldInput, actor: Actor) {
@@ -203,11 +321,16 @@ export function createParticulate(input: ParticulateInput, actor: Actor) {
   );
 }
 
-export function createRisk(input: RiskInput, actor: Actor) {
+export function createRisk(input: RiskInput, actor: Actor, existingCount = 0) {
+  const riskId = input.riskId || generateRiskId(existingCount);
   return createCpvRecord<RiskRecord>(
     CPV_COLLECTIONS.risk,
     'Risk Assessment',
-    { ...input, ...calculateRisk(input.likelihood, input.severity, input.detectability) },
+    {
+      ...input,
+      riskId,
+      ...calculateRisk(input.occurrence, input.severity, input.detectability),
+    },
     actor,
   );
 }

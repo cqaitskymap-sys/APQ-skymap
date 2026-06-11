@@ -1,0 +1,62 @@
+'use client';
+
+import Link from 'next/link';
+import { Eye } from 'lucide-react';
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { LoadingSpinner } from '@/components/ui/loading-spinner';
+import { CcStatusBadge, CcCategoryBadge } from '@/components/change-control/cc-sub-nav';
+import { useChangeControls } from '@/hooks/use-change-control';
+
+export default function ApprovalQueuePage() {
+  const { records, loading } = useChangeControls();
+  const filtered = records.filter((r) =>
+    ['submitted', 'under_qa_review', 'final_qa_review', 'risk_assessment', 'effectiveness_completed'].includes(r.status),
+  );
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold">Approval Workflow</h1>
+        <p className="text-muted-foreground text-sm">Change controls pending QA, Regulatory, or Head QA approval</p>
+      </div>
+      <Card>
+        <CardContent className="overflow-x-auto p-0 pt-4">
+          {loading ? <LoadingSpinner /> : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>CC #</TableHead>
+                  <TableHead>Title</TableHead>
+                  <TableHead>Category</TableHead>
+                  <TableHead>Regulatory</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtered.length === 0 ? (
+                  <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No records in this queue</TableCell></TableRow>
+                ) : filtered.map((r) => (
+                  <TableRow key={r.id}>
+                    <TableCell className="font-mono">{r.change_control_number}</TableCell>
+                    <TableCell className="max-w-[200px] truncate">{r.change_title}</TableCell>
+                    <TableCell><CcCategoryBadge category={r.change_category} /></TableCell>
+                    <TableCell>{r.regulatory_impact ? 'Yes' : 'No'}</TableCell>
+                    <TableCell><CcStatusBadge status={r.status} /></TableCell>
+                    <TableCell>
+                      <Link href={`/qms/change-control/${r.id}/approval`}>
+                        <Button variant="ghost" size="sm"><Eye className="h-4 w-4" /></Button>
+                      </Link>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

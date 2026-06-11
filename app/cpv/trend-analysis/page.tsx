@@ -1,5 +1,5 @@
-import { redirect } from 'next/navigation';
+import { TrendWorkspace } from '@/components/cpv/trend-workspace';
 
-export default function TrendAnalysisRedirect() {
-  redirect('/cpv/trends');
+export default function TrendAnalysisPage() {
+  return <TrendWorkspace />;
 }

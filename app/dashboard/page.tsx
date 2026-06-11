@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { TrendingUp, AlertTriangle, CheckCircle, Zap, Activity, Target, Users, FileText } from 'lucide-react';
+import { TrendingUp, AlertTriangle, CheckCircle, Zap, Activity, Target, Package, TestTube } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { LineChart, Line, AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { Badge } from '@/components/ui/badge';
@@ -263,5 +263,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
-import { Package, TestTube } from 'lucide-react';

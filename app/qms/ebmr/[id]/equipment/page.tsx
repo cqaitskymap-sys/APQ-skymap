@@ -1,0 +1,1 @@
+export { EquipmentPage as default } from '@/components/ebmr-mgmt/ebmr-section-pages';

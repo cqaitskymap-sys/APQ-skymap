@@ -1,2 +1,5 @@
-import { ControlChartsPage } from '@/components/cpv/analytics-pages';
-export default function Page() { return <ControlChartsPage />; }
+import { SpcWorkspace } from '@/components/cpv/spc-workspace';
+
+export default function Page() {
+  return <SpcWorkspace />;
+}
