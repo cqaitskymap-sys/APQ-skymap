@@ -1,5 +1,7 @@
-import { TrendWorkspace } from '@/components/cpv/trend-workspace';
+export const dynamic = 'force-dynamic';
 
-export default function TrendAnalysisPage() {
-  return <TrendWorkspace />;
+import { LazyTrendWorkspace } from '@/lib/lazy-cpv';
+
+export default function Page() {
+  return <LazyTrendWorkspace />;
 }

@@ -23,6 +23,11 @@ export const productMasterSchema = z.object({
   genericName: z.string().trim().optional().default(''),
   strength: z.string().trim().optional().default(''),
   dosageForm: z.string().trim().optional().default(''),
+  packSize: z.string().trim().optional().default(''),
+  market: z.string().trim().optional().default(''),
+  shelfLife: z.string().trim().optional().default(''),
+  bmrNumber: z.string().trim().optional().default(''),
+  bprNumber: z.string().trim().optional().default(''),
   status: statusField,
 });
 

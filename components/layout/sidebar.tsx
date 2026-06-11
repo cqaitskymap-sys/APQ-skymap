@@ -16,6 +16,8 @@ import {
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/contexts/auth-context';
+import { canAccessModule } from '@/lib/permissions';
+import { navHrefModule } from '@/lib/nav-permissions';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface NavItem {
@@ -59,13 +61,24 @@ const navItems: NavItem[] = [
     matchPrefix: '/cpv',
     children: [
       { label: 'CPV Dashboard', href: '/cpv/dashboard', icon: LayoutDashboard },
+      { label: 'Product Master', href: '/cpv/products', icon: FlaskConical },
+      { label: 'Batch Registration', href: '/cpv/batches', icon: Package },
       { label: 'CPP Monitoring', href: '/cpv/cpp', icon: Activity },
       { label: 'CQA Monitoring', href: '/cpv/cqa', icon: TestTube },
+      { label: 'Raw Material Monitoring', href: '/cpv/raw-materials', icon: Beaker },
+      { label: 'Packing Material Monitoring', href: '/cpv/packing-materials', icon: PackageSearch },
+      { label: 'Utility Monitoring', href: '/cpv/utility', icon: Droplets },
+      { label: 'Environmental Monitoring', href: '/cpv/environmental', icon: Thermometer },
+      { label: 'Yield Monitoring', href: '/cpv/yield', icon: TrendingUp },
+      { label: 'Stability Monitoring', href: '/cpv/stability', icon: Microscope },
+      { label: 'Hold Time Monitoring', href: '/cpv/hold-time', icon: Calendar },
       { label: 'Process Capability', href: '/cpv/process-capability', icon: BarChart3 },
       { label: 'Trend Analysis', href: '/cpv/trend-analysis', icon: LineChart },
       { label: 'Control Charts', href: '/cpv/control-charts', icon: BarChart3 },
       { label: 'Risk Assessment', href: '/cpv/risk-assessment', icon: ShieldCheck },
       { label: 'Annual CPV Review', href: '/cpv/annual-review', icon: FileText },
+      { label: 'Reports & Analytics', href: '/cpv/reports', icon: FileDown },
+      { label: 'Alert Engine', href: '/cpv/alerts', icon: Bell },
       { label: 'CPV Configuration', href: '/cpv/configuration', icon: Settings },
       { label: 'AI Analytics', href: '/cpv/ai-analytics', icon: Brain },
     ],
@@ -162,6 +175,28 @@ interface SidebarProps {
 export function Sidebar({ collapsed, onToggle, embedded = false }: SidebarProps) {
   const pathname = usePathname();
   const { profile, signOut } = useAuth();
+  const role = profile?.role;
+
+  const visibleNavItems = navItems
+    .map((item) => {
+      if (!item.children) {
+        if (item.href && navHrefModule(item.href) && !canAccessModule(role, navHrefModule(item.href)!)) {
+          return null;
+        }
+        return item;
+      }
+      const children = item.children.filter((child) => {
+        if (!child.href) return true;
+        const mod = navHrefModule(child.href);
+        if (!mod) return true;
+        return canAccessModule(role, mod);
+      });
+      if (!children.length) return null;
+      if (item.label === 'Admin' && !canAccessModule(role, 'admin')) return null;
+      return { ...item, children };
+    })
+    .filter(Boolean) as NavItem[];
+
   const [openGroups, setOpenGroups] = useState<string[]>([
     'Admin',
     'Continued Process Verification',
@@ -234,7 +269,7 @@ export function Sidebar({ collapsed, onToggle, embedded = false }: SidebarProps)
         </div>
 
         <nav className="flex-1 overflow-y-auto sidebar-scroll py-3 px-2 space-y-0.5">
-          {navItems.map((item) => {
+          {visibleNavItems.map((item) => {
             if (item.children) {
               const isOpen = openGroups.includes(item.label) || isGroupActive(item);
               const hasActiveChild = isGroupActive(item);

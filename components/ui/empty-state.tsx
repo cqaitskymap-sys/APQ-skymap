@@ -1,32 +1,41 @@
 'use client';
 
-import { FileQuestion } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import Link from 'next/link';
-
-interface EmptyStateProps {
-  title?: string;
-  description?: string;
-  actionLabel?: string;
-  actionHref?: string;
-}
+import { Database } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 
 export function EmptyState({
   title = 'No records found',
-  description = 'There is no data to display yet.',
+  description = 'Create a new record or adjust your filters to see data here.',
+  icon: Icon = Database,
+  action,
   actionLabel,
   actionHref,
-}: EmptyStateProps) {
+  className,
+}: {
+  title?: string;
+  description?: string;
+  icon?: React.ElementType;
+  action?: React.ReactNode;
+  actionLabel?: string;
+  actionHref?: string;
+  className?: string;
+}) {
+  const actionNode = action ?? (actionLabel && actionHref ? (
+    <Button asChild variant="outline" size="sm">
+      <Link href={actionHref}>{actionLabel}</Link>
+    </Button>
+  ) : null);
+
   return (
-    <div className="flex flex-col items-center justify-center py-16 text-center">
-      <FileQuestion className="h-12 w-12 text-muted-foreground/50 mb-4" />
-      <h3 className="font-semibold text-lg">{title}</h3>
-      <p className="text-sm text-muted-foreground mt-1 max-w-sm">{description}</p>
-      {actionLabel && actionHref && (
-        <Button asChild className="mt-4 bg-blue-600 hover:bg-blue-700">
-          <Link href={actionHref}>{actionLabel}</Link>
-        </Button>
-      )}
+    <div className={cn('flex min-h-[220px] flex-col items-center justify-center px-6 py-10 text-center', className)}>
+      <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-muted">
+        <Icon className="h-7 w-7 text-muted-foreground" />
+      </div>
+      <h3 className="text-base font-semibold">{title}</h3>
+      <p className="mt-1 max-w-md text-sm text-muted-foreground">{description}</p>
+      {actionNode && <div className="mt-4">{actionNode}</div>}
     </div>
   );
 }

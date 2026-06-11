@@ -1,5 +1,7 @@
-import { AiAnalyticsWorkspace } from '@/components/cpv/ai-analytics-workspace';
+export const dynamic = 'force-dynamic';
+
+import { LazyAiAnalyticsWorkspace } from '@/lib/lazy-cpv';
 
 export default function Page() {
-  return <AiAnalyticsWorkspace />;
+  return <LazyAiAnalyticsWorkspace />;
 }

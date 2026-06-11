@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import {
@@ -188,7 +188,7 @@ export function CqaWorkspace() {
 
   const { config } = useCpvConfig();
 
-  const applyParameterSpecs = (paramName: string) => {
+  const applyParameterSpecs = useCallback((paramName: string) => {
     const productName = form.getValues('productName');
     const resolved = resolveCqaParameterSpec(config, paramName, productName || undefined);
     const spec = resolved ?? CQA_PARAMETER_SPECS[paramName as typeof CQA_PARAMETERS[number]];
@@ -200,7 +200,7 @@ export function CqaWorkspace() {
     if ('type' in spec && spec.type === 'qualitative') {
       form.setValue('observedValue', 1);
     }
-  };
+  }, [form, config]);
 
   useEffect(() => {
     const sub = form.watch((_, { name }) => {
@@ -209,7 +209,7 @@ export function CqaWorkspace() {
       }
     });
     return () => sub.unsubscribe();
-  }, [form, config]);
+  }, [form, applyParameterSpecs]);
 
   const watched = form.watch();
   const previewStatus = classifyCqaStatus(

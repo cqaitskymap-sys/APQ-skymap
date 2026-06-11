@@ -1,6 +1,7 @@
 'use client';
 
-import { isFirebaseConfigured, isDemoAuthEnabled } from '@/lib/firebase';
+import { isDemoAuthEnabled } from '@/lib/demo-auth-config';
+import { isFirebaseConfigured } from '@/lib/firebase';
 import { AlertTriangle, Info } from 'lucide-react';
 
 export function FirebaseSetupBanner() {

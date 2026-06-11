@@ -1,15 +1,11 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import {
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  signOut as firebaseSignOut,
-  onAuthStateChanged,
-  User,
-} from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { auth, firestore, Profile, isDemoAuthEnabled } from '@/lib/firebase';
+  createContext, useContext, useEffect, useLayoutEffect, useState, ReactNode,
+} from 'react';
+import type { User } from 'firebase/auth';
+import type { Profile } from '@/lib/firebase';
+import { isDemoAuthEnabled } from '@/lib/demo-auth-config';
 import {
   demoSignIn, demoSignUp, demoSignOut, demoGetSession, formatAuthError, isAuthNetworkError,
 } from '@/lib/demo-auth';
@@ -27,20 +23,46 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+function clearAuthCookies() {
+  if (typeof document === 'undefined') return;
+  document.cookie = 'firebase-auth-session=; path=/; max-age=0; SameSite=Lax';
+  document.cookie = '__session=; path=/; max-age=0; SameSite=Lax';
+}
+
+function toDemoUser(profile: Profile): User {
+  return { uid: profile.id, email: profile.email } as User;
+}
+
+function applyDemoSession(
+  setProfile: (p: Profile | null) => void,
+  setUser: (u: User | null) => void,
+) {
+  const demoProfile = demoGetSession();
+  if (!demoProfile) clearAuthCookies();
+  setProfile(demoProfile);
+  setUser(demoProfile ? toDemoUser(demoProfile) : null);
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const demoEnabled = isDemoAuthEnabled();
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isDemoMode, setIsDemoMode] = useState(() => isDemoAuthEnabled());
+  const [isDemoMode, setIsDemoMode] = useState(demoEnabled);
 
   const activateDemoSession = (demoProfile: Profile) => {
     setIsDemoMode(true);
     setProfile(demoProfile);
-    setUser({ uid: demoProfile.id, email: demoProfile.email } as User);
+    setUser(toDemoUser(demoProfile));
+    setLoading(false);
   };
 
   const fetchProfile = async (userId: string) => {
     try {
+      const [{ firestore }, { doc, getDoc }] = await Promise.all([
+        import('@/lib/firebase'),
+        import('firebase/firestore'),
+      ]);
       const profileRef = doc(firestore, 'profiles', userId);
       const profileSnap = await getDoc(profileRef);
       if (profileSnap.exists()) {
@@ -59,28 +81,54 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (user) await fetchProfile(user.uid);
   };
 
+  // Resolve demo session before paint to avoid hydration mismatch + auth spinner stuck.
+  useLayoutEffect(() => {
+    if (!isDemoMode) return;
+    applyDemoSession(setProfile, setUser);
+    setLoading(false);
+  }, [isDemoMode]);
+
   useEffect(() => {
-    if (isDemoMode) {
-      const demoProfile = demoGetSession();
-      setProfile(demoProfile);
-      setUser(demoProfile ? ({ uid: demoProfile.id, email: demoProfile.email } as User) : null);
-      setLoading(false);
-      return;
-    }
+    if (isDemoMode) return;
 
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      setUser(currentUser ?? null);
-      if (currentUser) {
-        document.cookie = `firebase-auth-session=1; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
-        await fetchProfile(currentUser.uid);
-      } else {
-        document.cookie = 'firebase-auth-session=; path=/; max-age=0';
-        setProfile(null);
+    let cancelled = false;
+    let unsubscribe: (() => void) | undefined;
+
+    const safetyTimer = window.setTimeout(() => {
+      if (!cancelled) setLoading(false);
+    }, 4000);
+
+    void (async () => {
+      try {
+        const [{ auth }, { onAuthStateChanged }] = await Promise.all([
+          import('@/lib/firebase'),
+          import('firebase/auth'),
+        ]);
+
+        if (cancelled) return;
+
+        unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+          setUser(currentUser ?? null);
+          if (currentUser) {
+            document.cookie = `firebase-auth-session=1; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
+            void fetchProfile(currentUser.uid);
+          } else {
+            clearAuthCookies();
+            setProfile(null);
+          }
+          setLoading(false);
+        });
+      } catch (error) {
+        console.error('Firebase auth init failed:', error);
+        if (!cancelled) setLoading(false);
       }
-      setLoading(false);
-    });
+    })();
 
-    return () => unsubscribe();
+    return () => {
+      cancelled = true;
+      window.clearTimeout(safetyTimer);
+      unsubscribe?.();
+    };
   }, [isDemoMode]);
 
   const signIn = async (email: string, password: string) => {
@@ -92,6 +140,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     try {
+      const [{ auth }, { signInWithEmailAndPassword }] = await Promise.all([
+        import('@/lib/firebase'),
+        import('firebase/auth'),
+      ]);
       await signInWithEmailAndPassword(auth, email, password);
       return { error: null };
     } catch (error) {
@@ -115,6 +167,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     try {
+      const [{ auth, firestore }, { createUserWithEmailAndPassword }, { doc, setDoc }] = await Promise.all([
+        import('@/lib/firebase'),
+        import('firebase/auth'),
+        import('firebase/firestore'),
+      ]);
       const result = await createUserWithEmailAndPassword(auth, email, password);
       if (result.user) {
         const profileRef = doc(firestore, 'profiles', result.user.uid);
@@ -148,6 +205,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setProfile(null);
       return;
     }
+    const [{ auth }, { signOut: firebaseSignOut }] = await Promise.all([
+      import('@/lib/firebase'),
+      import('firebase/auth'),
+    ]);
     await firebaseSignOut(auth);
   };
 

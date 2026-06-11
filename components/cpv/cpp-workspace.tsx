@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import {
@@ -164,7 +164,7 @@ export function CppWorkspace() {
 
   const { config } = useCpvConfig();
 
-  const applyParameterSpecs = (paramName: string) => {
+  const applyParameterSpecs = useCallback((paramName: string) => {
     const productName = processForm.getValues('productName');
     const spec = resolveCppParameterSpec(config, paramName, productName || undefined)
       ?? PARAMETER_SPECS[paramName];
@@ -174,7 +174,7 @@ export function CppWorkspace() {
       processForm.setValue('usl', spec.usl);
       processForm.setValue('unit', spec.unit);
     }
-  };
+  }, [processForm, config]);
 
   useEffect(() => {
     const sub = processForm.watch((_, { name }) => {
@@ -183,7 +183,7 @@ export function CppWorkspace() {
       }
     });
     return () => sub.unsubscribe();
-  }, [processForm, config]);
+  }, [processForm, applyParameterSpecs]);
 
   const submitYield = yieldForm.handleSubmit(async (values) => {
     try {

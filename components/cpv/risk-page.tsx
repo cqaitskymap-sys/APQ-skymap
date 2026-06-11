@@ -4,7 +4,7 @@ import { Fragment, useEffect, useMemo, useState } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import { Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
-import { Plus, Printer } from 'lucide-react';
+import { FileSpreadsheet, Plus, Printer } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/auth-context';
 import {
@@ -34,6 +34,97 @@ import { cn } from '@/lib/utils';
 import { DataState, KpiCard, PageHeading, StatusBadge } from '@/components/cpv/cpv-ui';
 
 const LEVEL_TONE = { Low: 'green', Medium: 'amber', High: 'amber', Critical: 'red' } as const;
+
+const worksheetHeader = 'border border-[#315b18] bg-[#92d050] px-2 py-2 text-center text-[10px] font-bold uppercase leading-tight text-slate-950';
+const worksheetSubHeader = 'border border-[#315b18] bg-[#b7df82] px-2 py-2 text-center text-[10px] font-semibold leading-tight text-slate-950';
+const worksheetCell = 'border border-slate-300 px-2 py-2 align-top text-[11px] leading-snug';
+
+function RiskWorksheet({ records }: { records: RiskRecord[] }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="min-w-[1900px] w-full border-collapse bg-white text-slate-950">
+        <thead>
+          <tr>
+            <th className={worksheetHeader} colSpan={4}>Batch Identification</th>
+            <th className={worksheetHeader} colSpan={2}>Risk Identification</th>
+            <th className={worksheetHeader} colSpan={5}>Initial Risk Evaluation</th>
+            <th className={worksheetHeader} colSpan={2}>Risk Control</th>
+            <th className={worksheetHeader} colSpan={3}>Responsibility &amp; Follow-up</th>
+          </tr>
+          <tr>
+            <th className={worksheetSubHeader}>Sr. No.</th>
+            <th className={worksheetSubHeader}>Risk ID</th>
+            <th className={worksheetSubHeader}>Product</th>
+            <th className={worksheetSubHeader}>Batch No.</th>
+            <th className={worksheetSubHeader}>Source / Parameter</th>
+            <th className={worksheetSubHeader}>Potential Risk / Observation</th>
+            <th className={worksheetSubHeader}>Severity</th>
+            <th className={worksheetSubHeader}>Occurrence</th>
+            <th className={worksheetSubHeader}>Detectability</th>
+            <th className={worksheetSubHeader}>RPN</th>
+            <th className={worksheetSubHeader}>Risk Level</th>
+            <th className={worksheetSubHeader}>Existing Control / Mitigation</th>
+            <th className={worksheetSubHeader}>Control Status</th>
+            <th className={worksheetSubHeader}>Owner</th>
+            <th className={worksheetSubHeader}>Target Date</th>
+            <th className={worksheetSubHeader}>Review Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {records.map((risk, index) => {
+            const controlled = Boolean(risk.mitigation?.trim());
+            const overdue = Boolean(risk.dueDate && new Date(`${risk.dueDate}T23:59:59`) < new Date());
+            return (
+              <tr key={risk.id} className="even:bg-[#f4faec] hover:bg-[#e8f5d8]">
+                <td className={cn(worksheetCell, 'text-center font-medium')}>{index + 1}</td>
+                <td className={cn(worksheetCell, 'whitespace-nowrap font-mono font-semibold')}>{displayRiskId(risk)}</td>
+                <td className={cn(worksheetCell, 'min-w-[150px] font-semibold')}>{risk.productName}</td>
+                <td className={cn(worksheetCell, 'whitespace-nowrap')}>{risk.batchNo || 'All batches'}</td>
+                <td className={cn(worksheetCell, 'min-w-[140px]')}>{risk.factor}</td>
+                <td className={cn(worksheetCell, 'min-w-[260px]')}>{riskDescriptionText(risk)}</td>
+                <td className={cn(worksheetCell, 'text-center font-bold')}>{risk.severity}</td>
+                <td className={cn(worksheetCell, 'text-center font-bold')}>{riskOccurrence(risk)}</td>
+                <td className={cn(worksheetCell, 'text-center font-bold')}>{risk.detectability}</td>
+                <td className={cn(
+                  worksheetCell,
+                  'text-center font-mono text-sm font-bold',
+                  risk.riskLevel === 'Critical' && 'bg-red-100 text-red-800',
+                  risk.riskLevel === 'High' && 'bg-orange-100 text-orange-800',
+                  risk.riskLevel === 'Medium' && 'bg-amber-100 text-amber-800',
+                  risk.riskLevel === 'Low' && 'bg-emerald-100 text-emerald-800',
+                )}>
+                  {risk.rpn}
+                </td>
+                <td className={cn(worksheetCell, 'text-center')}><StatusBadge status={risk.riskLevel} /></td>
+                <td className={cn(worksheetCell, 'min-w-[260px]')}>{risk.mitigation || 'Control action not recorded'}</td>
+                <td className={cn(worksheetCell, 'text-center')}>
+                  <Badge variant="outline" className={controlled
+                    ? 'border-emerald-300 bg-emerald-50 text-emerald-800'
+                    : 'border-red-300 bg-red-50 text-red-800'}
+                  >
+                    {controlled ? 'Defined' : 'Open'}
+                  </Badge>
+                </td>
+                <td className={cn(worksheetCell, 'min-w-[130px]')}>{risk.owner}</td>
+                <td className={cn(worksheetCell, 'whitespace-nowrap text-center')}>{risk.dueDate || '-'}</td>
+                <td className={cn(worksheetCell, 'text-center')}>
+                  <Badge variant="outline" className={overdue
+                    ? 'border-red-300 bg-red-50 text-red-800'
+                    : controlled
+                      ? 'border-blue-300 bg-blue-50 text-blue-800'
+                      : 'border-amber-300 bg-amber-50 text-amber-800'}
+                  >
+                    {overdue ? 'Overdue' : controlled ? 'Under Monitoring' : 'Action Required'}
+                  </Badge>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
 
 function ScoreSelect({ form, name, label }: {
   form: ReturnType<typeof useForm<RiskInput>>;
@@ -241,7 +332,7 @@ export function RiskAssessmentPage() {
   return (
     <div className="space-y-6">
       <PageHeading
-        title="CPV Risk Assessment"
+        title="CPV Risk Assessment Worksheet"
         description="FMEA-style risk register for CPP drift, CQA drift, OOT, OOS, deviations, CAPA, equipment, utility, and vendor risks — with auto RPN, risk level, matrix, and heat map."
         actions={(
           <>
@@ -392,61 +483,26 @@ export function RiskAssessmentPage() {
 
       <Tabs defaultValue="register" className="space-y-5">
         <TabsList className="no-print grid h-auto w-full grid-cols-2 gap-1 p-1 lg:grid-cols-4">
-          <TabsTrigger value="register">Risk Register</TabsTrigger>
+          <TabsTrigger value="register"><FileSpreadsheet className="mr-2 h-4 w-4" />CPV Worksheet</TabsTrigger>
           <TabsTrigger value="matrix">Risk Matrix</TabsTrigger>
           <TabsTrigger value="heatmap">Heat Map</TabsTrigger>
           <TabsTrigger value="report">Risk Report</TabsTrigger>
         </TabsList>
 
         <TabsContent value="register">
-          <Card>
-            <CardHeader><CardTitle>Risk Register</CardTitle></CardHeader>
+          <Card className="overflow-hidden">
+            <CardHeader className="border-b bg-[#f4faec]">
+              <CardTitle className="flex items-center gap-2">
+                <FileSpreadsheet className="h-5 w-5 text-[#4f7f20]" />
+                CPV Risk Assessment Master Sheet
+              </CardTitle>
+              <CardDescription>
+                Controlled batch-wise worksheet. Scroll horizontally to review all grouped columns.
+              </CardDescription>
+            </CardHeader>
             <CardContent className="p-0">
               <DataState loading={loading} empty={!filtered.length} emptyText="No risk assessments recorded." />
-              {!loading && filtered.length > 0 && (
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Risk ID</TableHead>
-                        <TableHead>Product / Batch</TableHead>
-                        <TableHead>Source</TableHead>
-                        <TableHead>Description</TableHead>
-                        <TableHead>S</TableHead>
-                        <TableHead>O</TableHead>
-                        <TableHead>D</TableHead>
-                        <TableHead>RPN</TableHead>
-                        <TableHead>Level</TableHead>
-                        <TableHead>Owner</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filtered.map((risk: RiskRecord) => (
-                        <TableRow key={risk.id}>
-                          <TableCell className="font-mono text-xs">{displayRiskId(risk)}</TableCell>
-                          <TableCell>
-                            <p className="font-medium">{risk.productName}</p>
-                            <p className="text-xs text-muted-foreground">{risk.batchNo || 'All batches'}</p>
-                          </TableCell>
-                          <TableCell>{risk.factor}</TableCell>
-                          <TableCell className="max-w-[200px] truncate text-sm" title={riskDescriptionText(risk)}>
-                            {riskDescriptionText(risk)}
-                          </TableCell>
-                          <TableCell>{risk.severity}</TableCell>
-                          <TableCell>{riskOccurrence(risk)}</TableCell>
-                          <TableCell>{risk.detectability}</TableCell>
-                          <TableCell className="font-mono font-bold">{risk.rpn}</TableCell>
-                          <TableCell><StatusBadge status={risk.riskLevel} /></TableCell>
-                          <TableCell>
-                            <p className="text-sm">{risk.owner}</p>
-                            {risk.dueDate && <p className="text-xs text-muted-foreground">{risk.dueDate}</p>}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
+              {!loading && filtered.length > 0 && <RiskWorksheet records={filtered} />}
             </CardContent>
           </Card>
         </TabsContent>

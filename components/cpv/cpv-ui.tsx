@@ -1,8 +1,9 @@
 'use client';
 
-import { AlertTriangle, CheckCircle2, Database, Loader2, ShieldAlert } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Database, ShieldAlert } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
+import { TableSkeleton } from '@/components/ui/table-skeleton';
 import { cn } from '@/lib/utils';
 
 export function PageHeading({
@@ -88,12 +89,7 @@ export function DataState({
   emptyText?: string;
 }) {
   if (loading) {
-    return (
-      <div className="flex min-h-[220px] items-center justify-center text-sm text-muted-foreground">
-        <Loader2 className="mr-2 h-5 w-5 animate-spin text-blue-600" />
-        Loading controlled records...
-      </div>
-    );
+    return <TableSkeleton rows={6} cols={5} />;
   }
   if (empty) {
     return (

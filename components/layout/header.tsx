@@ -12,6 +12,7 @@ import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
+import { formatBreadcrumbLabel } from '@/lib/breadcrumb-labels';
 
 function getBreadcrumbs(pathname: string) {
   const parts = pathname.split('/').filter(Boolean);
@@ -19,8 +20,7 @@ function getBreadcrumbs(pathname: string) {
   let path = '';
   for (const part of parts) {
     path += `/${part}`;
-    const label = part.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-    crumbs.push({ label, href: path });
+    crumbs.push({ label: formatBreadcrumbLabel(part), href: path });
   }
   return crumbs;
 }

@@ -1,2 +1,7 @@
-import { AnnualReviewPage } from '@/components/cpv/annual-review-page';
-export default function Page() { return <AnnualReviewPage />; }
+export const dynamic = 'force-dynamic';
+
+import { LazyAnnualReviewPage } from '@/lib/lazy-cpv';
+
+export default function Page() {
+  return <LazyAnnualReviewPage />;
+}

@@ -1,2 +1,7 @@
-import { CapabilityWorkspace } from '@/components/cpv/capability-workspace';
-export default function Page() { return <CapabilityWorkspace />; }
+export const dynamic = 'force-dynamic';
+
+import { LazyCapabilityWorkspace } from '@/lib/lazy-cpv';
+
+export default function Page() {
+  return <LazyCapabilityWorkspace />;
+}

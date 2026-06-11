@@ -112,13 +112,15 @@ async function resolveBatchLink(batchNo: string, productName?: string) {
 
 export async function loadCppBatches(): Promise<Array<{ id: string; batch_number: string; product_name: string }>> {
   const results: Array<{ id: string; batch_number: string; product_name: string }> = [];
-  for (const coll of ['batches', 'pqr_batches']) {
+  const collections = ['cpv_batches', 'batches', 'pqr_batches'];
+  for (const coll of collections) {
     try {
       const snap = await getDocs(query(collection(firestore, coll), orderBy('created_at', 'desc'), limit(200)));
       snap.docs.forEach((d) => {
         const data = d.data();
         const bn = String(data.batch_number || data.batchNo || data.batchNumber || '');
-        if (bn) results.push({ id: d.id, batch_number: bn, product_name: String(data.product_name || data.productName || '') });
+        const pn = String(data.product_name || data.productName || '');
+        if (bn) results.push({ id: d.id, batch_number: bn, product_name: pn });
       });
       if (results.length) break;
     } catch {

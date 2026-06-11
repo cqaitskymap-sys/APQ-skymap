@@ -34,7 +34,7 @@ const MONTHS = [
 ];
 
 export function CpvDashboardPage() {
-  const { loading, cpp, cqa, risks, integrations } = useCpvData(true);
+  const { loading, cpp, cqa, risks, integrations, modules } = useCpvData(true);
   const [audit, setAudit] = useState<Record<string, unknown>[]>([]);
   const [filters, setFilters] = useState<CpvDashboardFilters>({
     product: 'all', year: 'all', month: 'all', quarter: 'all',
@@ -66,7 +66,15 @@ export function CpvDashboardPage() {
     [filteredCpp, filteredCqa],
   );
 
-  const batches = (integrations?.batches || []) as Record<string, unknown>[];
+  const batches = useMemo(
+    () => (integrations?.batches || []) as Record<string, unknown>[],
+    [integrations?.batches],
+  );
+  const openAlerts = modules?.alerts?.filter((a) => a.status === 'Open').length || 0;
+  const annualCompliance = totalStats.complies + totalStats.oot + totalStats.oos > 0
+    ? Math.round((totalStats.complies / (totalStats.complies + totalStats.oot + totalStats.oos)) * 100)
+    : 100;
+
   const kpis = useMemo(() => ({
     products: filters.product && filters.product !== 'all' ? 1 : products.length,
     batches: uniqueBatches(filteredCpp, filteredCqa, batches),
@@ -76,9 +84,11 @@ export function CpvDashboardPage() {
     oot: totalStats.oot,
     oos: totalStats.oos,
     openRisks: openRiskCount(filteredRisks),
+    openAlerts,
     avgCpk: averageCpk,
     avgPpk: averagePpk,
-  }), [filters, products, filteredCpp, filteredCqa, batches, totalStats, filteredRisks, averageCpk, averagePpk]);
+    annualCompliance,
+  }), [filters, products, filteredCpp, filteredCqa, batches, totalStats, filteredRisks, averageCpk, averagePpk, openAlerts, annualCompliance]);
 
   const charts = useMemo(() => ({
     monthly: monthlyTrend(allFiltered),
@@ -179,9 +189,35 @@ export function CpvDashboardPage() {
             <KpiCard label="OOT Parameters" value={kpis.oot} tone={kpis.oot ? 'amber' : 'green'} />
             <KpiCard label="OOS Parameters" value={kpis.oos} tone={kpis.oos ? 'red' : 'green'} />
             <KpiCard label="Open Risks" value={kpis.openRisks} tone={kpis.openRisks ? 'red' : 'green'} />
+            <KpiCard label="Open Alerts" value={kpis.openAlerts} tone={kpis.openAlerts ? 'red' : 'green'} />
+            <KpiCard label="Annual Compliance %" value={`${kpis.annualCompliance}%`} tone={kpis.annualCompliance >= 95 ? 'green' : 'amber'} />
             <KpiCard label="Average Cpk" value={averageCpk.toFixed(2)} tone={cpkTone} />
             <KpiCard label="Average Ppk" value={averagePpk.toFixed(2)} tone={ppkTone} />
           </div>
+
+          {/* Module Quick Links */}
+          <Card className="no-print">
+            <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">CPV Module Navigation</CardTitle></CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+                {[
+                  ['Product Master', '/cpv/products'], ['Batch Registration', '/cpv/batches'],
+                  ['CPP Monitoring', '/cpv/cpp'], ['CQA Monitoring', '/cpv/cqa'],
+                  ['Raw Materials', '/cpv/raw-materials'], ['Packing Materials', '/cpv/packing-materials'],
+                  ['Utility', '/cpv/utility'], ['Environmental', '/cpv/environmental'],
+                  ['Yield', '/cpv/yield'], ['Stability', '/cpv/stability'],
+                  ['Hold Time', '/cpv/hold-time'], ['Process Capability', '/cpv/process-capability'],
+                  ['Trend Analysis', '/cpv/trend-analysis'], ['Control Charts', '/cpv/control-charts'],
+                  ['Risk Assessment', '/cpv/risk-assessment'], ['Reports', '/cpv/reports'],
+                  ['Alerts', '/cpv/alerts'], ['Annual Review', '/cpv/annual-review'],
+                ].map(([label, href]) => (
+                  <Link key={href} href={href}>
+                    <Button variant="outline" size="sm" className="w-full justify-start text-xs h-8">{label}</Button>
+                  </Link>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
 
           {/* Charts */}
           <div className="grid gap-4 lg:grid-cols-2">

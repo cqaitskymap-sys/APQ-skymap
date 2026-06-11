@@ -1,2 +1,7 @@
-import { CpvDashboardPage } from '@/components/cpv/dashboard-page';
-export default function Page() { return <CpvDashboardPage />; }
+export const dynamic = 'force-dynamic';
+
+import { LazyCpvDashboard } from '@/lib/lazy-cpv';
+
+export default function Page() {
+  return <LazyCpvDashboard />;
+}

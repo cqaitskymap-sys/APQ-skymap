@@ -1,0 +1,76 @@
+'use client';
+
+import { ReactNode, useEffect } from 'react';
+import { useRouter, usePathname } from 'next/navigation';
+import { useAuth } from '@/contexts/auth-context';
+import { canAccessModule } from '@/lib/permissions';
+import { resolveModuleFromPath } from '@/lib/nav-permissions';
+import { LoadingSpinner } from '@/components/ui/loading-spinner';
+import { ShieldX } from 'lucide-react';
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import Link from 'next/link';
+
+interface ProtectedRouteProps {
+  children: ReactNode;
+  /** Override auto-detected module from pathname */
+  module?: Parameters<typeof canAccessModule>[1];
+  requireEdit?: boolean;
+}
+
+export function ProtectedRoute({ children, module, requireEdit = false }: ProtectedRouteProps) {
+  const { user, profile, loading } = useAuth();
+  const router = useRouter();
+  const pathname = usePathname();
+
+  useEffect(() => {
+    if (!loading && !user) {
+      document.cookie = 'firebase-auth-session=; path=/; max-age=0; SameSite=Lax';
+      document.cookie = '__session=; path=/; max-age=0; SameSite=Lax';
+      router.replace(`/auth/login?redirect=${encodeURIComponent(pathname)}`);
+    }
+  }, [user, loading, router, pathname]);
+
+  if (loading) {
+    return (
+      <div className="flex min-h-[50vh] items-center justify-center">
+        <LoadingSpinner label="Authenticating..." />
+      </div>
+    );
+  }
+
+  if (!user) return null;
+
+  const resolvedModule = module ?? resolveModuleFromPath(pathname);
+  if (resolvedModule && !canAccessModule(profile?.role, resolvedModule)) {
+    return (
+      <Card className="mx-auto mt-12 max-w-lg border-red-200">
+        <CardContent className="space-y-4 p-8 text-center">
+          <ShieldX className="mx-auto h-12 w-12 text-red-500" />
+          <h2 className="text-xl font-bold">Access Denied</h2>
+          <p className="text-sm text-muted-foreground">
+            Your role does not have permission to access this module.
+          </p>
+          <Button asChild variant="outline">
+            <Link href="/dashboard">Return to Dashboard</Link>
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (requireEdit && profile?.role && ['viewer', 'auditor'].includes(profile.role)) {
+    return (
+      <Card className="mx-auto mt-12 max-w-lg border-amber-200">
+        <CardContent className="space-y-4 p-8 text-center">
+          <ShieldX className="mx-auto h-12 w-12 text-amber-500" />
+          <h2 className="text-xl font-bold">Read-Only Access</h2>
+          <p className="text-sm text-muted-foreground">You can view records but cannot modify them.</p>
+          <Button asChild variant="outline"><Link href="/dashboard">Return to Dashboard</Link></Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return <>{children}</>;
+}

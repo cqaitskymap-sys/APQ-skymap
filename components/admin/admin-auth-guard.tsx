@@ -29,6 +29,10 @@ export function AdminAuthGuard({
       router.replace('/auth/login?redirect=/dashboard/admin');
       return;
     }
+    if (!perms.canAccessAdmin) {
+      router.replace('/dashboard');
+      return;
+    }
     if (requireSuperAdmin && !perms.canManageRoles) {
       router.replace('/dashboard/admin');
       return;
@@ -53,6 +57,7 @@ export function AdminAuthGuard({
   }
 
   if (!user) return null;
+  if (!perms.canAccessAdmin) return null;
 
   return <>{children}</>;
 }

@@ -1,5 +1,7 @@
-import { CqaWorkspace } from '@/components/cpv/cqa-workspace';
+export const dynamic = 'force-dynamic';
+
+import { LazyCqaWorkspace } from '@/lib/lazy-cpv';
 
 export default function Page() {
-  return <CqaWorkspace />;
+  return <LazyCqaWorkspace />;
 }

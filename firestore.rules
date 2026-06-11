@@ -1,6 +1,7 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+
     function isAuthenticated() {
       return request.auth != null;
     }
@@ -17,19 +18,79 @@ service cloud.firestore {
       return isAuthenticated() && getProfileRole() in ['super_admin', 'admin'];
     }
 
+    function isNotReadOnly() {
+      return isAuthenticated() && !(getProfileRole() in ['auditor', 'viewer']);
+    }
+
+    function isQaRole() {
+      return getProfileRole() in [
+        'super_admin', 'admin', 'head_qa', 'qa_manager', 'qa_executive',
+        'qa', 'qc_manager', 'qc_executive', 'qc'
+      ];
+    }
+
+    function isAllowedWriteCollection(name) {
+      return name.matches('cpv_.*')
+        || name.matches('cpv_config_.*')
+        || name in [
+          'deviations', 'oos_records', 'oos', 'capa_records', 'capa',
+          'change_control', 'change_controls', 'complaints', 'recall_records',
+          'stability_studies', 'stability', 'pqr_documents', 'pqr_records',
+          'pqr_batches', 'material_master', 'vendor_master', 'material_review',
+          'packaging_material_master', 'packaging_reviews', 'packaging_vendor_review',
+          'packaging_reconciliation', 'dms_documents', 'training_records',
+          'validation_records', 'csv_systems', 'equipment_records',
+          'monitoring_records', 'warehouse_records', 'ebmr_records',
+          'audit_mgmt_records', 'vendor_records', 'notifications'
+        ];
+    }
+
+    function isAuditCollection(name) {
+      return name.matches('.*audit_trail.*')
+        || name.matches('.*audit_logs.*')
+        || name in ['cpv_audit_trail', 'audit_logs', 'audit_trail', 'packaging_audit_trail', 'audit_logs_material'];
+    }
+
+    // ── Profiles ──
     match /profiles/{userId} {
-      allow read: if isAuthenticated();
+      allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin() || isQaRole());
       allow create: if isAuthenticated() && request.auth.uid == userId;
       allow update: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
       allow delete: if isSuperAdmin();
     }
 
+    // ── Immutable audit logs ──
     match /audit_logs/{logId} {
       allow read: if isAuthenticated();
-      allow create: if isAuthenticated();
+      allow create: if isNotReadOnly();
       allow update, delete: if false;
     }
 
+    match /cpv_audit_trail/{logId} {
+      allow read: if isAuthenticated();
+      allow create: if isNotReadOnly();
+      allow update, delete: if false;
+    }
+
+    match /audit_trail/{logId} {
+      allow read: if isAuthenticated();
+      allow create: if isNotReadOnly();
+      allow update, delete: if false;
+    }
+
+    match /packaging_audit_trail/{logId} {
+      allow read: if isAuthenticated();
+      allow create: if isNotReadOnly();
+      allow update, delete: if false;
+    }
+
+    match /audit_logs_material/{logId} {
+      allow read: if isAuthenticated();
+      allow create: if isNotReadOnly();
+      allow update, delete: if false;
+    }
+
+    // ── Admin collections ──
     match /users/{docId} {
       allow read: if isAuthenticated();
       allow write: if isAdmin();
@@ -83,7 +144,7 @@ service cloud.firestore {
 
     match /batches/{docId} {
       allow read: if isAuthenticated();
-      allow write: if isAuthenticated() && getProfileRole() != 'viewer';
+      allow write: if isNotReadOnly();
     }
 
     match /parameters/{docId} {
@@ -111,9 +172,22 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // ── CPV operational + config data (cpv_* prefix) ──
+    match /cpv_{cpvModule}/{docId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isNotReadOnly();
+      allow delete: if isAdmin() || isSuperAdmin();
+    }
+
+    // ── Default: registered collections only, deny unknown writes ──
     match /{collection}/{docId} {
       allow read: if isAuthenticated();
-      allow write: if isAuthenticated() && !(getProfileRole() in ['auditor', 'viewer']);
+      allow create, update: if isNotReadOnly()
+        && isAllowedWriteCollection(collection)
+        && !isAuditCollection(collection);
+      allow delete: if (isAdmin() || isSuperAdmin())
+        && isAllowedWriteCollection(collection)
+        && !isAuditCollection(collection);
     }
   }
 }

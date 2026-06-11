@@ -16,6 +16,15 @@ export const CPV_COLLECTIONS = {
   risk: 'cpv_risk_assessment',
   annualReview: 'cpv_annual_review',
   audit: 'cpv_audit_trail',
+  batches: 'cpv_batches',
+  rawMaterials: 'cpv_raw_materials',
+  packingMaterials: 'cpv_packing_materials',
+  utilityMonitoring: 'cpv_utility_monitoring',
+  environment: 'cpv_environment_monitoring',
+  yieldMonitoring: 'cpv_yield_monitoring',
+  stability: 'cpv_stability_studies',
+  holdTime: 'cpv_hold_time',
+  alerts: 'cpv_alerts',
 } as const;
 
 export type CpvStatus = 'Complies' | 'OOT' | 'OOS';
