@@ -1,41 +1,49 @@
-import { initializeApp, getApps, FirebaseApp } from 'firebase/app';
-import { getAuth, Auth, connectAuthEmulator } from 'firebase/auth';
-import { getFirestore, Firestore, connectFirestoreEmulator } from 'firebase/firestore';
-import { getStorage, FirebaseStorage } from 'firebase/storage';
+import { initializeApp, getApps, type FirebaseApp, type FirebaseOptions } from 'firebase/app';
+import { getAuth, connectAuthEmulator, type Auth } from 'firebase/auth';
+import { getFirestore, connectFirestoreEmulator, type Firestore } from 'firebase/firestore';
+import { getStorage, type FirebaseStorage } from 'firebase/storage';
 
-const fallbackConfig = {
-  apiKey: 'AIzaSyC0O8J9_1eYUt4__QQ4INv_H1U9sBrzJBU',
-  authDomain: 'apq-skymap.firebaseapp.com',
-  databaseURL: 'https://apq-skymap-default-rtdb.firebaseio.com',
-  projectId: 'apq-skymap',
-  storageBucket: 'apq-skymap.firebasestorage.app',
-  messagingSenderId: '52013725731',
-  appId: '1:52013725731:web:f0e4faeece7b4d8998d996',
-  measurementId: 'G-8SPWM00W7L',
-};
+const REQUIRED_ENV_KEYS = [
+  'NEXT_PUBLIC_FIREBASE_API_KEY',
+  'NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN',
+  'NEXT_PUBLIC_FIREBASE_PROJECT_ID',
+  'NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET',
+  'NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID',
+  'NEXT_PUBLIC_FIREBASE_APP_ID',
+] as const;
 
-function getFirebaseConfig() {
-  return {
-    apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || fallbackConfig.apiKey,
-    authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || fallbackConfig.authDomain,
-    databaseURL: process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL || fallbackConfig.databaseURL,
-    projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || fallbackConfig.projectId,
-    storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || fallbackConfig.storageBucket,
-    messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || fallbackConfig.messagingSenderId,
-    appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || fallbackConfig.appId,
-    measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID || fallbackConfig.measurementId,
-  };
+export class FirebaseNotConfiguredError extends Error {
+  constructor(message = 'Firebase is not configured. Copy .env.local.example to .env.local and add your project credentials.') {
+    super(message);
+    this.name = 'FirebaseNotConfiguredError';
+  }
 }
 
 export function isFirebaseConfigured(): boolean {
-  return Boolean(
-    process.env.NEXT_PUBLIC_FIREBASE_API_KEY &&
-    process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID &&
-    process.env.NEXT_PUBLIC_FIREBASE_APP_ID
-  );
+  return REQUIRED_ENV_KEYS.every((key) => Boolean(process.env[key]?.trim()));
 }
 
-let app: FirebaseApp;
+export function getFirebaseSetupMessage(): string {
+  if (isFirebaseConfigured()) return '';
+  const missing = REQUIRED_ENV_KEYS.filter((key) => !process.env[key]?.trim());
+  return `Firebase environment variables are missing: ${missing.join(', ')}. Copy .env.local.example to .env.local and add your project credentials.`;
+}
+
+function getFirebaseConfig(): FirebaseOptions {
+  if (!isFirebaseConfigured()) {
+    throw new FirebaseNotConfiguredError(getFirebaseSetupMessage());
+  }
+  return {
+    apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY!,
+    authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN!,
+    projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID!,
+    storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET!,
+    messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID!,
+    appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID!,
+  };
+}
+
+let app: FirebaseApp | null = null;
 let authInstance: Auth | null = null;
 let firestoreInstance: Firestore | null = null;
 let storageInstance: FirebaseStorage | null = null;
@@ -53,25 +61,23 @@ function connectEmulators(auth: Auth, db: Firestore) {
   }
 }
 
-function getFirebaseApp(): FirebaseApp {
-  if (typeof window === 'undefined') {
-    return getApps()[0] ?? initializeApp(getFirebaseConfig());
-  }
+export function getFirebaseApp(): FirebaseApp {
+  if (!isFirebaseConfigured()) throw new FirebaseNotConfiguredError();
   if (!app) {
     app = getApps().length === 0 ? initializeApp(getFirebaseConfig()) : getApps()[0]!;
   }
   return app;
 }
 
-function getAuthInstance(): Auth {
+export function getFirebaseAuth(): Auth {
   if (!authInstance) {
     authInstance = getAuth(getFirebaseApp());
-    connectEmulators(authInstance, getFirestoreInstance());
+    if (firestoreInstance) connectEmulators(authInstance, firestoreInstance);
   }
   return authInstance;
 }
 
-function getFirestoreInstance(): Firestore {
+export function getFirebaseFirestore(): Firestore {
   if (!firestoreInstance) {
     firestoreInstance = getFirestore(getFirebaseApp());
     if (authInstance) connectEmulators(authInstance, firestoreInstance);
@@ -79,30 +85,51 @@ function getFirestoreInstance(): Firestore {
   return firestoreInstance;
 }
 
-function getStorageInstance(): FirebaseStorage {
+export function getFirebaseStorage(): FirebaseStorage {
   if (!storageInstance) {
     storageInstance = getStorage(getFirebaseApp());
   }
   return storageInstance;
 }
 
-export const auth: Auth = typeof window !== 'undefined'
-  ? getAuthInstance()
-  : getAuth(getFirebaseApp());
+function createLazyProxy<T extends object>(getter: () => T): T {
+  let instance: T | null = null;
+  return new Proxy({} as T, {
+    get(_target, prop) {
+      if (!isFirebaseConfigured()) {
+        throw new FirebaseNotConfiguredError();
+      }
+      if (!instance) instance = getter();
+      const value = Reflect.get(instance, prop, instance);
+      return typeof value === 'function' ? (value as (...args: unknown[]) => unknown).bind(instance) : value;
+    },
+  });
+}
 
-export const firestore: Firestore = typeof window !== 'undefined'
-  ? getFirestoreInstance()
-  : getFirestore(getFirebaseApp());
+/** @deprecated Prefer getFirebaseAuth() — lazy proxy for backward compatibility */
+export const auth = createLazyProxy(getFirebaseAuth);
 
-export const storage: FirebaseStorage = typeof window !== 'undefined'
-  ? getStorageInstance()
-  : getStorage(getFirebaseApp());
+/** @deprecated Prefer getFirebaseFirestore() — lazy proxy for backward compatibility */
+export const firestore = createLazyProxy(getFirebaseFirestore);
+
+/** @deprecated Prefer getFirebaseStorage() — lazy proxy for backward compatibility */
+export const storage = createLazyProxy(getFirebaseStorage);
 
 export function isDemoAuthEnabled(): boolean {
   return process.env.NEXT_PUBLIC_DEMO_AUTH === 'true';
 }
 
-export type UserRole = 'super_admin' | 'qa' | 'qc' | 'production' | 'engineering' | 'warehouse' | 'regulatory' | 'viewer' | 'auditor';
+export type UserRole =
+  | 'super_admin'
+  | 'admin'
+  | 'qa'
+  | 'qc'
+  | 'production'
+  | 'engineering'
+  | 'warehouse'
+  | 'regulatory'
+  | 'auditor'
+  | 'viewer';
 
 export interface Profile {
   id: string;

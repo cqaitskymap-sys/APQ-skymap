@@ -18,31 +18,38 @@ service cloud.firestore {
       return isAuthenticated() && getProfileRole() in ['super_admin', 'admin'];
     }
 
+    function isReadOnly() {
+      return isAuthenticated() && getProfileRole() in ['auditor', 'viewer'];
+    }
+
     function isNotReadOnly() {
-      return isAuthenticated() && !(getProfileRole() in ['auditor', 'viewer']);
+      return isAuthenticated() && !isReadOnly();
     }
 
     function isQaRole() {
       return getProfileRole() in [
-        'super_admin', 'admin', 'head_qa', 'qa_manager', 'qa_executive',
-        'qa', 'qc_manager', 'qc_executive', 'qc'
+        'super_admin', 'admin', 'head_qa', 'qa_manager', 'qa_executive', 'qa'
       ];
     }
 
-    function isAllowedWriteCollection(name) {
-      return name.matches('cpv_.*')
-        || name.matches('cpv_config_.*')
-        || name in [
-          'deviations', 'oos_records', 'oos', 'capa_records', 'capa',
-          'change_control', 'change_controls', 'complaints', 'recall_records',
-          'stability_studies', 'stability', 'pqr_documents', 'pqr_records',
-          'pqr_batches', 'material_master', 'vendor_master', 'material_review',
-          'packaging_material_master', 'packaging_reviews', 'packaging_vendor_review',
-          'packaging_reconciliation', 'dms_documents', 'training_records',
-          'validation_records', 'csv_systems', 'equipment_records',
-          'monitoring_records', 'warehouse_records', 'ebmr_records',
-          'audit_mgmt_records', 'vendor_records', 'notifications'
-        ];
+    function isQcRole() {
+      return getProfileRole() in ['super_admin', 'admin', 'qc_manager', 'qc_executive', 'qc'];
+    }
+
+    function isProductionRole() {
+      return getProfileRole() in ['super_admin', 'admin', 'production_manager', 'production_executive', 'production'];
+    }
+
+    function isEngineeringRole() {
+      return getProfileRole() in ['super_admin', 'admin', 'engineering_manager', 'engineering_executive', 'engineering'];
+    }
+
+    function isWarehouseRole() {
+      return getProfileRole() in ['super_admin', 'admin', 'warehouse_manager', 'warehouse_executive', 'warehouse'];
+    }
+
+    function isRegulatoryRole() {
+      return getProfileRole() in ['super_admin', 'admin', 'regulatory_affairs', 'regulatory'];
     }
 
     function isAuditCollection(name) {
@@ -51,7 +58,42 @@ service cloud.firestore {
         || name in ['cpv_audit_trail', 'audit_logs', 'audit_trail', 'packaging_audit_trail', 'audit_logs_material'];
     }
 
-    // ── Profiles ──
+    function isRegisteredCollection(name) {
+      return name.matches('cpv_.*')
+        || name in [
+          'users', 'roles', 'permissions', 'products', 'batches',
+          'cpv_reviews', 'cpp_parameters', 'cpp_results',
+          'cqa_parameters', 'cqa_results', 'risk_assessment',
+          'pqr_records', 'pqr_documents', 'pqr_batches',
+          'deviations', 'oos_records', 'oos', 'capa_records', 'capa',
+          'change_controls', 'change_control', 'stability_studies', 'stability',
+          'complaints', 'recalls', 'recall_records', 'documents', 'dms_documents',
+          'training_records', 'audits', 'audit_mgmt_records',
+          'vendors', 'vendor_master', 'vendor_records',
+          'validation_records', 'csv_systems',
+          'equipment_master', 'equipment_records', 'calibration_records',
+          'monitoring_records', 'warehouse_materials', 'warehouse_records',
+          'ebmr_records', 'notifications',
+          'material_master', 'packaging_material_master',
+          'departments', 'designations', 'company_sites', 'parameters',
+          'workflows', 'approval_matrix', 'document_numbering',
+          'notification_settings', 'esign_settings', 'system_settings', 'backup_history'
+        ];
+    }
+
+    function canWriteCollection(name) {
+      return isSuperAdmin()
+        || (isAdmin() && name in ['users', 'roles', 'permissions', 'products', 'batches', 'departments', 'designations'])
+        || (isQaRole() && name in ['pqr_records', 'pqr_documents', 'deviations', 'capa_records', 'capa', 'change_controls', 'change_control', 'complaints', 'recalls', 'recall_records', 'stability_studies', 'training_records', 'documents', 'dms_documents'])
+        || (isQcRole() && name in ['oos_records', 'oos', 'cqa_parameters', 'cqa_results', 'stability_studies', 'stability'])
+        || (isProductionRole() && name in ['batches', 'cpp_parameters', 'cpp_results', 'ebmr_records'])
+        || (isEngineeringRole() && name in ['equipment_master', 'equipment_records', 'calibration_records', 'validation_records', 'csv_systems', 'monitoring_records'])
+        || (isWarehouseRole() && name in ['warehouse_materials', 'warehouse_records', 'material_master'])
+        || (isRegulatoryRole() && name in ['change_controls', 'change_control', 'recalls', 'recall_records', 'documents', 'dms_documents', 'pqr_records'])
+        || (isNotReadOnly() && name.matches('cpv_.*'));
+    }
+
+    // ── Profiles & Users ──
     match /profiles/{userId} {
       allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin() || isQaRole());
       allow create: if isAuthenticated() && request.auth.uid == userId;
@@ -59,7 +101,29 @@ service cloud.firestore {
       allow delete: if isSuperAdmin();
     }
 
-    // ── Immutable audit logs ──
+    match /users/{docId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAdmin();
+      allow delete: if isSuperAdmin();
+    }
+
+    match /roles/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isSuperAdmin();
+    }
+
+    match /permissions/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isSuperAdmin();
+    }
+
+    // ── Immutable audit trail ──
+    match /audit_trail/{logId} {
+      allow read: if isAuthenticated();
+      allow create: if isNotReadOnly();
+      allow update, delete: if false;
+    }
+
     match /audit_logs/{logId} {
       allow read: if isAuthenticated();
       allow create: if isNotReadOnly();
@@ -67,12 +131,6 @@ service cloud.firestore {
     }
 
     match /cpv_audit_trail/{logId} {
-      allow read: if isAuthenticated();
-      allow create: if isNotReadOnly();
-      allow update, delete: if false;
-    }
-
-    match /audit_trail/{logId} {
       allow read: if isAuthenticated();
       allow create: if isNotReadOnly();
       allow update, delete: if false;
@@ -90,22 +148,17 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
-    // ── Admin collections ──
-    match /users/{docId} {
-      allow read: if isAuthenticated();
-      allow write: if isAdmin();
+    // ── Notifications ──
+    match /notifications/{docId} {
+      allow read: if isAuthenticated()
+        && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isNotReadOnly();
+      allow update: if isAuthenticated()
+        && (resource.data.userId == request.auth.uid || isAdmin());
+      allow delete: if isSuperAdmin();
     }
 
-    match /roles/{docId} {
-      allow read: if isAuthenticated();
-      allow write: if isSuperAdmin();
-    }
-
-    match /permissions/{docId} {
-      allow read: if isAuthenticated();
-      allow write: if isSuperAdmin();
-    }
-
+    // ── Admin / master data ──
     match /system_settings/{docId} {
       allow read: if isAuthenticated();
       allow write: if isSuperAdmin();
@@ -124,12 +177,12 @@ service cloud.firestore {
 
     match /departments/{docId} {
       allow read: if isAuthenticated();
-      allow write: if isAdmin() || getProfileRole() in ['head_qa', 'qa_manager'];
+      allow write: if isAdmin() || isQaRole();
     }
 
     match /designations/{docId} {
       allow read: if isAuthenticated();
-      allow write: if isAdmin() || getProfileRole() in ['head_qa', 'qa_manager'];
+      allow write: if isAdmin() || isQaRole();
     }
 
     match /company_sites/{docId} {
@@ -139,54 +192,31 @@ service cloud.firestore {
 
     match /products/{docId} {
       allow read: if isAuthenticated();
-      allow write: if isAdmin() || getProfileRole() in ['head_qa', 'qa_manager'];
+      allow write: if isAdmin() || isQaRole();
     }
 
     match /batches/{docId} {
       allow read: if isAuthenticated();
-      allow write: if isNotReadOnly();
+      allow create, update: if isNotReadOnly();
+      allow delete: if isSuperAdmin();
     }
 
-    match /parameters/{docId} {
-      allow read: if isAuthenticated();
-      allow write: if isAdmin() || getProfileRole() in ['head_qa', 'qa_manager', 'qa_executive'];
-    }
-
-    match /workflows/{docId} {
-      allow read: if isAuthenticated();
-      allow write: if isAdmin();
-    }
-
-    match /approval_matrix/{docId} {
-      allow read: if isAuthenticated();
-      allow write: if isAdmin();
-    }
-
-    match /document_numbering/{docId} {
-      allow read: if isAuthenticated();
-      allow write: if isAdmin();
-    }
-
-    match /notification_settings/{docId} {
-      allow read: if isAuthenticated();
-      allow write: if isAdmin();
-    }
-
-    // ── CPV operational + config data (cpv_* prefix) ──
+    // ── CPV (cpv_* prefix) ──
     match /cpv_{cpvModule}/{docId} {
       allow read: if isAuthenticated();
       allow create, update: if isNotReadOnly();
-      allow delete: if isAdmin() || isSuperAdmin();
+      allow delete: if isSuperAdmin();
     }
 
-    // ── Default: registered collections only, deny unknown writes ──
+    // ── Default: registered collections ──
     match /{collection}/{docId} {
       allow read: if isAuthenticated();
       allow create, update: if isNotReadOnly()
-        && isAllowedWriteCollection(collection)
+        && isRegisteredCollection(collection)
+        && canWriteCollection(collection)
         && !isAuditCollection(collection);
-      allow delete: if (isAdmin() || isSuperAdmin())
-        && isAllowedWriteCollection(collection)
+      allow delete: if isSuperAdmin()
+        && isRegisteredCollection(collection)
         && !isAuditCollection(collection);
     }
   }

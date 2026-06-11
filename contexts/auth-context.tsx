@@ -7,8 +7,11 @@ import type { User } from 'firebase/auth';
 import type { Profile } from '@/lib/firebase';
 import { isDemoAuthEnabled } from '@/lib/demo-auth-config';
 import {
-  demoSignIn, demoSignUp, demoSignOut, demoGetSession, formatAuthError, isAuthNetworkError,
+  demoSignIn, demoSignUp, demoSignOut, demoGetSession,
 } from '@/lib/demo-auth';
+import {
+  formatAuthError, isAuthNetworkError, getUserProfile, subscribeToAuthState,
+} from '@/lib/auth';
 
 interface AuthContextType {
   user: User | null;
@@ -59,15 +62,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const fetchProfile = async (userId: string) => {
     try {
-      const [{ firestore }, { doc, getDoc }] = await Promise.all([
-        import('@/lib/firebase'),
-        import('firebase/firestore'),
-      ]);
-      const profileRef = doc(firestore, 'profiles', userId);
-      const profileSnap = await getDoc(profileRef);
-      if (profileSnap.exists()) {
-        setProfile(profileSnap.data() as Profile);
-      }
+      const data = await getUserProfile(userId);
+      if (data) setProfile(data);
     } catch (error) {
       console.error('Error fetching profile:', error);
     }
@@ -100,14 +96,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     void (async () => {
       try {
-        const [{ auth }, { onAuthStateChanged }] = await Promise.all([
-          import('@/lib/firebase'),
-          import('firebase/auth'),
-        ]);
+        const { isFirebaseConfigured } = await import('@/lib/firebase');
+        if (!isFirebaseConfigured()) {
+          if (!cancelled) setLoading(false);
+          return;
+        }
 
         if (cancelled) return;
 
-        unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+        unsubscribe = subscribeToAuthState((currentUser) => {
           setUser(currentUser ?? null);
           if (currentUser) {
             document.cookie = `firebase-auth-session=1; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
@@ -140,11 +137,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      const [{ auth }, { signInWithEmailAndPassword }] = await Promise.all([
-        import('@/lib/firebase'),
-        import('firebase/auth'),
-      ]);
-      await signInWithEmailAndPassword(auth, email, password);
+      const { signIn: firebaseSignIn } = await import('@/lib/auth');
+      await firebaseSignIn(email, password);
       return { error: null };
     } catch (error) {
       if (isAuthNetworkError(error)) {
@@ -167,24 +161,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      const [{ auth, firestore }, { createUserWithEmailAndPassword }, { doc, setDoc }] = await Promise.all([
-        import('@/lib/firebase'),
-        import('firebase/auth'),
-        import('firebase/firestore'),
-      ]);
-      const result = await createUserWithEmailAndPassword(auth, email, password);
-      if (result.user) {
-        const profileRef = doc(firestore, 'profiles', result.user.uid);
-        await setDoc(profileRef, {
-          id: result.user.uid,
-          email,
-          full_name: fullName,
-          role,
-          is_active: true,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        } as Partial<Profile>);
-      }
+      const { signUp: firebaseSignUp } = await import('@/lib/auth');
+      await firebaseSignUp(email, password, fullName, role as Profile['role']);
       return { error: null };
     } catch (error) {
       if (isAuthNetworkError(error)) {
@@ -205,11 +183,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setProfile(null);
       return;
     }
-    const [{ auth }, { signOut: firebaseSignOut }] = await Promise.all([
-      import('@/lib/firebase'),
-      import('firebase/auth'),
-    ]);
-    await firebaseSignOut(auth);
+    const { signOut: firebaseSignOut } = await import('@/lib/auth');
+    await firebaseSignOut();
   };
 
   return (

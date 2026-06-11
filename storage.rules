@@ -1,0 +1,47 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function getProfileRole() {
+      return firestore.get(/databases/(default)/documents/profiles/$(request.auth.uid)).data.role;
+    }
+
+    function isSuperAdmin() {
+      return isAuthenticated() && getProfileRole() == 'super_admin';
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && getProfileRole() in ['super_admin', 'admin'];
+    }
+
+    function isReadOnly() {
+      return isAuthenticated() && getProfileRole() in ['auditor', 'viewer'];
+    }
+
+    function isAllowedMime() {
+      return request.resource.contentType.matches('application/pdf')
+        || request.resource.contentType.matches('application/vnd.*')
+        || request.resource.contentType.matches('application/msword')
+        || request.resource.contentType.matches('image/.*');
+    }
+
+    // Path: /moduleName/documentId/fileName
+    match /{moduleName}/{documentId}/{fileName} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated()
+        && !isReadOnly()
+        && isAllowedMime()
+        && request.resource.size < 25 * 1024 * 1024;
+      allow delete: if isAdmin() || isSuperAdmin();
+    }
+
+    match /{allPaths=**} {
+      allow read: if isAuthenticated();
+      allow write: if false;
+    }
+  }
+}

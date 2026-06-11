@@ -2,11 +2,13 @@ import {
   ADMIN_MODULES, PERMISSION_ACTIONS, ADMIN_ROLES, ADMIN_COLLECTIONS,
 } from './admin/constants';
 import type { PermissionMatrix } from './admin/schemas';
+import type { UserRole } from './firebase';
 
 export type AdminRoleId = typeof ADMIN_ROLES[number]['id'];
 export type AdminModule = typeof ADMIN_MODULES[number];
 export type PermissionAction = typeof PERMISSION_ACTIONS[number];
 
+/** Maps Firebase auth roles to internal admin role IDs */
 const LEGACY_ROLE_MAP: Record<string, AdminRoleId> = {
   super_admin: 'super_admin',
   admin: 'admin',
@@ -18,7 +20,26 @@ const LEGACY_ROLE_MAP: Record<string, AdminRoleId> = {
   regulatory: 'regulatory_affairs',
   auditor: 'auditor',
   viewer: 'viewer',
+  head_qa: 'head_qa',
+  qa_manager: 'qa_manager',
+  qc_manager: 'qc_manager',
+  production_manager: 'production_manager',
+  engineering_manager: 'engineering_manager',
+  warehouse_manager: 'warehouse_manager',
+  regulatory_affairs: 'regulatory_affairs',
 };
+
+export const ROLE_DEFINITIONS: { id: UserRole; label: string; description: string }[] = [
+  { id: 'super_admin', label: 'Super Admin', description: 'Full system access' },
+  { id: 'admin', label: 'Admin', description: 'Admin panel and master data management' },
+  { id: 'qa', label: 'QA', description: 'QMS, PQR, CPV review and approval' },
+  { id: 'qc', label: 'QC', description: 'Testing, CQA, and OOS management' },
+  { id: 'production', label: 'Production', description: 'Batch records, eBMR, and CPP entry' },
+  { id: 'engineering', label: 'Engineering', description: 'Equipment, utility, and validation' },
+  { id: 'warehouse', label: 'Warehouse', description: 'Material, inventory, and dispensing' },
+  { id: 'regulatory', label: 'Regulatory', description: 'Change control, recall, and documents' },
+  { id: 'auditor', label: 'Auditor', description: 'Read-only access across modules' },
+];
 
 export function normalizeRole(role?: string | null): AdminRoleId {
   if (!role) return 'viewer';
@@ -30,8 +51,12 @@ function buildDefaultPermissions(roleId: AdminRoleId): Record<AdminModule, Recor
   const isSuperAdmin = roleId === 'super_admin';
   const isAdmin = roleId === 'admin' || isSuperAdmin;
   const isAuditor = roleId === 'auditor' || roleId === 'viewer';
-  const isDeptHead = ['head_qa', 'qa_manager', 'qc_manager', 'production_manager',
-    'warehouse_manager', 'engineering_manager'].includes(roleId);
+  const isQa = ['head_qa', 'qa_manager', 'qa_executive'].includes(roleId);
+  const isQc = ['qc_manager', 'qc_executive'].includes(roleId);
+  const isProduction = ['production_manager', 'production_executive'].includes(roleId);
+  const isEngineering = ['engineering_manager', 'engineering_executive'].includes(roleId);
+  const isWarehouse = ['warehouse_manager', 'warehouse_executive'].includes(roleId);
+  const isRegulatory = roleId === 'regulatory_affairs';
 
   for (const mod of ADMIN_MODULES) {
     matrix[mod] = {} as Record<PermissionAction, boolean>;
@@ -42,11 +67,33 @@ function buildDefaultPermissions(roleId: AdminRoleId): Record<AdminModule, Recor
         matrix[mod][action] = mod !== 'Admin' || action !== 'delete';
       } else if (isAuditor) {
         matrix[mod][action] = action === 'view' || action === 'export';
-      } else if (isDeptHead) {
-        matrix[mod][action] = ['view', 'create', 'edit', 'review', 'export'].includes(action);
+      } else if (isQa) {
+        matrix[mod][action] = ['Dashboard', 'PQR', 'CPV', 'CPP', 'CQA', 'Deviation', 'CAPA', 'Change Control',
+          'Complaint', 'Recall', 'Stability', 'Document', 'Training', 'Reports'].includes(mod)
+          ? ['view', 'create', 'edit', 'review', 'approve', 'reject', 'export', 'eSign'].includes(action)
+          : action === 'view' || action === 'export';
+      } else if (isQc) {
+        matrix[mod][action] = ['Dashboard', 'CQA', 'OOS', 'CPV', 'Batch', 'Stability', 'Reports'].includes(mod)
+          ? ['view', 'create', 'edit', 'review', 'export'].includes(action)
+          : action === 'view';
+      } else if (isProduction) {
+        matrix[mod][action] = ['Dashboard', 'Batch', 'CPP', 'CPV', 'Product'].includes(mod)
+          ? ['view', 'create', 'edit', 'export'].includes(action)
+          : action === 'view';
+      } else if (isEngineering) {
+        matrix[mod][action] = ['Dashboard', 'Equipment', 'Validation', 'CPV'].includes(mod)
+          ? ['view', 'create', 'edit', 'export'].includes(action)
+          : action === 'view';
+      } else if (isWarehouse) {
+        matrix[mod][action] = ['Dashboard', 'Material', 'Vendor', 'Batch'].includes(mod)
+          ? ['view', 'create', 'edit', 'export'].includes(action)
+          : action === 'view';
+      } else if (isRegulatory) {
+        matrix[mod][action] = ['Dashboard', 'Change Control', 'Recall', 'Document', 'PQR', 'Complaint'].includes(mod)
+          ? ['view', 'create', 'edit', 'review', 'approve', 'export'].includes(action)
+          : action === 'view';
       } else {
-        matrix[mod][action] = ['view', 'create', 'edit'].includes(action) &&
-          !['Admin'].includes(mod);
+        matrix[mod][action] = ['view', 'create', 'edit'].includes(action) && !['Admin'].includes(mod);
       }
     }
   }
@@ -67,7 +114,7 @@ export function getDefaultPermissionMatrix(roleId: AdminRoleId): PermissionMatri
 
 export function canAccessAdminPanel(role?: string | null): boolean {
   const r = normalizeRole(role);
-  return !['viewer'].includes(r) || r === 'auditor';
+  return r !== 'viewer';
 }
 
 export function canManageRoles(role?: string | null): boolean {
@@ -109,7 +156,7 @@ export function hasPermission(
   permissions: PermissionMatrix | null | undefined,
   module: AdminModule,
   action: PermissionAction,
-  role?: string | null
+  role?: string | null,
 ): boolean {
   if (canManagePermissions(role)) return true;
   if (isReadOnlyRole(role)) return action === 'view' || action === 'export';
@@ -159,7 +206,11 @@ const MODULE_ROLE_ACCESS: Record<AppModule, AdminRoleId[]> = {
 export function canAccessModule(role: string | null | undefined, module: AppModule): boolean {
   const r = normalizeRole(role);
   if (r === 'super_admin') return true;
-  if (['auditor', 'viewer'].includes(r)) return module === 'audit' || module === 'qms' || module === 'pqr';
+  if (['auditor', 'viewer'].includes(r)) {
+    return ['audit', 'qms', 'pqr', 'dms', 'training', 'stability', 'complaints', 'recall',
+      'deviation', 'oos', 'capa', 'change_control', 'cpv', 'vendors', 'validation', 'csv',
+      'equipment', 'monitoring', 'warehouse', 'ebmr'].includes(module);
+  }
   return MODULE_ROLE_ACCESS[module]?.includes(r) ?? false;
 }
 

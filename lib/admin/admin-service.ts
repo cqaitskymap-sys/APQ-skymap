@@ -51,10 +51,14 @@ export async function createAdminRecord<T extends Record<string, unknown>>(
   data: Omit<T, 'id'>,
   auditMeta: { userId: string; userName: string; module: string; action?: string }
 ): Promise<T> {
-  const record = await createRecord<T>(collectionName, data as Omit<T, 'id'>, {
-    createdBy: auditMeta.userId,
-    updatedBy: auditMeta.userId,
-  });
+  const record = await createRecord<T>(
+    collectionName,
+    { ...data, createdBy: auditMeta.userId, updatedBy: auditMeta.userId } as Omit<T, 'id' | 'createdAt' | 'updatedAt' | 'isDeleted'>,
+    {
+      moduleName: auditMeta.module,
+      actor: { id: auditMeta.userId, name: auditMeta.userName },
+    },
+  );
 
   await logAuditEvent({
     userId: auditMeta.userId,
@@ -80,9 +84,15 @@ export async function updateAdminRecord<T extends Record<string, unknown>>(
   auditMeta: { userId: string; userName: string; module: string; oldValue?: string }
 ): Promise<T | null> {
   const existing = await getRecord<T>(collectionName, recordId);
-  const record = await updateRecord<T>(collectionName, recordId, updates, {
-    updatedBy: auditMeta.userId,
-  });
+  const record = await updateRecord<T>(
+    collectionName,
+    recordId,
+    { ...updates, updatedBy: auditMeta.userId },
+    {
+      moduleName: auditMeta.module,
+      actor: { id: auditMeta.userId, name: auditMeta.userName },
+    },
+  );
 
   if (record) {
     await logAuditEvent({
@@ -109,7 +119,10 @@ export async function deleteAdminRecord(
   auditMeta: { userId: string; userName: string; module: string }
 ): Promise<boolean> {
   const existing = await getRecord(collectionName, recordId);
-  const success = await deleteRecord(collectionName, recordId);
+  const success = await deleteRecord(collectionName, recordId, {
+    moduleName: auditMeta.module,
+    actor: { id: auditMeta.userId, name: auditMeta.userName },
+  });
 
   if (success) {
     await logAuditEvent({
@@ -119,8 +132,8 @@ export async function deleteAdminRecord(
       recordId,
       action: 'DELETE',
       oldValue: JSON.stringify(existing),
-      newValue: '',
-      reason: '',
+      newValue: JSON.stringify({ isDeleted: true }),
+      reason: 'Soft delete',
       ipAddress: 'client',
       device: typeof navigator !== 'undefined' ? navigator.userAgent : 'server',
       status: 'Success',
