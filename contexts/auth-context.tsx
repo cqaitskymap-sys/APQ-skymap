@@ -5,12 +5,13 @@ import {
 } from 'react';
 import type { User } from 'firebase/auth';
 import type { Profile } from '@/lib/firebase';
-import { isDemoAuthEnabled } from '@/lib/demo-auth-config';
+import { isDemoAuthEnabled, shouldUseDemoAuth } from '@/lib/demo-auth-config';
 import {
   demoSignIn, demoSignUp, demoSignOut, demoGetSession,
 } from '@/lib/demo-auth';
 import {
   formatAuthError, isAuthNetworkError, getUserProfile, subscribeToAuthState,
+  FirebaseNotConfiguredError,
 } from '@/lib/auth';
 
 interface AuthContextType {
@@ -47,7 +48,7 @@ function applyDemoSession(
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const demoEnabled = isDemoAuthEnabled();
+  const demoEnabled = shouldUseDemoAuth();
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -141,6 +142,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await firebaseSignIn(email, password);
       return { error: null };
     } catch (error) {
+      if (error instanceof FirebaseNotConfiguredError || (error as Error)?.name === 'FirebaseNotConfiguredError') {
+        const demoResult = demoSignIn(email, password);
+        if (demoResult.profile) {
+          activateDemoSession(demoResult.profile);
+          return { error: null };
+        }
+        return {
+          error: new Error(
+            'Firebase is not configured. Add env vars in Netlify, or use Demo Access buttons (admin@pharmaQMS.com / demo123456).',
+          ),
+        };
+      }
       if (isAuthNetworkError(error)) {
         const demoResult = demoSignIn(email, password);
         if (demoResult.profile) {
@@ -165,6 +178,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await firebaseSignUp(email, password, fullName, role as Profile['role']);
       return { error: null };
     } catch (error) {
+      if (error instanceof FirebaseNotConfiguredError || (error as Error)?.name === 'FirebaseNotConfiguredError') {
+        const demoResult = demoSignUp(email, password, fullName, role);
+        if (demoResult.profile) {
+          activateDemoSession(demoResult.profile);
+          return { error: null };
+        }
+      }
       if (isAuthNetworkError(error)) {
         const demoResult = demoSignUp(email, password, fullName, role);
         if (demoResult.profile) {

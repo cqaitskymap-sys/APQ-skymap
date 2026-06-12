@@ -56,6 +56,9 @@ function requireDb() {
 }
 
 export function formatAuthError(error: unknown): string {
+  if (error instanceof FirebaseNotConfiguredError || (error as Error)?.name === 'FirebaseNotConfiguredError') {
+    return 'Firebase is not configured. Add NEXT_PUBLIC_FIREBASE_* variables in Netlify Site settings → Environment variables, then redeploy.';
+  }
   const code = (error as { code?: string })?.code;
   const messages: Record<string, string> = {
     'auth/invalid-email': 'Invalid email address.',
