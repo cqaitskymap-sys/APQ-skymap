@@ -10,7 +10,7 @@ import {
   serverTimestamp,
   updateDoc,
 } from 'firebase/firestore';
-import { firestore } from '@/lib/firebase';
+import { getFirebaseFirestore } from '@/lib/firebase';
 import { validateRecordMetadata } from '@/lib/database-registry';
 import { CPV_COLLECTIONS, classifySpecification } from '@/lib/cpv';
 import {
@@ -47,7 +47,7 @@ function serialized<T>(value: T): T {
 }
 
 async function writeAudit(action: string, module: string, recordId: string, actor: Actor, payload: unknown) {
-  await addDoc(collection(firestore, CPV_COLLECTIONS.audit), {
+  await addDoc(collection(getFirebaseFirestore(), CPV_COLLECTIONS.audit), {
     action,
     module,
     recordId,
@@ -63,14 +63,14 @@ async function writeAudit(action: string, module: string, recordId: string, acto
 export async function listModuleRecords<T>(collectionName: string, max = 500): Promise<T[]> {
   try {
     const snapshot = await getDocs(query(
-      collection(firestore, collectionName),
+      collection(getFirebaseFirestore(), collectionName),
       orderBy('createdAt', 'desc'),
       limit(max),
     ));
     return snapshot.docs.map((item) => ({ id: item.id, ...item.data() } as T));
   } catch {
     try {
-      const snapshot = await getDocs(query(collection(firestore, collectionName), limit(max)));
+      const snapshot = await getDocs(query(collection(getFirebaseFirestore(), collectionName), limit(max)));
       return snapshot.docs.map((item) => ({ id: item.id, ...item.data() } as T));
     } catch (error) {
       console.error(`Unable to load ${collectionName}:`, error);
@@ -94,7 +94,7 @@ async function createModuleRecord<T>(
     createdByName: actor.name || 'System',
     version: 1,
   };
-  const reference = await addDoc(collection(firestore, collectionName), payload);
+  const reference = await addDoc(collection(getFirebaseFirestore(), collectionName), payload);
   await writeAudit('CREATE', module, reference.id, actor, payload);
   return { id: reference.id, ...payload };
 }
@@ -107,7 +107,7 @@ async function updateModuleRecord<T extends Record<string, unknown>>(
   actor: Actor,
 ) {
   const payload = { ...data, updatedAt: new Date().toISOString() };
-  await updateDoc(doc(firestore, collectionName, id), payload);
+  await updateDoc(doc(getFirebaseFirestore(), collectionName, id), payload);
   await writeAudit('UPDATE', module, id, actor, payload);
 }
 
@@ -123,7 +123,7 @@ export async function createBatch(input: BatchInput, actor: Actor) {
     actor,
   );
   try {
-    await addDoc(collection(firestore, 'batches'), {
+    await addDoc(collection(getFirebaseFirestore(), 'batches'), {
       batch_number: input.batchNumber,
       product_name: input.productName,
       product_code: input.productCode,
@@ -302,7 +302,7 @@ export async function createAlert(
     createdAt: new Date().toISOString(),
     createdBy: actor.name || 'System',
   };
-  const ref = await addDoc(collection(firestore, CPV_MODULE_COLLECTIONS.alerts), payload);
+  const ref = await addDoc(collection(getFirebaseFirestore(), CPV_MODULE_COLLECTIONS.alerts), payload);
   return { id: ref.id, ...payload };
 }
 
@@ -344,6 +344,6 @@ export async function loadAllCpvModules() {
 }
 
 export async function deleteBatch(id: string, actor: Actor) {
-  await deleteDoc(doc(firestore, CPV_MODULE_COLLECTIONS.batches, id));
+  await deleteDoc(doc(getFirebaseFirestore(), CPV_MODULE_COLLECTIONS.batches, id));
   await writeAudit('DELETE', 'Batch Registration', id, actor, {});
 }

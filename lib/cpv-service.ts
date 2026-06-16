@@ -8,7 +8,7 @@ import {
   serverTimestamp,
   where,
 } from 'firebase/firestore';
-import { firestore } from '@/lib/firebase';
+import { getFirebaseFirestore } from '@/lib/firebase';
 import {
   CPV_COLLECTIONS,
   CppInput,
@@ -49,7 +49,7 @@ function serialized<T>(value: T): T {
 export async function listCpvRecords<T>(collectionName: string, max = 500): Promise<T[]> {
   try {
     const snapshot = await getDocs(query(
-      collection(firestore, collectionName),
+      collection(getFirebaseFirestore(), collectionName),
       orderBy('createdAt', 'desc'),
       limit(max),
     ));
@@ -67,7 +67,7 @@ async function writeAudit(
   actor: Actor,
   payload: unknown,
 ) {
-  await addDoc(collection(firestore, CPV_COLLECTIONS.audit), {
+  await addDoc(collection(getFirebaseFirestore(), CPV_COLLECTIONS.audit), {
     action,
     module,
     recordId,
@@ -92,7 +92,7 @@ async function resolveBatchLink(batchNo: string, productName?: string) {
   try {
     for (const coll of ['batches', 'pqr_batches']) {
       const snap = await getDocs(query(
-        collection(firestore, coll),
+        collection(getFirebaseFirestore(), coll),
         where('batch_number', '==', batchNo),
         limit(1),
       ));
@@ -111,11 +111,17 @@ async function resolveBatchLink(batchNo: string, productName?: string) {
 }
 
 export async function loadCppBatches(): Promise<Array<{ id: string; batch_number: string; product_name: string }>> {
+  try {
+    const { listCpvBatchesForDropdown } = await import('@/lib/cpv-batch-registration-service');
+    const fromService = await listCpvBatchesForDropdown();
+    if (fromService.length) return fromService;
+  } catch { /* fallback below */ }
+
   const results: Array<{ id: string; batch_number: string; product_name: string }> = [];
   const collections = ['cpv_batches', 'batches', 'pqr_batches'];
   for (const coll of collections) {
     try {
-      const snap = await getDocs(query(collection(firestore, coll), orderBy('created_at', 'desc'), limit(200)));
+      const snap = await getDocs(query(collection(getFirebaseFirestore(), coll), orderBy('created_at', 'desc'), limit(200)));
       snap.docs.forEach((d) => {
         const data = d.data();
         const bn = String(data.batch_number || data.batchNo || data.batchNumber || '');
@@ -125,7 +131,7 @@ export async function loadCppBatches(): Promise<Array<{ id: string; batch_number
       if (results.length) break;
     } catch {
       try {
-        const snap = await getDocs(query(collection(firestore, coll), limit(200)));
+        const snap = await getDocs(query(collection(getFirebaseFirestore(), coll), limit(200)));
         snap.docs.forEach((d) => {
           const data = d.data();
           const bn = String(data.batch_number || data.batchNo || '');
@@ -164,7 +170,7 @@ async function createCpvRecord<T>(
     createdByName: actor.name || 'System',
     version: 1,
   };
-  const reference = await addDoc(collection(firestore, collectionName), payload);
+  const reference = await addDoc(collection(getFirebaseFirestore(), collectionName), payload);
   await writeAudit('CREATE', module, reference.id, actor, payload);
   return { id: reference.id, ...payload };
 }
@@ -350,7 +356,7 @@ export async function loadIntegrationSnapshot() {
   const readFirstAvailable = async (candidates: string[]) => {
     for (const name of candidates) {
       try {
-        const snapshot = await getDocs(query(collection(firestore, name), limit(500)));
+        const snapshot = await getDocs(query(collection(getFirebaseFirestore(), name), limit(500)));
         if (!snapshot.empty) return snapshot.docs.map((item) => ({ id: item.id, ...item.data() }));
       } catch {
         // Try the next known collection name.

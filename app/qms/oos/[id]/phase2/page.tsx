@@ -1,8 +1,9 @@
 'use client';
 
 import { useParams } from 'next/navigation';
-import { OosDetailView } from '@/components/oos/oos-detail-view';
+import { OosPhase2Page } from '@/components/oos/phase2/oos-phase2-page';
 
-export default function OosPhase2Page() {
-  return <OosDetailView id={useParams().id as string} defaultTab="phase2" />;
+export default function Page() {
+  const params = useParams();
+  return <OosPhase2Page oosId={params.id as string} />;
 }

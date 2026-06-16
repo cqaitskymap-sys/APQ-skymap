@@ -8,7 +8,7 @@ import {
 import { addDoc, collection } from 'firebase/firestore';
 import { Download, FileBarChart, Printer, Save } from 'lucide-react';
 import { toast } from 'sonner';
-import { firestore } from '@/lib/firebase';
+import { getFirebaseFirestore } from '@/lib/firebase';
 import { useAuth } from '@/contexts/auth-context';
 import {
   CPV_COLLECTIONS, CapabilityResult, CppRecord, CqaRecord, capabilityStatusTone,
@@ -163,7 +163,7 @@ export function CapabilityWorkspace() {
 
   const saveAnalysis = async () => {
     if (result.status === 'Insufficient Data') return toast.error('At least two observations are required');
-    await addDoc(collection(firestore, CPV_COLLECTIONS.capability), {
+    await addDoc(collection(getFirebaseFirestore(), CPV_COLLECTIONS.capability), {
       recordType: 'analysis',
       source,
       product,
@@ -180,7 +180,7 @@ export function CapabilityWorkspace() {
 
   const saveReport = async () => {
     if (!report.rows.length) return toast.error('No capability data for this report period');
-    await addDoc(collection(firestore, CPV_COLLECTIONS.capability), {
+    await addDoc(collection(getFirebaseFirestore(), CPV_COLLECTIONS.capability), {
       recordType: `${reportPeriod}_report`,
       source,
       product,

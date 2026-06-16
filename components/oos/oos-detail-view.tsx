@@ -17,16 +17,18 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { OosStatusBadge, ResultStatusBadge } from './oos-sub-nav';
 import { OosTimeline, OosPdfDocument } from './oos-pdf-document';
+import { OosAuditTimeline } from './audit-trail/oos-audit-timeline';
 import { OosForm } from './oos-form';
+import { z } from 'zod';
 import {
-  phase1Schema, phase2Schema, impactAssessmentSchema, approvalSchema,
-  type Phase1Input, type Phase2Input, type OosImpactInput, type OosApprovalInput,
+  phase1SchemaLegacy, phase2SchemaLegacy, impactAssessmentSchemaLegacy,
+  type Phase1Input, type OosImpactLegacyInput,
 } from '@/lib/oos-schemas';
 import { PHASE1_OUTCOMES } from '@/lib/oos-types';
 import {
   getOosById, getPhase1, getPhase2, getImpactAssessment, getCapaLink, getApprovals,
   getAttachments, getAuditLogsForOos, savePhase1, savePhase2, saveImpactAssessment,
-  submitApproval, linkCapa, createCapaFromOos, closeOos, submitOos, updateOosRecord,
+  linkCapa, createCapaFromOos, closeOos, submitOos, updateOosRecord,
   uploadAttachment, deleteAttachment, canUserAccessOos,
 } from '@/lib/oos-service';
 import type { OosRecord, OosPhase1, OosPhase2, OosImpactAssessment, OosCapaLink, OosApproval, OosAttachment } from '@/lib/oos-types';
@@ -71,8 +73,25 @@ export function OosDetailView({ id, defaultTab = 'overview' }: { id: string; def
   const canClose = canUserAccessOos('close', actor.role);
 
   const timeline = auditLogs.map((log) => ({
-    date: String(log.dateTime || ''), title: String(log.action || ''),
-    description: String(log.newValue || '').slice(0, 120), user: String(log.userName || ''),
+    id: String(log.id || ''),
+    audit_id: String(log.auditId || log.id || ''),
+    oos_id: id,
+    oos_number: record?.oos_number || '',
+    module_name: String(log.moduleName || log.module || 'OOS'),
+    action_type: String(log.actionType || log.action || 'Updated'),
+    action_description: String(log.actionDescription || log.action || ''),
+    field_name: String(log.fieldName || ''),
+    old_value: String(log.oldValue || ''),
+    new_value: String(log.newValue || ''),
+    changed_by: String(log.userId || ''),
+    changed_by_name: String(log.userName || ''),
+    changed_by_role: String(log.changedByRole || ''),
+    department: String(log.department || ''),
+    reason: String(log.reason || ''),
+    ip_address: String(log.ipAddress || ''),
+    device_info: String(log.device || log.deviceInfo || ''),
+    date_time: String(log.dateTime || ''),
+    status: String(log.status || 'Success'),
   }));
 
   return (
@@ -141,8 +160,27 @@ export function OosDetailView({ id, defaultTab = 'overview' }: { id: string; def
         <TabsContent value="impact"><ImpactPanel oosId={id} impact={impact} actor={actor} canEdit={canPhase1 || canApprove} onSaved={refresh} /></TabsContent>
         <TabsContent value="capa"><CapaPanel record={record} capa={capa} capaNumber={capaNumber} setCapaNumber={setCapaNumber} actor={actor} onSaved={refresh} /></TabsContent>
         <TabsContent value="attachments"><AttachmentsPanel oosId={id} attachments={attachments} actor={actor} canUpload={canPhase1 || canPhase2} onChanged={refresh} /></TabsContent>
-        <TabsContent value="approval"><ApprovalPanel oosId={id} record={record} approvals={approvals} actor={actor} canApprove={canApprove} onSaved={refresh} /></TabsContent>
-        <TabsContent value="audit"><Card><CardHeader><CardTitle>Audit Trail</CardTitle></CardHeader><CardContent><OosTimeline events={timeline} /></CardContent></Card></TabsContent>
+        <TabsContent value="approval"><ApprovalPanel oosId={id} record={record} approvals={approvals} /></TabsContent>
+        <TabsContent value="audit">
+          <Card>
+            <CardHeader className="flex flex-row items-start justify-between gap-4">
+              <div>
+                <CardTitle>Audit Trail</CardTitle>
+                <CardDescription>21 CFR Part 11 compliant read-only activity log</CardDescription>
+              </div>
+              <Link href={`/qms/oos/${id}/audit-trail`}>
+                <Button variant="outline" size="sm">Full Audit Trail</Button>
+              </Link>
+            </CardHeader>
+            <CardContent>
+              {timeline.length ? (
+                <OosAuditTimeline entries={timeline} />
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-8">No audit trail entries recorded yet.</p>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
 
       <div className="hidden print:block">
@@ -154,7 +192,7 @@ export function OosDetailView({ id, defaultTab = 'overview' }: { id: string; def
 
 function Phase1Panel({ oosId, phase1, actor, canEdit, onSaved }: { oosId: string; phase1: OosPhase1 | null; actor: ReturnType<typeof useOosActor>; canEdit: boolean; onSaved: () => void }) {
   const form = useForm<Phase1Input>({
-    resolver: zodResolver(phase1Schema),
+    resolver: zodResolver(phase1SchemaLegacy),
     defaultValues: {
       analyst_name: phase1?.analyst_name || '', instrument_used: phase1?.instrument_used || '',
       instrument_calibration_status: phase1?.instrument_calibration_status || 'Valid',
@@ -168,11 +206,21 @@ function Phase1Panel({ oosId, phase1, actor, canEdit, onSaved }: { oosId: string
   const boolFields = [['calculation_verified', 'Calculation Verified'], ['data_review_completed', 'Data Review Completed'], ['chromatogram_attached', 'Chromatogram Attached'], ['raw_data_attached', 'Raw Data Attached']] as const;
 
   return (
-    <Card><CardHeader><CardTitle className="text-base">Phase-I Laboratory Investigation</CardTitle></CardHeader><CardContent>
+    <Card><CardHeader className="flex flex-row items-center justify-between">
+      <CardTitle className="text-base">Phase-I Laboratory Investigation</CardTitle>
+      <Link href={`/qms/oos/${oosId}/phase1`}><Button variant="outline" size="sm">Open Full Phase-I Module</Button></Link>
+    </CardHeader><CardContent>
       <Form {...form}><form onSubmit={form.handleSubmit(async (data) => {
         if (!canEdit) { toast.error('No permission'); return; }
         try {
-          await savePhase1(oosId, { ...data, investigator_id: actor.id, investigator_name: actor.name, started_at: phase1?.started_at || new Date().toISOString(), completed_at: new Date().toISOString() }, actor);
+          await savePhase1(oosId, {
+            ...data,
+            phase1_outcome: data.phase1_outcome || 'Inconclusive',
+            investigator_id: actor.id,
+            investigator_name: actor.name,
+            started_at: phase1?.started_at || new Date().toISOString(),
+            completed_at: null,
+          }, actor);
           toast.success('Phase-I saved'); onSaved();
         } catch (e) { toast.error(e instanceof Error ? e.message : 'Failed'); }
       })} className="space-y-4">
@@ -209,8 +257,8 @@ function Phase1Panel({ oosId, phase1, actor, canEdit, onSaved }: { oosId: string
 }
 
 function Phase2Panel({ oosId, phase2, actor, canEdit, onSaved }: { oosId: string; phase2: OosPhase2 | null; actor: ReturnType<typeof useOosActor>; canEdit: boolean; onSaved: () => void }) {
-  const form = useForm<Phase2Input>({
-    resolver: zodResolver(phase2Schema),
+  const form = useForm<z.infer<typeof phase2SchemaLegacy>>({
+    resolver: zodResolver(phase2SchemaLegacy),
     defaultValues: {
       raw_material_review: phase2?.raw_material_review || '', equipment_review: phase2?.equipment_review || '',
       environmental_review: phase2?.environmental_review || '', process_review: phase2?.process_review || '',
@@ -224,7 +272,10 @@ function Phase2Panel({ oosId, phase2, actor, canEdit, onSaved }: { oosId: string
   const fields = ['raw_material_review', 'equipment_review', 'environmental_review', 'process_review', 'operator_review', 'deviation_review', 'change_control_review', 'batch_record_review', 'root_cause', 'impact_assessment', 'corrective_action', 'preventive_action', 'conclusion'] as const;
 
   return (
-    <Card><CardHeader><CardTitle className="text-base">Phase-II Manufacturing Investigation</CardTitle></CardHeader><CardContent>
+    <Card><CardHeader className="flex flex-row items-center justify-between">
+      <CardTitle className="text-base">Phase-II Manufacturing Investigation</CardTitle>
+      <Link href={`/qms/oos/${oosId}/phase2`}><Button variant="outline" size="sm">Open Full Phase-II Module</Button></Link>
+    </CardHeader><CardContent>
       <Form {...form}><form onSubmit={form.handleSubmit(async (data) => {
         if (!canEdit) { toast.error('No permission'); return; }
         try {
@@ -244,8 +295,8 @@ function Phase2Panel({ oosId, phase2, actor, canEdit, onSaved }: { oosId: string
 }
 
 function ImpactPanel({ oosId, impact, actor, canEdit, onSaved }: { oosId: string; impact: OosImpactAssessment | null; actor: ReturnType<typeof useOosActor>; canEdit: boolean; onSaved: () => void }) {
-  const form = useForm<OosImpactInput>({
-    resolver: zodResolver(impactAssessmentSchema),
+  const form = useForm<OosImpactLegacyInput>({
+    resolver: zodResolver(impactAssessmentSchemaLegacy),
     defaultValues: {
       product_impact: impact?.product_impact || '', batch_impact: impact?.batch_impact || '',
       market_impact: impact?.market_impact || '', patient_safety_impact: impact?.patient_safety_impact || '',
@@ -254,7 +305,10 @@ function ImpactPanel({ oosId, impact, actor, canEdit, onSaved }: { oosId: string
     },
   });
   return (
-    <Card><CardHeader><CardTitle className="text-base">Impact Assessment</CardTitle></CardHeader><CardContent>
+    <Card><CardHeader className="flex flex-row items-center justify-between gap-2">
+      <CardTitle className="text-base">Impact Assessment</CardTitle>
+      <Link href={`/qms/oos/${oosId}/impact-assessment`}><Button variant="outline" size="sm">Open Full Impact Module</Button></Link>
+    </CardHeader><CardContent>
       <Form {...form}><form onSubmit={form.handleSubmit(async (data) => {
         try {
           await saveImpactAssessment(oosId, { ...data, assessed_by: actor.id, assessed_by_name: actor.name, assessed_at: new Date().toISOString() }, actor);
@@ -277,7 +331,10 @@ function ImpactPanel({ oosId, impact, actor, canEdit, onSaved }: { oosId: string
 
 function CapaPanel({ record, capa, capaNumber, setCapaNumber, actor, onSaved }: { record: OosRecord; capa: OosCapaLink | null; capaNumber: string; setCapaNumber: (v: string) => void; actor: ReturnType<typeof useOosActor>; onSaved: () => void }) {
   return (
-    <Card><CardHeader><CardTitle className="text-base">CAPA Link</CardTitle></CardHeader><CardContent className="space-y-4">
+    <Card><CardHeader className="flex flex-row items-center justify-between gap-2">
+      <CardTitle className="text-base">CAPA Link</CardTitle>
+      <Link href={`/qms/oos/${record.id}/capa`}><Button variant="outline" size="sm">Open CAPA Management</Button></Link>
+    </CardHeader><CardContent className="space-y-4">
       {capa || record.linked_capa_number ? (
         <div className="rounded-lg border p-4 bg-green-50 dark:bg-green-950/20">
           <p className="font-mono font-semibold">{capa?.capa_number || record.linked_capa_number}</p>
@@ -330,28 +387,39 @@ function AttachmentsPanel({ oosId, attachments, actor, canUpload, onChanged }: {
   );
 }
 
-function ApprovalPanel({ oosId, record, approvals, actor, canApprove, onSaved }: { oosId: string; record: OosRecord; approvals: OosApproval[]; actor: ReturnType<typeof useOosActor>; canApprove: boolean; onSaved: () => void }) {
-  const form = useForm<OosApprovalInput>({ resolver: zodResolver(approvalSchema), defaultValues: { decision: 'approved', comments: '', e_signature: '' } });
-  const pending = ['qa_review', 'final_qa_review', 'phase2_investigation', 'capa_required', 'submitted'].includes(record.status);
+function ApprovalPanel({ oosId, record, approvals }: { oosId: string; record: OosRecord; approvals: OosApproval[] }) {
+  const pending = approvals.find((a) => ['Pending', 'Escalated'].includes(a.approval_status || ''));
   return (
     <div className="space-y-4">
-      {approvals.map((a) => (
-        <Card key={a.id}><CardContent className="p-4"><p className="font-medium">{a.approver_name} ({a.approver_role})</p><p className="text-sm">{a.comments}</p><p className="text-xs italic">E-Sig: {a.e_signature}</p><OosStatusBadge status={a.decision} /></CardContent></Card>
-      ))}
-      {canApprove && pending && (
-        <Card><CardHeader><CardTitle className="text-base">Approve / Reject</CardTitle><CardDescription>Head QA required for final approval</CardDescription></CardHeader><CardContent>
-          <Form {...form}><form onSubmit={form.handleSubmit(async (data) => {
-            try { await submitApproval(oosId, data, actor); toast.success(data.decision); onSaved(); form.reset(); }
-            catch (e) { toast.error(e instanceof Error ? e.message : 'Failed'); }
-          })} className="space-y-4">
-            <FormField control={form.control} name="decision" render={({ field }) => (
-              <FormItem><FormLabel>Decision</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent><SelectItem value="approved">Approve</SelectItem><SelectItem value="rejected">Reject</SelectItem></SelectContent></Select></FormItem>
-            )} />
-            <FormField control={form.control} name="comments" render={({ field }) => (<FormItem><FormLabel>Comments</FormLabel><FormControl><Textarea rows={3} {...field} /></FormControl><FormMessage /></FormItem>)} />
-            <FormField control={form.control} name="e_signature" render={({ field }) => (<FormItem><FormLabel>E-Signature</FormLabel><FormControl><Input {...field} placeholder="Type full name" /></FormControl><FormMessage /></FormItem>)} />
-            <Button type="submit" className="bg-green-600 hover:bg-green-700 gap-1"><CheckCircle className="h-4 w-4" />Submit</Button>
-          </form></Form>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Approval Workflow</CardTitle>
+          <CardDescription>Full GMP-compliant review, e-signature, and escalation</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {pending && (
+            <p className="text-sm">
+              Current step: <strong>{pending.current_workflow_step}</strong> — {pending.approval_status}
+              {pending.due_date && <span className="text-muted-foreground"> · Due {pending.due_date}</span>}
+            </p>
+          )}
+          <Link href={`/qms/oos/${oosId}/approval`}>
+            <Button className="bg-blue-600 hover:bg-blue-700 gap-1"><CheckCircle className="h-4 w-4" />Open Approval Workflow</Button>
+          </Link>
+          <Link href="/qms/oos/approval" className="block">
+            <Button variant="outline" size="sm">Approval Dashboard</Button>
+          </Link>
+        </CardContent>
+      </Card>
+      {approvals.filter((a) => a.approval_status === 'Approved' || a.approver_name).map((a) => (
+        <Card key={a.id}><CardContent className="p-4">
+          <p className="font-medium">{a.current_workflow_step} — {a.approver_name} ({a.approver_role})</p>
+          <p className="text-sm text-muted-foreground">{a.comments}</p>
+          <OosStatusBadge status={a.approval_status || a.decision} />
         </CardContent></Card>
+      ))}
+      {!approvals.length && record.status !== 'draft' && (
+        <p className="text-sm text-muted-foreground">Approval workflow will initialize when OOS is submitted.</p>
       )}
     </div>
   );

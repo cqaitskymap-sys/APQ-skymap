@@ -1,9 +1,5 @@
-'use client';
+import { DeviationImpactPage } from '@/components/deviations/impact-assessment/deviation-impact-page';
 
-import { useParams } from 'next/navigation';
-import { DeviationDetailView } from '@/components/deviations/deviation-detail-view';
-
-export default function DeviationImpactAssessmentPage() {
-  const id = useParams().id as string;
-  return <DeviationDetailView id={id} defaultTab="impact" />;
+export default function Page({ params }: { params: { id: string } }) {
+  return <DeviationImpactPage deviationId={params.id} />;
 }

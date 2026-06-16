@@ -3,7 +3,7 @@ import {
   type QueryConstraint,
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { firestore, storage } from '@/lib/firebase';
+import { getFirebaseFirestore, getFirebaseStorage } from '@/lib/firebase';
 import { logAuditEvent, generateDocumentNumber } from '@/lib/admin/admin-service';
 import { downloadCsv } from '@/lib/export-utils';
 import {
@@ -32,7 +32,7 @@ async function audit(actor: DmsActor, action: string, recordId: string, oldValue
 async function notify(title: string, message: string, recordId: string, roles: string[]) {
   try {
     for (const role of roles) {
-      await addDoc(collection(firestore, DMS_COLLECTIONS.notifications), {
+      await addDoc(collection(getFirebaseFirestore(), DMS_COLLECTIONS.notifications), {
         title, message, module: 'DMS', record_id: recordId, target_role: role,
         read: false, created_at: now(),
       });
@@ -49,7 +49,7 @@ export async function generateDmsDocumentNumber(documentType: string): Promise<s
   const docPrefix = `${prefix}-${year}-`;
   try {
     const snap = await getDocs(query(
-      collection(firestore, DMS_COLLECTIONS.documents),
+      collection(getFirebaseFirestore(), DMS_COLLECTIONS.documents),
       where('document_number', '>=', docPrefix),
       where('document_number', '<=', `${docPrefix}\uf8ff`),
       orderBy('document_number', 'desc'),
@@ -60,7 +60,7 @@ export async function generateDmsDocumentNumber(documentType: string): Promise<s
       return `${docPrefix}${String(parseInt(last.split('-').pop() || '0', 10) + 1).padStart(4, '0')}`;
     }
   } catch {
-    const all = await getDocs(collection(firestore, DMS_COLLECTIONS.documents));
+    const all = await getDocs(collection(getFirebaseFirestore(), DMS_COLLECTIONS.documents));
     return `${docPrefix}${String(all.size + 1).padStart(4, '0')}`;
   }
   return `${docPrefix}0001`;
@@ -68,7 +68,7 @@ export async function generateDmsDocumentNumber(documentType: string): Promise<s
 
 async function isDocumentNumberUnique(number: string, excludeId?: string): Promise<boolean> {
   const snap = await getDocs(query(
-    collection(firestore, DMS_COLLECTIONS.documents),
+    collection(getFirebaseFirestore(), DMS_COLLECTIONS.documents),
     where('document_number', '==', number),
     limit(5),
   ));
@@ -115,13 +115,13 @@ export async function createDocument(input: DocumentCreateInput, actor: DmsActor
     updated_at: timestamp,
   };
 
-  const refDoc = await addDoc(collection(firestore, DMS_COLLECTIONS.documents), record);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), DMS_COLLECTIONS.documents), record);
   await audit(actor, 'CREATE', refDoc.id, null, record);
   return { id: refDoc.id, ...record };
 }
 
 export async function getDocumentById(id: string): Promise<DocumentRecord | null> {
-  const snap = await getDoc(doc(firestore, DMS_COLLECTIONS.documents, id));
+  const snap = await getDoc(doc(getFirebaseFirestore(), DMS_COLLECTIONS.documents, id));
   if (!snap.exists()) return null;
   return { id: snap.id, ...snap.data() } as DocumentRecord;
 }
@@ -137,10 +137,10 @@ export async function listDocuments(filters?: DmsFilters, actorRole?: string): P
 
   let records: DocumentRecord[];
   try {
-    const snap = await getDocs(query(collection(firestore, DMS_COLLECTIONS.documents), ...constraints));
+    const snap = await getDocs(query(collection(getFirebaseFirestore(), DMS_COLLECTIONS.documents), ...constraints));
     records = snap.docs.map((d) => ({ id: d.id, ...d.data() } as DocumentRecord));
   } catch {
-    const snap = await getDocs(collection(firestore, DMS_COLLECTIONS.documents));
+    const snap = await getDocs(collection(getFirebaseFirestore(), DMS_COLLECTIONS.documents));
     records = snap.docs.map((d) => ({ id: d.id, ...d.data() } as DocumentRecord));
   }
 
@@ -177,7 +177,7 @@ export async function updateDocument(id: string, input: DocumentUpdateInput, act
     updated_by_name: actor.name,
     updated_at: now(),
   };
-  await updateDoc(doc(firestore, DMS_COLLECTIONS.documents, id), updates);
+  await updateDoc(doc(getFirebaseFirestore(), DMS_COLLECTIONS.documents, id), updates);
   await audit(actor, 'EDIT', id, existing, { ...existing, ...updates });
   return { ...existing, ...updates } as DocumentRecord;
 }
@@ -186,7 +186,7 @@ export async function uploadAttachment(
   documentId: string, file: File, actor: DmsActor,
 ): Promise<DocumentAttachment> {
   const path = `dms/${documentId}/${Date.now()}_${file.name}`;
-  const storageRef = ref(storage, path);
+  const storageRef = ref(getFirebaseStorage(), path);
   await uploadBytes(storageRef, file);
   const downloadUrl = await getDownloadURL(storageRef);
 
@@ -202,7 +202,7 @@ export async function uploadAttachment(
     uploaded_at: now(),
   };
 
-  const refDoc = await addDoc(collection(firestore, DMS_COLLECTIONS.attachments), attachment);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), DMS_COLLECTIONS.attachments), attachment);
   await audit(actor, 'UPLOAD', documentId, null, { file_name: file.name });
   return { id: refDoc.id, ...attachment };
 }
@@ -210,14 +210,14 @@ export async function uploadAttachment(
 export async function getAttachments(documentId: string): Promise<DocumentAttachment[]> {
   try {
     const snap = await getDocs(query(
-      collection(firestore, DMS_COLLECTIONS.attachments),
+      collection(getFirebaseFirestore(), DMS_COLLECTIONS.attachments),
       where('document_id', '==', documentId),
       orderBy('uploaded_at', 'desc'),
     ));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as DocumentAttachment));
   } catch {
     const snap = await getDocs(query(
-      collection(firestore, DMS_COLLECTIONS.attachments),
+      collection(getFirebaseFirestore(), DMS_COLLECTIONS.attachments),
       where('document_id', '==', documentId),
     ));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as DocumentAttachment));
@@ -240,9 +240,9 @@ export async function submitForReview(documentId: string, actor: DmsActor, comme
     updated_by_name: actor.name,
     updated_at: now(),
   };
-  await updateDoc(doc(firestore, DMS_COLLECTIONS.documents, documentId), updates);
+  await updateDoc(doc(getFirebaseFirestore(), DMS_COLLECTIONS.documents, documentId), updates);
 
-  await addDoc(collection(firestore, DMS_COLLECTIONS.approvals), {
+  await addDoc(collection(getFirebaseFirestore(), DMS_COLLECTIONS.approvals), {
     document_id: documentId,
     stage: 'department_review',
     reviewer_id: actor.id,
@@ -279,7 +279,7 @@ export async function processApproval(
     signed_at: now(),
     created_at: now(),
   };
-  await addDoc(collection(firestore, DMS_COLLECTIONS.approvals), approvalEntry);
+  await addDoc(collection(getFirebaseFirestore(), DMS_COLLECTIONS.approvals), approvalEntry);
 
   let newStatus = existing.status;
   const updates: Partial<DocumentRecord> = {
@@ -296,12 +296,12 @@ export async function processApproval(
     if (input.stage === 'department_review') {
       updates.reviewed_by = actor.id;
       updates.reviewed_by_name = actor.name;
-      await addDoc(collection(firestore, DMS_COLLECTIONS.approvals), {
+      await addDoc(collection(getFirebaseFirestore(), DMS_COLLECTIONS.approvals), {
         document_id: documentId, stage: 'qa_review', reviewer_id: '', reviewer_name: '',
         decision: 'pending', comments: '', signed_at: null, created_at: now(),
       });
     } else if (input.stage === 'qa_review') {
-      await addDoc(collection(firestore, DMS_COLLECTIONS.approvals), {
+      await addDoc(collection(getFirebaseFirestore(), DMS_COLLECTIONS.approvals), {
         document_id: documentId, stage: 'head_qa_approval', reviewer_id: '', reviewer_name: '',
         decision: 'pending', comments: '', signed_at: null, created_at: now(),
       });
@@ -314,7 +314,7 @@ export async function processApproval(
   }
 
   updates.status = newStatus;
-  await updateDoc(doc(firestore, DMS_COLLECTIONS.documents, documentId), updates);
+  await updateDoc(doc(getFirebaseFirestore(), DMS_COLLECTIONS.documents, documentId), updates);
   await audit(actor, input.decision === 'rejected' ? 'REJECTION' : 'APPROVAL', documentId, existing, updates, input.comments);
 
   if (newStatus === 'approved') {
@@ -327,7 +327,7 @@ export async function processApproval(
 export async function syncEffectiveDocuments(): Promise<number> {
   const today = new Date().toISOString().split('T')[0];
   const snap = await getDocs(query(
-    collection(firestore, DMS_COLLECTIONS.documents),
+    collection(getFirebaseFirestore(), DMS_COLLECTIONS.documents),
     where('status', '==', 'approved'),
   ));
   let count = 0;
@@ -357,7 +357,7 @@ async function obsoletePreviousRevision(oldDocId: string, newDocId: string) {
   const oldDoc = await getDocumentById(oldDocId);
   if (!oldDoc || oldDoc.status === 'obsolete') return;
 
-  await updateDoc(doc(firestore, DMS_COLLECTIONS.documents, oldDocId), {
+  await updateDoc(doc(getFirebaseFirestore(), DMS_COLLECTIONS.documents, oldDocId), {
     status: 'obsolete', is_latest: false, updated_at: now(),
   });
   await audit(
@@ -378,7 +378,7 @@ export async function createRevision(
   const unique = await isDocumentNumberUnique(parent.document_number);
   if (!unique) throw new Error('Document number conflict');
 
-  await addDoc(collection(firestore, DMS_COLLECTIONS.revisions), {
+  await addDoc(collection(getFirebaseFirestore(), DMS_COLLECTIONS.revisions), {
     document_id: parentId,
     document_number: parent.document_number,
     version: parent.version,
@@ -391,7 +391,7 @@ export async function createRevision(
     created_at: now(),
   });
 
-  await updateDoc(doc(firestore, DMS_COLLECTIONS.documents, parentId), { is_latest: false, updated_at: now() });
+  await updateDoc(doc(getFirebaseFirestore(), DMS_COLLECTIONS.documents, parentId), { is_latest: false, updated_at: now() });
 
   const timestamp = now();
   const newRevision = parent.revision_number + 1;
@@ -431,7 +431,7 @@ export async function createRevision(
     updated_at: timestamp,
   };
 
-  const refDoc = await addDoc(collection(firestore, DMS_COLLECTIONS.documents), record);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), DMS_COLLECTIONS.documents), record);
   await audit(actor, 'REVISION', refDoc.id, parent, record, input.reason_for_revision);
   await createTrainingRequirement(refDoc.id, { ...record, id: refDoc.id });
   await notify('Document Revised', `${parent.document_number} rev ${input.version} created — training required`, refDoc.id, ['qa_manager', 'head_qa']);
@@ -441,7 +441,7 @@ export async function createRevision(
 async function createTrainingRequirement(documentId: string, doc: DocumentRecord) {
   const dueDate = new Date();
   dueDate.setDate(dueDate.getDate() + 30);
-  await addDoc(collection(firestore, DMS_COLLECTIONS.trainingLinks), {
+  await addDoc(collection(getFirebaseFirestore(), DMS_COLLECTIONS.trainingLinks), {
     document_id: documentId,
     document_number: doc.document_number,
     document_title: doc.document_title,
@@ -459,14 +459,14 @@ export async function getRevisions(documentId: string): Promise<DocumentRevision
 
   try {
     const snap = await getDocs(query(
-      collection(firestore, DMS_COLLECTIONS.revisions),
+      collection(getFirebaseFirestore(), DMS_COLLECTIONS.revisions),
       where('document_id', '==', rootId),
       orderBy('created_at', 'desc'),
     ));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as DocumentRevision));
   } catch {
     const snap = await getDocs(query(
-      collection(firestore, DMS_COLLECTIONS.revisions),
+      collection(getFirebaseFirestore(), DMS_COLLECTIONS.revisions),
       where('document_id', '==', rootId),
     ));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as DocumentRevision));
@@ -476,14 +476,14 @@ export async function getRevisions(documentId: string): Promise<DocumentRevision
 export async function getApprovals(documentId: string): Promise<DocumentApproval[]> {
   try {
     const snap = await getDocs(query(
-      collection(firestore, DMS_COLLECTIONS.approvals),
+      collection(getFirebaseFirestore(), DMS_COLLECTIONS.approvals),
       where('document_id', '==', documentId),
       orderBy('created_at', 'asc'),
     ));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as DocumentApproval));
   } catch {
     const snap = await getDocs(query(
-      collection(firestore, DMS_COLLECTIONS.approvals),
+      collection(getFirebaseFirestore(), DMS_COLLECTIONS.approvals),
       where('document_id', '==', documentId),
     ));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as DocumentApproval));
@@ -493,14 +493,14 @@ export async function getApprovals(documentId: string): Promise<DocumentApproval
 export async function getDistribution(documentId: string): Promise<DocumentDistribution[]> {
   try {
     const snap = await getDocs(query(
-      collection(firestore, DMS_COLLECTIONS.distribution),
+      collection(getFirebaseFirestore(), DMS_COLLECTIONS.distribution),
       where('document_id', '==', documentId),
       orderBy('distributed_at', 'desc'),
     ));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as DocumentDistribution));
   } catch {
     const snap = await getDocs(query(
-      collection(firestore, DMS_COLLECTIONS.distribution),
+      collection(getFirebaseFirestore(), DMS_COLLECTIONS.distribution),
       where('document_id', '==', documentId),
     ));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as DocumentDistribution));
@@ -517,7 +517,7 @@ export async function addDistribution(documentId: string, input: DistributionInp
     acknowledged: false,
     acknowledged_at: null,
   };
-  const refDoc = await addDoc(collection(firestore, DMS_COLLECTIONS.distribution), entry);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), DMS_COLLECTIONS.distribution), entry);
   await audit(actor, 'DISTRIBUTE', documentId, null, entry);
   return { id: refDoc.id, ...entry };
 }
@@ -525,14 +525,14 @@ export async function addDistribution(documentId: string, input: DistributionInp
 export async function getTrainingLinks(documentId: string): Promise<DocumentTrainingLink[]> {
   try {
     const snap = await getDocs(query(
-      collection(firestore, DMS_COLLECTIONS.trainingLinks),
+      collection(getFirebaseFirestore(), DMS_COLLECTIONS.trainingLinks),
       where('document_id', '==', documentId),
       orderBy('created_at', 'desc'),
     ));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as DocumentTrainingLink));
   } catch {
     const snap = await getDocs(query(
-      collection(firestore, DMS_COLLECTIONS.trainingLinks),
+      collection(getFirebaseFirestore(), DMS_COLLECTIONS.trainingLinks),
       where('document_id', '==', documentId),
     ));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as DocumentTrainingLink));
@@ -542,7 +542,7 @@ export async function getTrainingLinks(documentId: string): Promise<DocumentTrai
 export async function getAuditLogsForDocument(documentId: string): Promise<Record<string, unknown>[]> {
   try {
     const snap = await getDocs(query(
-      collection(firestore, DMS_COLLECTIONS.auditLogs),
+      collection(getFirebaseFirestore(), DMS_COLLECTIONS.auditLogs),
       where('recordId', '==', documentId),
       where('module', '==', 'DMS'),
       orderBy('dateTime', 'desc'),
@@ -551,7 +551,7 @@ export async function getAuditLogsForDocument(documentId: string): Promise<Recor
     return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
   } catch {
     const snap = await getDocs(query(
-      collection(firestore, DMS_COLLECTIONS.auditLogs),
+      collection(getFirebaseFirestore(), DMS_COLLECTIONS.auditLogs),
       where('recordId', '==', documentId),
       limit(100),
     ));
@@ -569,7 +569,7 @@ export async function trackPrint(documentId: string, actor: DmsActor) {
 
 export async function syncReviewDueNotifications(): Promise<number> {
   const snap = await getDocs(query(
-    collection(firestore, DMS_COLLECTIONS.documents),
+    collection(getFirebaseFirestore(), DMS_COLLECTIONS.documents),
     where('status', '==', 'effective'),
   ));
   let count = 0;
@@ -591,7 +591,7 @@ export async function syncReviewDueNotifications(): Promise<number> {
 export async function listChangeControlsForLink(): Promise<{ id: string; number: string; title: string }[]> {
   try {
     const snap = await getDocs(query(
-      collection(firestore, DMS_COLLECTIONS.changeControls),
+      collection(getFirebaseFirestore(), DMS_COLLECTIONS.changeControls),
       orderBy('updated_at', 'desc'),
       limit(50,
     )));
@@ -624,7 +624,7 @@ export function computeDashboardMetrics(records: DocumentRecord[]): DmsDashboard
 export async function computeTrainingPending(): Promise<number> {
   try {
     const snap = await getDocs(query(
-      collection(firestore, DMS_COLLECTIONS.trainingLinks),
+      collection(getFirebaseFirestore(), DMS_COLLECTIONS.trainingLinks),
       where('status', '==', 'pending'),
     ));
     return snap.size;
@@ -680,7 +680,7 @@ export async function archiveDocument(documentId: string, actor: DmsActor): Prom
   if (existing.status !== 'obsolete') throw new Error('Only obsolete documents can be archived');
 
   const updates = { status: 'archived', updated_by: actor.id, updated_by_name: actor.name, updated_at: now() };
-  await updateDoc(doc(firestore, DMS_COLLECTIONS.documents, documentId), updates);
+  await updateDoc(doc(getFirebaseFirestore(), DMS_COLLECTIONS.documents, documentId), updates);
   await audit(actor, 'ARCHIVE', documentId, existing, updates);
   return { ...existing, ...updates } as DocumentRecord;
 }

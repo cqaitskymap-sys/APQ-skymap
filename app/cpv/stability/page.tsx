@@ -1,5 +1,5 @@
-import { StabilityWorkspace } from '@/components/cpv/cpv-module-workspaces';
+import { redirect } from 'next/navigation';
 
-export default function Page() {
-  return <StabilityWorkspace />;
+export default function StabilityLegacyPage() {
+  redirect('/cpv/stability-monitoring');
 }

@@ -3,7 +3,7 @@ import {
   type QueryConstraint,
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { firestore, storage } from '@/lib/firebase';
+import { getFirebaseFirestore, getFirebaseStorage } from '@/lib/firebase';
 import { logAuditEvent } from '@/lib/admin/admin-service';
 import { createDeviation } from '@/lib/deviation-service';
 import { downloadCsv } from '@/lib/export-utils';
@@ -31,7 +31,7 @@ async function auditLog(actor: EquipmentActor, action: string, recordId: string,
 async function notify(title: string, message: string, recordId: string, roles: string[]) {
   try {
     for (const role of roles) {
-      await addDoc(collection(firestore, EQUIPMENT_COLLECTIONS.notifications), {
+      await addDoc(collection(getFirebaseFirestore(), EQUIPMENT_COLLECTIONS.notifications), {
         title, message, module: 'Equipment', record_id: recordId, target_role: role,
         read: false, created_at: now(),
       });
@@ -44,7 +44,7 @@ async function genNumber(prefix: string, collName: string, field: string): Promi
   const p = `${prefix}-${year}-`;
   try {
     const snap = await getDocs(query(
-      collection(firestore, collName),
+      collection(getFirebaseFirestore(), collName),
       where(field, '>=', p), where(field, '<=', `${p}\uf8ff`),
       orderBy(field, 'desc'), limit(1),
     ));
@@ -53,14 +53,14 @@ async function genNumber(prefix: string, collName: string, field: string): Promi
       return `${p}${String(parseInt(last.split('-').pop() || '0', 10) + 1).padStart(4, '0')}`;
     }
   } catch {
-    const all = await getDocs(collection(firestore, collName));
+    const all = await getDocs(collection(getFirebaseFirestore(), collName));
     return `${p}${String(all.size + 1).padStart(4, '0')}`;
   }
   return `${p}0001`;
 }
 
 async function logStatusChange(equipmentDocId: string, equipmentId: string, oldStatus: string, newStatus: string, reason: string, actor: EquipmentActor) {
-  await addDoc(collection(firestore, EQUIPMENT_COLLECTIONS.statusHistory), {
+  await addDoc(collection(getFirebaseFirestore(), EQUIPMENT_COLLECTIONS.statusHistory), {
     equipment_doc_id: equipmentDocId, equipment_id: equipmentId,
     old_status: oldStatus, new_status: newStatus, reason,
     changed_by: actor.id, changed_by_name: actor.name, changed_at: now(),
@@ -101,13 +101,13 @@ export async function createEquipment(input: EquipmentCreateInput, actor: Equipm
     created_at: timestamp,
     updated_at: timestamp,
   };
-  const refDoc = await addDoc(collection(firestore, EQUIPMENT_COLLECTIONS.master), record);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), EQUIPMENT_COLLECTIONS.master), record);
   await auditLog(actor, 'CREATE', refDoc.id, null, record);
   return { id: refDoc.id, ...record };
 }
 
 export async function getEquipmentById(id: string): Promise<EquipmentRecord | null> {
-  const snap = await getDoc(doc(firestore, EQUIPMENT_COLLECTIONS.master, id));
+  const snap = await getDoc(doc(getFirebaseFirestore(), EQUIPMENT_COLLECTIONS.master, id));
   if (!snap.exists()) return null;
   return { id: snap.id, ...snap.data() } as EquipmentRecord;
 }
@@ -120,10 +120,10 @@ export async function listEquipment(filters?: EquipmentFilters): Promise<Equipme
 
   let records: EquipmentRecord[];
   try {
-    const snap = await getDocs(query(collection(firestore, EQUIPMENT_COLLECTIONS.master), ...constraints));
+    const snap = await getDocs(query(collection(getFirebaseFirestore(), EQUIPMENT_COLLECTIONS.master), ...constraints));
     records = snap.docs.map((d) => ({ id: d.id, ...d.data() } as EquipmentRecord));
   } catch {
-    const snap = await getDocs(collection(firestore, EQUIPMENT_COLLECTIONS.master));
+    const snap = await getDocs(collection(getFirebaseFirestore(), EQUIPMENT_COLLECTIONS.master));
     records = snap.docs.map((d) => ({ id: d.id, ...d.data() } as EquipmentRecord));
   }
 
@@ -145,7 +145,7 @@ export async function updateEquipment(id: string, input: Partial<EquipmentCreate
   if (input.equipment_status && input.equipment_status !== existing.equipment_status) {
     await logStatusChange(id, existing.equipment_id, existing.equipment_status, input.equipment_status, 'Manual update', actor);
   }
-  await updateDoc(doc(firestore, EQUIPMENT_COLLECTIONS.master, id), updates);
+  await updateDoc(doc(getFirebaseFirestore(), EQUIPMENT_COLLECTIONS.master, id), updates);
   await auditLog(actor, 'EDIT', id, existing, updates);
   return { ...existing, ...updates } as EquipmentRecord;
 }
@@ -153,7 +153,7 @@ export async function updateEquipment(id: string, input: Partial<EquipmentCreate
 export async function blockEquipment(id: string, actor: EquipmentActor, reason: string): Promise<EquipmentRecord> {
   const existing = await getEquipmentById(id);
   if (!existing) throw new Error('Equipment not found');
-  await updateDoc(doc(firestore, EQUIPMENT_COLLECTIONS.master, id), {
+  await updateDoc(doc(getFirebaseFirestore(), EQUIPMENT_COLLECTIONS.master, id), {
     equipment_status: 'Blocked', updated_at: now(),
   });
   await logStatusChange(id, existing.equipment_id, existing.equipment_status, 'Blocked', reason, actor);
@@ -199,7 +199,7 @@ export async function createCalibration(input: CalibrationInput, actor: Equipmen
     created_at: now(),
     updated_at: now(),
   };
-  const refDoc = await addDoc(collection(firestore, EQUIPMENT_COLLECTIONS.calibration), record);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), EQUIPMENT_COLLECTIONS.calibration), record);
   await auditLog(actor, 'CALIBRATION', input.equipment_doc_id, null, record);
 
   const eqUpdates: Partial<EquipmentRecord> = {
@@ -211,7 +211,7 @@ export async function createCalibration(input: CalibrationInput, actor: Equipmen
     eqUpdates.equipment_status = 'Blocked';
     await notify('Calibration Failed', `${input.equipment_name} calibration failed — equipment blocked`, input.equipment_doc_id, ['qa_manager', 'engineering']);
   }
-  await updateDoc(doc(firestore, EQUIPMENT_COLLECTIONS.master, input.equipment_doc_id), eqUpdates);
+  await updateDoc(doc(getFirebaseFirestore(), EQUIPMENT_COLLECTIONS.master, input.equipment_doc_id), eqUpdates);
 
   return { id: refDoc.id, ...record };
 }
@@ -220,12 +220,12 @@ export async function listCalibrations(equipmentDocId?: string): Promise<Calibra
   try {
     const constraints: QueryConstraint[] = [orderBy('calibration_date', 'desc')];
     if (equipmentDocId) constraints.unshift(where('equipment_doc_id', '==', equipmentDocId));
-    const snap = await getDocs(query(collection(firestore, EQUIPMENT_COLLECTIONS.calibration), ...constraints));
+    const snap = await getDocs(query(collection(getFirebaseFirestore(), EQUIPMENT_COLLECTIONS.calibration), ...constraints));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as CalibrationRecord));
   } catch {
     const snap = equipmentDocId
-      ? await getDocs(query(collection(firestore, EQUIPMENT_COLLECTIONS.calibration), where('equipment_doc_id', '==', equipmentDocId)))
-      : await getDocs(collection(firestore, EQUIPMENT_COLLECTIONS.calibration));
+      ? await getDocs(query(collection(getFirebaseFirestore(), EQUIPMENT_COLLECTIONS.calibration), where('equipment_doc_id', '==', equipmentDocId)))
+      : await getDocs(collection(getFirebaseFirestore(), EQUIPMENT_COLLECTIONS.calibration));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as CalibrationRecord));
   }
 }
@@ -234,10 +234,10 @@ export async function uploadCalibrationCertificate(
   equipmentDocId: string, calId: string, file: File, actor: EquipmentActor,
 ): Promise<string> {
   const path = `equipment/${equipmentDocId}/calibration/${calId}_${Date.now()}_${file.name}`;
-  const storageRef = ref(storage, path);
+  const storageRef = ref(getFirebaseStorage(), path);
   await uploadBytes(storageRef, file);
   const url = await getDownloadURL(storageRef);
-  await updateDoc(doc(firestore, EQUIPMENT_COLLECTIONS.calibration, calId), { certificate_url: url, updated_at: now() });
+  await updateDoc(doc(getFirebaseFirestore(), EQUIPMENT_COLLECTIONS.calibration, calId), { certificate_url: url, updated_at: now() });
   await auditLog(actor, 'ATTACHMENT_UPLOAD', equipmentDocId, null, { calId, file: file.name });
   return url;
 }
@@ -266,9 +266,9 @@ export async function createPmRecord(input: PmInput, actor: EquipmentActor): Pro
     created_at: now(),
     updated_at: now(),
   };
-  const refDoc = await addDoc(collection(firestore, EQUIPMENT_COLLECTIONS.pm), record);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), EQUIPMENT_COLLECTIONS.pm), record);
   await auditLog(actor, 'PM_RECORD', input.equipment_doc_id, null, record);
-  await updateDoc(doc(firestore, EQUIPMENT_COLLECTIONS.master, input.equipment_doc_id), {
+  await updateDoc(doc(getFirebaseFirestore(), EQUIPMENT_COLLECTIONS.master, input.equipment_doc_id), {
     pm_due_date: input.next_pm_due_date,
     pm_status: input.pm_status,
     updated_at: now(),
@@ -280,12 +280,12 @@ export async function listPmRecords(equipmentDocId?: string): Promise<PmRecord[]
   try {
     const constraints: QueryConstraint[] = [orderBy('pm_date', 'desc')];
     if (equipmentDocId) constraints.unshift(where('equipment_doc_id', '==', equipmentDocId));
-    const snap = await getDocs(query(collection(firestore, EQUIPMENT_COLLECTIONS.pm), ...constraints));
+    const snap = await getDocs(query(collection(getFirebaseFirestore(), EQUIPMENT_COLLECTIONS.pm), ...constraints));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as PmRecord));
   } catch {
     const snap = equipmentDocId
-      ? await getDocs(query(collection(firestore, EQUIPMENT_COLLECTIONS.pm), where('equipment_doc_id', '==', equipmentDocId)))
-      : await getDocs(collection(firestore, EQUIPMENT_COLLECTIONS.pm));
+      ? await getDocs(query(collection(getFirebaseFirestore(), EQUIPMENT_COLLECTIONS.pm), where('equipment_doc_id', '==', equipmentDocId)))
+      : await getDocs(collection(getFirebaseFirestore(), EQUIPMENT_COLLECTIONS.pm));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as PmRecord));
   }
 }
@@ -359,11 +359,11 @@ export async function createBreakdown(input: BreakdownInput, actor: EquipmentAct
     created_at: now(),
     updated_at: now(),
   };
-  const refDoc = await addDoc(collection(firestore, EQUIPMENT_COLLECTIONS.breakdown), record);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), EQUIPMENT_COLLECTIONS.breakdown), record);
   await auditLog(actor, 'BREAKDOWN', input.equipment_doc_id, null, record);
 
   if (input.impact_on_product_quality) {
-    await updateDoc(doc(firestore, EQUIPMENT_COLLECTIONS.master, input.equipment_doc_id), {
+    await updateDoc(doc(getFirebaseFirestore(), EQUIPMENT_COLLECTIONS.master, input.equipment_doc_id), {
       equipment_status: 'Under Maintenance', updated_at: now(),
     });
   }
@@ -376,12 +376,12 @@ export async function listBreakdowns(equipmentDocId?: string): Promise<Breakdown
   try {
     const constraints: QueryConstraint[] = [orderBy('breakdown_date', 'desc')];
     if (equipmentDocId) constraints.unshift(where('equipment_doc_id', '==', equipmentDocId));
-    const snap = await getDocs(query(collection(firestore, EQUIPMENT_COLLECTIONS.breakdown), ...constraints));
+    const snap = await getDocs(query(collection(getFirebaseFirestore(), EQUIPMENT_COLLECTIONS.breakdown), ...constraints));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as BreakdownRecord));
   } catch {
     const snap = equipmentDocId
-      ? await getDocs(query(collection(firestore, EQUIPMENT_COLLECTIONS.breakdown), where('equipment_doc_id', '==', equipmentDocId)))
-      : await getDocs(collection(firestore, EQUIPMENT_COLLECTIONS.breakdown));
+      ? await getDocs(query(collection(getFirebaseFirestore(), EQUIPMENT_COLLECTIONS.breakdown), where('equipment_doc_id', '==', equipmentDocId)))
+      : await getDocs(collection(getFirebaseFirestore(), EQUIPMENT_COLLECTIONS.breakdown));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as BreakdownRecord));
   }
 }
@@ -392,7 +392,7 @@ export async function uploadEquipmentAttachment(
   equipmentDocId: string, file: File, category: string, actor: EquipmentActor,
 ): Promise<EquipmentAttachment> {
   const path = `equipment/${equipmentDocId}/${Date.now()}_${file.name}`;
-  const storageRef = ref(storage, path);
+  const storageRef = ref(getFirebaseStorage(), path);
   await uploadBytes(storageRef, file);
   const downloadUrl = await getDownloadURL(storageRef);
   const attachment: Omit<EquipmentAttachment, 'id'> = {
@@ -400,7 +400,7 @@ export async function uploadEquipmentAttachment(
     category, storage_path: path, download_url: downloadUrl,
     uploaded_by: actor.id, uploaded_by_name: actor.name, uploaded_at: now(),
   };
-  const refDoc = await addDoc(collection(firestore, EQUIPMENT_COLLECTIONS.attachments), attachment);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), EQUIPMENT_COLLECTIONS.attachments), attachment);
   await auditLog(actor, 'ATTACHMENT_UPLOAD', equipmentDocId, null, { file_name: file.name });
   return { id: refDoc.id, ...attachment };
 }
@@ -408,13 +408,13 @@ export async function uploadEquipmentAttachment(
 export async function getEquipmentAttachments(equipmentDocId: string): Promise<EquipmentAttachment[]> {
   try {
     const snap = await getDocs(query(
-      collection(firestore, EQUIPMENT_COLLECTIONS.attachments),
+      collection(getFirebaseFirestore(), EQUIPMENT_COLLECTIONS.attachments),
       where('equipment_doc_id', '==', equipmentDocId), orderBy('uploaded_at', 'desc'),
     ));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as EquipmentAttachment));
   } catch {
     const snap = await getDocs(query(
-      collection(firestore, EQUIPMENT_COLLECTIONS.attachments), where('equipment_doc_id', '==', equipmentDocId),
+      collection(getFirebaseFirestore(), EQUIPMENT_COLLECTIONS.attachments), where('equipment_doc_id', '==', equipmentDocId),
     ));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as EquipmentAttachment));
   }
@@ -423,7 +423,7 @@ export async function getEquipmentAttachments(equipmentDocId: string): Promise<E
 export async function getStatusHistory(equipmentDocId: string): Promise<EquipmentStatusHistory[]> {
   try {
     const snap = await getDocs(query(
-      collection(firestore, EQUIPMENT_COLLECTIONS.statusHistory),
+      collection(getFirebaseFirestore(), EQUIPMENT_COLLECTIONS.statusHistory),
       where('equipment_doc_id', '==', equipmentDocId), orderBy('changed_at', 'desc'),
     ));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as EquipmentStatusHistory));
@@ -435,7 +435,7 @@ export async function getStatusHistory(equipmentDocId: string): Promise<Equipmen
 export async function getAuditLogsForEquipment(equipmentDocId: string): Promise<Record<string, unknown>[]> {
   try {
     const snap = await getDocs(query(
-      collection(firestore, EQUIPMENT_COLLECTIONS.auditLogs),
+      collection(getFirebaseFirestore(), EQUIPMENT_COLLECTIONS.auditLogs),
       where('recordId', '==', equipmentDocId), where('module', '==', 'Equipment'),
       orderBy('dateTime', 'desc'), limit(100),
     ));
@@ -449,7 +449,7 @@ export async function getAuditLogsForEquipment(equipmentDocId: string): Promise<
 
 export async function syncEquipmentDueDates(): Promise<number> {
   const t = today();
-  const snap = await getDocs(collection(firestore, EQUIPMENT_COLLECTIONS.master));
+  const snap = await getDocs(collection(getFirebaseFirestore(), EQUIPMENT_COLLECTIONS.master));
   let count = 0;
 
   for (const d of snap.docs) {

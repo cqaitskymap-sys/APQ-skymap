@@ -23,6 +23,8 @@ import {
   updateBatchStatus, listBatches, listAlerts, acknowledgeAlert, closeAlert,
   loadAllCpvModules,
 } from '@/lib/cpv-module-service';
+import { fetchCpvProducts, isCpvProductActiveForEntry } from '@/lib/cpv-product-master-service';
+import { isCpvProductOperational } from '@/lib/cpv-product-master';
 import {
   createConfigRecord, updateConfigRecord,
 } from '@/lib/cpv-config-service';
@@ -485,6 +487,7 @@ export function BatchRegistrationWorkspace() {
   const canReview = cpvPermissions.canReview(profile?.role);
   const [loading, setLoading] = useState(true);
   const [batches, setBatches] = useState<Awaited<ReturnType<typeof listBatches>>>([]);
+  const [cpvProducts, setCpvProducts] = useState<Awaited<ReturnType<typeof fetchCpvProducts>>>([]);
   const [open, setOpen] = useState(false);
   const { config } = useCpvConfig();
   const actor = { id: user?.uid, name: profile?.full_name, role: profile?.role };
@@ -500,12 +503,30 @@ export function BatchRegistrationWorkspace() {
 
   const load = async () => {
     setLoading(true);
-    setBatches(await listBatches());
+    const [batchRows, productRows] = await Promise.all([listBatches(), fetchCpvProducts()]);
+    setBatches(batchRows);
+    setCpvProducts(productRows);
     setLoading(false);
   };
   useEffect(() => { void load(); }, []);
 
+  const activeCpvProducts = useMemo(() => {
+    const fromMaster = cpvProducts.filter((p) => isCpvProductOperational(p.cpvStatus));
+    if (fromMaster.length) return fromMaster;
+    return config.products.filter((p) => p.status === 'Active').map((p) => ({
+      id: p.id,
+      productName: p.productName,
+      productCode: p.productCode,
+      cpvStatus: 'Active' as const,
+    }));
+  }, [cpvProducts, config.products]);
+
   const submit = form.handleSubmit(async (values) => {
+    const active = await isCpvProductActiveForEntry(values.productName || values.productCode);
+    if (!active) {
+      toast.error('This CPV product is inactive. New batch registration is not allowed.');
+      return;
+    }
     await createBatch(values, actor);
     toast.success('Batch registered');
     setOpen(false);
@@ -541,8 +562,8 @@ export function BatchRegistrationWorkspace() {
                       <Select value={field.value} onValueChange={field.onChange}>
                         <SelectTrigger><SelectValue placeholder="Select product" /></SelectTrigger>
                         <SelectContent>
-                          {config.products.filter((p) => p.status === 'Active').map((p) => (
-                            <SelectItem key={p.id} value={p.productName}>{p.productName}</SelectItem>
+                          {activeCpvProducts.map((p) => (
+                            <SelectItem key={p.id || p.productName} value={p.productName}>{p.productName}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>

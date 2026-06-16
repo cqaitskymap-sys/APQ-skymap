@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Plus, Edit, Trash2, Search, Building2, Shield } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc, orderBy, query } from 'firebase/firestore';
-import { firestore } from '@/lib/firebase';
+import { getFirebaseFirestore } from '@/lib/firebase';
 import { PageLoader } from '@/components/loaders/page-loader';
 
 type VendorType = 'manufacturer' | 'supplier' | 'manufacturer_supplier';
@@ -95,7 +95,7 @@ export default function VendorMasterPage() {
 
   const fetchVendors = async () => {
     try {
-      const q = query(collection(firestore, 'vendor_master'), orderBy('vendor_code'));
+      const q = query(collection(getFirebaseFirestore(), 'vendor_master'), orderBy('vendor_code'));
       const querySnapshot = await getDocs(q);
       const data = querySnapshot.docs.map(doc => ({
         id: doc.id,
@@ -136,9 +136,9 @@ export default function VendorMasterPage() {
 
     try {
       if (editingId) {
-        await updateDoc(doc(firestore, 'vendor_master', editingId), { ...form });
+        await updateDoc(doc(getFirebaseFirestore(), 'vendor_master', editingId), { ...form });
       } else {
-        const vendorRef = doc(collection(firestore, 'vendor_master'));
+        const vendorRef = doc(collection(getFirebaseFirestore(), 'vendor_master'));
         await setDoc(vendorRef, form);
       }
       setDialogOpen(false);
@@ -177,7 +177,7 @@ export default function VendorMasterPage() {
   const handleDelete = async (id: string) => {
     if (confirm('Are you sure you want to delete this vendor?')) {
       try {
-        await deleteDoc(doc(firestore, 'vendor_master', id));
+        await deleteDoc(doc(getFirebaseFirestore(), 'vendor_master', id));
         fetchVendors();
       } catch (error) {
         console.error('Error deleting vendor:', error);

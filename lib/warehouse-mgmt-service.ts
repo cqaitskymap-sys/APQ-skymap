@@ -3,7 +3,7 @@ import {
   type QueryConstraint,
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { firestore, storage } from '@/lib/firebase';
+import { getFirebaseFirestore, getFirebaseStorage } from '@/lib/firebase';
 import { logAuditEvent } from '@/lib/admin/admin-service';
 import { isVendorSelectable } from '@/lib/vendor-mgmt-service';
 import { downloadCsv } from '@/lib/export-utils';
@@ -33,7 +33,7 @@ async function auditLog(actor: WarehouseActor, action: string, recordId: string,
 async function notify(title: string, message: string, recordId: string, roles: string[]) {
   try {
     for (const role of roles) {
-      await addDoc(collection(firestore, WAREHOUSE_COLLECTIONS.notifications), {
+      await addDoc(collection(getFirebaseFirestore(), WAREHOUSE_COLLECTIONS.notifications), {
         title, message, module: 'Warehouse', record_id: recordId, target_role: role,
         read: false, created_at: now(),
       });
@@ -46,7 +46,7 @@ async function genNumber(prefix: string, collName: string, field: string): Promi
   const p = `${prefix}-${year}-`;
   try {
     const snap = await getDocs(query(
-      collection(firestore, collName),
+      collection(getFirebaseFirestore(), collName),
       where(field, '>=', p), where(field, '<=', `${p}\uf8ff`),
       orderBy(field, 'desc'), limit(1),
     ));
@@ -55,7 +55,7 @@ async function genNumber(prefix: string, collName: string, field: string): Promi
       return `${p}${String(parseInt(last.split('-').pop() || '0', 10) + 1).padStart(4, '0')}`;
     }
   } catch {
-    const all = await getDocs(collection(firestore, collName));
+    const all = await getDocs(collection(getFirebaseFirestore(), collName));
     return `${p}${String(all.size + 1).padStart(4, '0')}`;
   }
   return `${p}0001`;
@@ -67,10 +67,10 @@ async function upsertTraceability(
   step: { step: string; ref_id: string; ref_no: string; date: string; quantity: number },
   extras?: { production_batch?: string; fg_batch_number?: string; dispatch_ref?: string },
 ) {
-  const q = query(collection(firestore, WAREHOUSE_COLLECTIONS.traceability), where('ar_number', '==', arNumber), limit(1));
+  const q = query(collection(getFirebaseFirestore(), WAREHOUSE_COLLECTIONS.traceability), where('ar_number', '==', arNumber), limit(1));
   const snap = await getDocs(q);
   if (snap.empty) {
-    await addDoc(collection(firestore, WAREHOUSE_COLLECTIONS.traceability), {
+    await addDoc(collection(getFirebaseFirestore(), WAREHOUSE_COLLECTIONS.traceability), {
       ar_number: arNumber, lot_number: lotNumber, material_name: materialName,
       material_type: materialType, grn_number: grnNumber, vendor_name: vendorName,
       production_batch: extras?.production_batch || null,
@@ -138,7 +138,7 @@ export async function createReceipt(input: ReceiptInput, actor: WarehouseActor):
     created_at: timestamp,
   };
 
-  const refDoc = await addDoc(collection(firestore, WAREHOUSE_COLLECTIONS.receipts), record);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), WAREHOUSE_COLLECTIONS.receipts), record);
   const full = { id: refDoc.id, ...record };
   await auditLog(actor, 'RECEIPT', refDoc.id, null, record);
 
@@ -148,7 +148,7 @@ export async function createReceipt(input: ReceiptInput, actor: WarehouseActor):
     await notify('Retest Due Alert', `${input.material_name} AR ${arNumber} retest due`, refDoc.id, ['qc_manager', 'qa_manager']);
   }
 
-  await addDoc(collection(firestore, WAREHOUSE_COLLECTIONS.inventory), {
+  await addDoc(collection(getFirebaseFirestore(), WAREHOUSE_COLLECTIONS.inventory), {
     material_name: input.material_name, material_code: input.material_code,
     material_type: input.material_type, ar_number: arNumber, lot_number: input.batch_lot_number,
     grn_number: grnNumber, receipt_doc_id: refDoc.id,
@@ -172,7 +172,7 @@ export async function listReceipts(filters?: WarehouseFilters): Promise<Material
   const constraints: QueryConstraint[] = [orderBy('created_at', 'desc')];
   if (filters?.material_type) constraints.unshift(where('material_type', '==', filters.material_type));
   if (filters?.status) constraints.unshift(where('status', '==', filters.status));
-  const snap = await getDocs(query(collection(firestore, WAREHOUSE_COLLECTIONS.receipts), ...constraints));
+  const snap = await getDocs(query(collection(getFirebaseFirestore(), WAREHOUSE_COLLECTIONS.receipts), ...constraints));
   let rows = snap.docs.map((d) => ({ id: d.id, ...d.data() } as MaterialReceipt));
   if (filters?.search) {
     const s = filters.search.toLowerCase();
@@ -185,7 +185,7 @@ export async function listReceipts(filters?: WarehouseFilters): Promise<Material
 }
 
 export async function getReceiptById(id: string): Promise<MaterialReceipt | null> {
-  const snap = await getDoc(doc(firestore, WAREHOUSE_COLLECTIONS.receipts, id));
+  const snap = await getDoc(doc(getFirebaseFirestore(), WAREHOUSE_COLLECTIONS.receipts, id));
   if (!snap.exists()) return null;
   return { id: snap.id, ...snap.data() } as MaterialReceipt;
 }
@@ -208,15 +208,15 @@ export async function createSampling(input: SamplingInput, actor: WarehouseActor
     remarks: input.remarks,
     created_at: now(),
   };
-  const refDoc = await addDoc(collection(firestore, WAREHOUSE_COLLECTIONS.sampling), record);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), WAREHOUSE_COLLECTIONS.sampling), record);
   await auditLog(actor, 'SAMPLING', refDoc.id, null, record);
 
   const receiptStatus = input.qc_status === 'Under Test' ? 'Under Test' : 'Under Sampling';
-  await updateDoc(doc(firestore, WAREHOUSE_COLLECTIONS.receipts, input.receipt_doc_id), {
+  await updateDoc(doc(getFirebaseFirestore(), WAREHOUSE_COLLECTIONS.receipts, input.receipt_doc_id), {
     status: receiptStatus, qc_status: input.qc_status, updated_at: now(),
   });
 
-  const invSnap = await getDocs(query(collection(firestore, WAREHOUSE_COLLECTIONS.inventory), where('ar_number', '==', input.ar_number), limit(1)));
+  const invSnap = await getDocs(query(collection(getFirebaseFirestore(), WAREHOUSE_COLLECTIONS.inventory), where('ar_number', '==', input.ar_number), limit(1)));
   if (!invSnap.empty) {
     await updateDoc(invSnap.docs[0].ref, { qc_status: input.qc_status, receipt_status: receiptStatus, updated_at: now() });
   }
@@ -225,7 +225,7 @@ export async function createSampling(input: SamplingInput, actor: WarehouseActor
 }
 
 export async function listSamplings(): Promise<QcSampling[]> {
-  const snap = await getDocs(query(collection(firestore, WAREHOUSE_COLLECTIONS.sampling), orderBy('sampling_date', 'desc')));
+  const snap = await getDocs(query(collection(getFirebaseFirestore(), WAREHOUSE_COLLECTIONS.sampling), orderBy('sampling_date', 'desc')));
   return snap.docs.map((d) => ({ id: d.id, ...d.data() } as QcSampling));
 }
 
@@ -248,15 +248,15 @@ export async function createRelease(input: ReleaseInput, actor: WarehouseActor):
     remarks: input.remarks,
     created_at: now(),
   };
-  const refDoc = await addDoc(collection(firestore, WAREHOUSE_COLLECTIONS.release), record);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), WAREHOUSE_COLLECTIONS.release), record);
   await auditLog(actor, 'RELEASE', refDoc.id, null, record);
 
   const receiptStatus = input.qc_result === 'Approved' ? 'Approved' : 'Rejected';
-  await updateDoc(doc(firestore, WAREHOUSE_COLLECTIONS.receipts, input.receipt_doc_id), {
+  await updateDoc(doc(getFirebaseFirestore(), WAREHOUSE_COLLECTIONS.receipts, input.receipt_doc_id), {
     status: receiptStatus, qc_status: input.qc_result, updated_at: now(),
   });
 
-  const invSnap = await getDocs(query(collection(firestore, WAREHOUSE_COLLECTIONS.inventory), where('ar_number', '==', input.ar_number), limit(1)));
+  const invSnap = await getDocs(query(collection(getFirebaseFirestore(), WAREHOUSE_COLLECTIONS.inventory), where('ar_number', '==', input.ar_number), limit(1)));
   if (!invSnap.empty) {
     const inv = invSnap.docs[0];
     const data = inv.data() as InventoryStock;
@@ -279,7 +279,7 @@ export async function createRelease(input: ReleaseInput, actor: WarehouseActor):
 }
 
 export async function listReleases(): Promise<MaterialRelease[]> {
-  const snap = await getDocs(query(collection(firestore, WAREHOUSE_COLLECTIONS.release), orderBy('release_date', 'desc')));
+  const snap = await getDocs(query(collection(getFirebaseFirestore(), WAREHOUSE_COLLECTIONS.release), orderBy('release_date', 'desc')));
   return snap.docs.map((d) => ({ id: d.id, ...d.data() } as MaterialRelease));
 }
 
@@ -287,7 +287,7 @@ export async function listReleases(): Promise<MaterialRelease[]> {
 
 export async function suggestFifoLots(materialCode: string): Promise<InventoryStock[]> {
   const snap = await getDocs(query(
-    collection(firestore, WAREHOUSE_COLLECTIONS.inventory),
+    collection(getFirebaseFirestore(), WAREHOUSE_COLLECTIONS.inventory),
     where('material_code', '==', materialCode),
     orderBy('exp_date', 'asc'),
   ));
@@ -296,7 +296,7 @@ export async function suggestFifoLots(materialCode: string): Promise<InventorySt
 }
 
 export async function createDispensing(input: DispensingInput, actor: WarehouseActor): Promise<MaterialDispensing> {
-  const invSnap = await getDocs(query(collection(firestore, WAREHOUSE_COLLECTIONS.inventory), where('ar_number', '==', input.ar_number), limit(1)));
+  const invSnap = await getDocs(query(collection(getFirebaseFirestore(), WAREHOUSE_COLLECTIONS.inventory), where('ar_number', '==', input.ar_number), limit(1)));
   if (invSnap.empty) throw new Error('Inventory not found for AR number');
 
   const stock = { id: invSnap.docs[0].id, ...invSnap.docs[0].data() } as InventoryStock;
@@ -339,7 +339,7 @@ export async function createDispensing(input: DispensingInput, actor: WarehouseA
     created_at: now(),
   };
 
-  const refDoc = await addDoc(collection(firestore, WAREHOUSE_COLLECTIONS.dispensing), record);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), WAREHOUSE_COLLECTIONS.dispensing), record);
   await auditLog(actor, 'DISPENSING', refDoc.id, null, record);
 
   await updateDoc(invSnap.docs[0].ref, {
@@ -356,14 +356,14 @@ export async function createDispensing(input: DispensingInput, actor: WarehouseA
 }
 
 export async function listDispensing(): Promise<MaterialDispensing[]> {
-  const snap = await getDocs(query(collection(firestore, WAREHOUSE_COLLECTIONS.dispensing), orderBy('dispensing_date', 'desc')));
+  const snap = await getDocs(query(collection(getFirebaseFirestore(), WAREHOUSE_COLLECTIONS.dispensing), orderBy('dispensing_date', 'desc')));
   return snap.docs.map((d) => ({ id: d.id, ...d.data() } as MaterialDispensing));
 }
 
 // ─── Inventory ───────────────────────────────────────────────────────────────
 
 export async function listInventory(filters?: WarehouseFilters): Promise<InventoryStock[]> {
-  const snap = await getDocs(query(collection(firestore, WAREHOUSE_COLLECTIONS.inventory), orderBy('updated_at', 'desc')));
+  const snap = await getDocs(query(collection(getFirebaseFirestore(), WAREHOUSE_COLLECTIONS.inventory), orderBy('updated_at', 'desc')));
   let rows = snap.docs.map((d) => ({ id: d.id, ...d.data() } as InventoryStock));
   if (filters?.material_type) rows = rows.filter((r) => r.material_type === filters.material_type);
   if (filters?.status) rows = rows.filter((r) => r.receipt_status === filters.status);
@@ -375,7 +375,7 @@ export async function listInventory(filters?: WarehouseFilters): Promise<Invento
 }
 
 export async function syncInventoryExpiry(): Promise<number> {
-  const snap = await getDocs(collection(firestore, WAREHOUSE_COLLECTIONS.inventory));
+  const snap = await getDocs(collection(getFirebaseFirestore(), WAREHOUSE_COLLECTIONS.inventory));
   let updated = 0;
   for (const d of snap.docs) {
     const data = d.data() as InventoryStock;
@@ -411,11 +411,11 @@ export async function createFinishedGoods(input: FinishedGoodsInput, actor: Ware
     created_at: now(),
     updated_at: now(),
   };
-  const refDoc = await addDoc(collection(firestore, WAREHOUSE_COLLECTIONS.finishedGoods), record);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), WAREHOUSE_COLLECTIONS.finishedGoods), record);
   await auditLog(actor, 'FG_CREATE', refDoc.id, null, record);
 
   if (input.source_batch_number) {
-    const dispSnap = await getDocs(query(collection(firestore, WAREHOUSE_COLLECTIONS.dispensing), where('batch_number', '==', input.source_batch_number)));
+    const dispSnap = await getDocs(query(collection(getFirebaseFirestore(), WAREHOUSE_COLLECTIONS.dispensing), where('batch_number', '==', input.source_batch_number)));
     for (const d of dispSnap.docs) {
       const disp = d.data() as MaterialDispensing;
       await upsertTraceability(disp.ar_number, '', disp.material_name, '', '', '', {
@@ -428,12 +428,12 @@ export async function createFinishedGoods(input: FinishedGoodsInput, actor: Ware
 }
 
 export async function listFinishedGoods(): Promise<FinishedGoods[]> {
-  const snap = await getDocs(query(collection(firestore, WAREHOUSE_COLLECTIONS.finishedGoods), orderBy('created_at', 'desc')));
+  const snap = await getDocs(query(collection(getFirebaseFirestore(), WAREHOUSE_COLLECTIONS.finishedGoods), orderBy('created_at', 'desc')));
   return snap.docs.map((d) => ({ id: d.id, ...d.data() } as FinishedGoods));
 }
 
 export async function releaseFinishedGoods(id: string, qty: number, actor: WarehouseActor): Promise<FinishedGoods> {
-  const snap = await getDoc(doc(firestore, WAREHOUSE_COLLECTIONS.finishedGoods, id));
+  const snap = await getDoc(doc(getFirebaseFirestore(), WAREHOUSE_COLLECTIONS.finishedGoods, id));
   if (!snap.exists()) throw new Error('FG not found');
   const fg = snap.data() as FinishedGoods;
   await updateDoc(snap.ref, {
@@ -445,18 +445,18 @@ export async function releaseFinishedGoods(id: string, qty: number, actor: Wareh
 // ─── Traceability ────────────────────────────────────────────────────────────
 
 export async function getTraceability(arOrLot: string): Promise<TraceabilityRecord[]> {
-  const byAr = await getDocs(query(collection(firestore, WAREHOUSE_COLLECTIONS.traceability), where('ar_number', '==', arOrLot)));
+  const byAr = await getDocs(query(collection(getFirebaseFirestore(), WAREHOUSE_COLLECTIONS.traceability), where('ar_number', '==', arOrLot)));
   if (!byAr.empty) return byAr.docs.map((d) => ({ id: d.id, ...d.data() } as TraceabilityRecord));
-  const byLot = await getDocs(query(collection(firestore, WAREHOUSE_COLLECTIONS.traceability), where('lot_number', '==', arOrLot)));
+  const byLot = await getDocs(query(collection(getFirebaseFirestore(), WAREHOUSE_COLLECTIONS.traceability), where('lot_number', '==', arOrLot)));
   return byLot.docs.map((d) => ({ id: d.id, ...d.data() } as TraceabilityRecord));
 }
 
 export async function getTraceabilityForRecall(lotOrBatch: string): Promise<TraceabilityRecord[]> {
   const results = await getTraceability(lotOrBatch);
   if (results.length) return results;
-  const byBatch = await getDocs(query(collection(firestore, WAREHOUSE_COLLECTIONS.traceability), where('production_batch', '==', lotOrBatch)));
+  const byBatch = await getDocs(query(collection(getFirebaseFirestore(), WAREHOUSE_COLLECTIONS.traceability), where('production_batch', '==', lotOrBatch)));
   if (!byBatch.empty) return byBatch.docs.map((d) => ({ id: d.id, ...d.data() } as TraceabilityRecord));
-  const byFg = await getDocs(query(collection(firestore, WAREHOUSE_COLLECTIONS.traceability), where('fg_batch_number', '==', lotOrBatch)));
+  const byFg = await getDocs(query(collection(getFirebaseFirestore(), WAREHOUSE_COLLECTIONS.traceability), where('fg_batch_number', '==', lotOrBatch)));
   return byFg.docs.map((d) => ({ id: d.id, ...d.data() } as TraceabilityRecord));
 }
 
@@ -563,10 +563,10 @@ export async function uploadWarehouseAttachment(
   receiptDocId: string, file: File, category: string, actor: WarehouseActor,
 ) {
   const path = `warehouse/${receiptDocId}/${Date.now()}_${file.name}`;
-  const storageRef = ref(storage, path);
+  const storageRef = ref(getFirebaseStorage(), path);
   await uploadBytes(storageRef, file);
   const downloadUrl = await getDownloadURL(storageRef);
-  await addDoc(collection(firestore, WAREHOUSE_COLLECTIONS.attachments), {
+  await addDoc(collection(getFirebaseFirestore(), WAREHOUSE_COLLECTIONS.attachments), {
     receipt_doc_id: receiptDocId, file_name: file.name, file_type: file.type,
     category, storage_path: path, download_url: downloadUrl,
     uploaded_by: actor.id, uploaded_by_name: actor.name, uploaded_at: now(),

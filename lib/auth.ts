@@ -118,7 +118,7 @@ export async function signUp(
   try {
     const auth = requireAuth();
     const db = requireDb();
-    const result = await createUserWithEmailAndPassword(auth, email, password);
+    const result = await createUserWithEmailAndPassword(getFirebaseAuth(), email, password);
 
     if (result.user) {
       await updateProfile(result.user, { displayName: fullName });
@@ -246,7 +246,7 @@ export async function updateUserProfile(
 export async function resetPassword(email: string): Promise<void> {
   try {
     const auth = requireAuth();
-    await sendPasswordResetEmail(auth, email);
+    await sendPasswordResetEmail(getFirebaseAuth(), email);
   } catch (error) {
     console.error('resetPassword failed:', error);
     throw error;

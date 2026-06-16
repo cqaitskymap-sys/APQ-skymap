@@ -17,6 +17,7 @@ import {
   cpvPermissions, displayCpvStatus, PARAMETER_SPECS, utilitySchema, yieldSchema,
 } from '@/lib/cpv';
 import { createCpp, createUtility, createYield, listCpvRecords, loadCppBatches } from '@/lib/cpv-service';
+import { isCpvProductActiveForEntry } from '@/lib/cpv-product-master-service';
 import { resolveCppParameterSpec } from '@/lib/cpv-config-service';
 import { useCpvConfig } from '@/hooks/use-cpv-config';
 import { buildMonthlyCppReport, monthlyTrendData } from '@/lib/cpv-cpp-report';
@@ -197,6 +198,11 @@ export function CppWorkspace() {
 
   const submitProcess = processForm.handleSubmit(async (values) => {
     try {
+      const active = await isCpvProductActiveForEntry(values.productName);
+      if (!active) {
+        toast.error('This CPV product is inactive. New CPP data entry is not allowed.');
+        return;
+      }
       await createCpp(values, actor);
       toast.success('Process parameter saved');
       setProcessOpen(false);

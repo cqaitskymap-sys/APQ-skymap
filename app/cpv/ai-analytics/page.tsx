@@ -1,7 +1,7 @@
+import { AiAnalyticsPageWithGuard } from '@/components/cpv/ai-analytics/ai-analytics-page';
+
 export const dynamic = 'force-dynamic';
 
-import { LazyAiAnalyticsWorkspace } from '@/lib/lazy-cpv';
-
-export default function Page() {
-  return <LazyAiAnalyticsWorkspace />;
+export default function AiAnalyticsRoutePage() {
+  return <AiAnalyticsPageWithGuard />;
 }

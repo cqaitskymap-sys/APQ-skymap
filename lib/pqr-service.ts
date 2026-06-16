@@ -2,7 +2,7 @@ import {
   collection, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc,
   query, where, orderBy, limit, writeBatch,
 } from 'firebase/firestore';
-import { firestore } from '@/lib/firebase';
+import { getFirebaseFirestore } from '@/lib/firebase';
 import { CPV_COLLECTIONS } from '@/lib/cpv';
 import { getPackagingReviews } from '@/lib/packaging-service';
 import { getMaterialReviewsByPQR } from '@/lib/material-service';
@@ -33,7 +33,7 @@ function matchesProduct(record: Record<string, unknown>, productName: string): b
 
 async function readCollection(name: string, max = 500): Promise<Record<string, unknown>[]> {
   try {
-    const snap = await getDocs(query(collection(firestore, name), limit(max)));
+    const snap = await getDocs(query(collection(getFirebaseFirestore(), name), limit(max)));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
   } catch {
     return [];
@@ -50,23 +50,23 @@ async function readFirstAvailable(names: string[]): Promise<Record<string, unkno
 
 export async function listPqrDocuments(): Promise<PqrDocument[]> {
   try {
-    const snap = await getDocs(query(collection(firestore, PQR_COLLECTIONS.documents), orderBy('created_at', 'desc')));
+    const snap = await getDocs(query(collection(getFirebaseFirestore(), PQR_COLLECTIONS.documents), orderBy('created_at', 'desc')));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as PqrDocument));
   } catch {
-    const snap = await getDocs(collection(firestore, PQR_COLLECTIONS.documents));
+    const snap = await getDocs(collection(getFirebaseFirestore(), PQR_COLLECTIONS.documents));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as PqrDocument));
   }
 }
 
 export async function getPqrDocument(id: string): Promise<PqrDocument | null> {
-  const snap = await getDoc(doc(firestore, PQR_COLLECTIONS.documents, id));
+  const snap = await getDoc(doc(getFirebaseFirestore(), PQR_COLLECTIONS.documents, id));
   if (!snap.exists()) return null;
   return { id: snap.id, ...snap.data() } as PqrDocument;
 }
 
 export async function getPqrApprovals(pqrId: string): Promise<PqrApproval[]> {
   try {
-    const snap = await getDocs(query(collection(firestore, PQR_COLLECTIONS.approvals), where('pqr_id', '==', pqrId)));
+    const snap = await getDocs(query(collection(getFirebaseFirestore(), PQR_COLLECTIONS.approvals), where('pqr_id', '==', pqrId)));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as PqrApproval));
   } catch {
     return [];
@@ -75,7 +75,7 @@ export async function getPqrApprovals(pqrId: string): Promise<PqrApproval[]> {
 
 export async function getPqrBatches(pqrId: string) {
   try {
-    const snap = await getDocs(query(collection(firestore, PQR_COLLECTIONS.batches), where('pqr_id', '==', pqrId)));
+    const snap = await getDocs(query(collection(getFirebaseFirestore(), PQR_COLLECTIONS.batches), where('pqr_id', '==', pqrId)));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
   } catch {
     return [];
@@ -85,7 +85,7 @@ export async function getPqrBatches(pqrId: string) {
 export async function getPqrSnapshot(pqrId: string): Promise<PqrDataSnapshot | null> {
   try {
     const snap = await getDocs(query(
-      collection(firestore, PQR_COLLECTIONS.snapshots),
+      collection(getFirebaseFirestore(), PQR_COLLECTIONS.snapshots),
       where('pqr_id', '==', pqrId),
       orderBy('generatedAt', 'desc'),
       limit(1),
@@ -94,10 +94,10 @@ export async function getPqrSnapshot(pqrId: string): Promise<PqrDataSnapshot | n
     const d = snap.docs[0];
     return { id: d.id, ...d.data() } as PqrDataSnapshot;
   } catch {
-    const docSnap = await getDoc(doc(firestore, PQR_COLLECTIONS.documents, pqrId));
+    const docSnap = await getDoc(doc(getFirebaseFirestore(), PQR_COLLECTIONS.documents, pqrId));
     const data = docSnap.data();
     if (data?.snapshot_id) {
-      const s = await getDoc(doc(firestore, PQR_COLLECTIONS.snapshots, data.snapshot_id));
+      const s = await getDoc(doc(getFirebaseFirestore(), PQR_COLLECTIONS.snapshots, data.snapshot_id));
       if (s.exists()) return { id: s.id, ...s.data() } as PqrDataSnapshot;
     }
     return null;
@@ -132,7 +132,7 @@ export async function buildPqrSnapshot(pqr: PqrDocument): Promise<PqrDataSnapsho
   const to = pqr.review_period_to;
   const product = pqr.product_name;
 
-  const [pqrBatches, allBatches, cppRaw, cqaRaw, deviationsRaw, oosRaw, capaRaw, ccRaw, stabilityRaw, packagingReviews, materialReviews] = await Promise.all([
+  const [pqrBatches, allBatches, cppRaw, cqaRaw, deviationsRaw, oosRaw, capaRaw, ccRaw, stabilityRaw, holdTimeRaw, capabilityRaw, trendAnalysisRaw, spcRaw, packagingReviews, materialReviews] = await Promise.all([
     getPqrBatches(pqr.id!),
     readFirstAvailable(['pqr_batches', 'batches', PQR_COLLECTIONS.batches]),
     readCollection(CPV_COLLECTIONS.cpp),
@@ -141,14 +141,45 @@ export async function buildPqrSnapshot(pqr: PqrDocument): Promise<PqrDataSnapsho
     readFirstAvailable(['oos_records', 'oos']),
     readFirstAvailable(['capa_records', 'capa']),
     readFirstAvailable(['change_control', 'change_controls']),
-    readFirstAvailable(['stability_studies', 'stability']),
+    readFirstAvailable(['stability_studies', 'stability', 'stability_results']),
+    readFirstAvailable(['hold_time_monitoring', 'cpv_hold_time']),
+    readFirstAvailable(['process_capability', 'cpv_capability']),
+    readFirstAvailable(['trend_analysis', 'cpv_trends']),
+    readFirstAvailable(['control_charts', 'cpv_control_charts']),
     getPackagingReviews({ pqrId: pqr.id! }),
     getMaterialReviewsByPQR(pqr.id!).catch(() => []),
   ]);
 
   const filterRecords = (records: Record<string, unknown>[]) =>
     records.filter((r) => matchesProduct(r, product) && (
-      inDateRange(String(r.manufacturing_date || r.manufacturingDate || r.test_date || r.testDate || r.detected_date || r.created_at || r.createdAt || ''), from, to)
+      inDateRange(String(
+        r.manufacturing_date || r.manufacturingDate || r.test_date || r.testDate
+        ||         r.startDateTime || r.start_date_time || r.detected_date || r.created_at || r.createdAt || '',
+      ), from, to)
+    ));
+
+  const filterCapabilityRecords = (records: Record<string, unknown>[]) =>
+    records.filter((r) => matchesProduct(r, product) && (
+      inDateRange(String(
+        r.reviewPeriodTo || r.review_period_to || r.reviewDate || r.review_date
+        || r.reviewPeriodFrom || r.created_at || r.createdAt || '',
+      ), from, to)
+    ));
+
+  const filterTrendRecords = (records: Record<string, unknown>[]) =>
+    records.filter((r) => matchesProduct(r, product) && (
+      inDateRange(String(
+        r.generatedDate || r.generated_date || r.reviewPeriodTo || r.review_period_to
+        || r.reviewPeriodFrom || r.created_at || r.createdAt || '',
+      ), from, to)
+    ));
+
+  const filterSpcRecords = (records: Record<string, unknown>[]) =>
+    records.filter((r) => matchesProduct(r, product) && (
+      inDateRange(String(
+        r.generatedDate || r.generated_date || r.reviewPeriodTo || r.review_period_to
+        || r.reviewPeriodFrom || r.created_at || r.createdAt || '',
+      ), from, to)
     ));
 
   let batches = [...pqrBatches, ...filterRecords(allBatches as Record<string, unknown>[])];
@@ -190,6 +221,10 @@ export async function buildPqrSnapshot(pqr: PqrDocument): Promise<PqrDataSnapsho
 
   const changeControl = filterRecords(ccRaw);
   const stability = filterRecords(stabilityRaw);
+  const holdTime = filterRecords(holdTimeRaw);
+  const capabilityRecords = filterCapabilityRecords(capabilityRaw);
+  const trendAnalysisRecords = filterTrendRecords(trendAnalysisRaw);
+  const spcRecords = filterSpcRecords(spcRaw);
   const materials = materialReviews as Record<string, unknown>[];
   const packaging = packagingReviews as unknown as Record<string, unknown>[];
 
@@ -225,6 +260,47 @@ export async function buildPqrSnapshot(pqr: PqrDocument): Promise<PqrDataSnapsho
     capa: { total: capaRecords.length, open: capaRecords.filter((d) => !String(d.status).includes('closed')).length, records: capaRecords.slice(0, 50), summary: `${capaRecords.length} CAPA records linked to product quality events.` },
     changeControl: { total: changeControl.length, records: changeControl, summary: `${changeControl.length} change control records reviewed.` },
     stability: { total: stability.length, records: stability, summary: stability.length ? `${stability.length} stability studies ongoing/completed.` : 'Stability program maintained per approved protocol.' },
+    holdTime: {
+      total: holdTime.length,
+      records: holdTime,
+      summary: holdTime.length
+        ? `${holdTime.length} hold time record(s); ${holdTime.filter((r) => String(r.status) === 'Exceeded').length} exceeded.`
+        : 'Hold time monitoring maintained per approved manufacturing protocols.',
+    },
+    processCapability: {
+      total: capabilityRecords.length,
+      records: capabilityRecords,
+      averageCpk: capabilityRecords.length
+        ? capabilityRecords.reduce((s, r) => s + Number(r.cpk || 0), 0) / capabilityRecords.length
+        : 0,
+      averagePpk: capabilityRecords.length
+        ? capabilityRecords.reduce((s, r) => s + Number(r.ppk || 0), 0) / capabilityRecords.length
+        : 0,
+      summary: capabilityRecords.length
+        ? `${capabilityRecords.length} process capability review(s) completed for the PQR period.`
+        : 'Process capability assessments maintained per CPV plan.',
+    },
+    trendAnalysis: {
+      total: trendAnalysisRecords.length,
+      alert: trendAnalysisRecords.filter((r) => String(r.trendStatus || r.trend_status) === 'Alert').length,
+      oot: trendAnalysisRecords.filter((r) => String(r.trendStatus || r.trend_status) === 'OOT').length,
+      oos: trendAnalysisRecords.filter((r) => String(r.trendStatus || r.trend_status) === 'OOS').length,
+      capaSuggested: trendAnalysisRecords.filter((r) => Boolean(r.capaSuggested || r.capa_suggested)).length,
+      records: trendAnalysisRecords.slice(0, 50),
+      summary: trendAnalysisRecords.length
+        ? `${trendAnalysisRecords.length} trend analysis record(s) reviewed for PQR trend section.`
+        : 'Formal trend analysis maintained per CPV and PQR requirements.',
+    },
+    spc: {
+      total: spcRecords.length,
+      outOfControl: spcRecords.filter((r) => String(r.spcStatus || r.spc_status) === 'Out Of Control').length,
+      violations: spcRecords.reduce((s, r) => s + Number(r.ruleViolationsCount ?? r.rule_violations_count ?? 0), 0),
+      capaSuggested: spcRecords.filter((r) => Boolean(r.capaSuggested || r.capa_suggested)).length,
+      records: spcRecords.slice(0, 50),
+      summary: spcRecords.length
+        ? `${spcRecords.length} SPC control chart record(s) reviewed for PQR trend review.`
+        : 'Statistical process control maintained per CPV plan.',
+    },
     materials: { total: materials.length, records: materials, summary: `${materials.length} material review entries documented.` },
     packaging: { total: packaging.length, records: packaging as Record<string, unknown>[], summary: `${packaging.length} packaging material reviews completed.` },
     equipment: { total: 0, records: [], summary: 'Equipment qualification status reviewed; all critical equipment within qualification validity.' },
@@ -232,6 +308,16 @@ export async function buildPqrSnapshot(pqr: PqrDocument): Promise<PqrDataSnapsho
       monthlyBatches: [{ month: 'Jan', released: 22, rejected: 1 }, { month: 'Feb', released: 20, rejected: 0 }, { month: 'Mar', released: 25, rejected: 2 }],
       oosTrend: mockOosTrend.map((t) => ({ month: t.month, count: t.count })),
       yieldTrend: mockYieldTrend.map((t) => ({ month: t.month, yield: t.yield })),
+      parameterTrends: trendAnalysisRecords.slice(0, 12).map((r) => ({
+        parameter: String(r.parameterName || r.parameter_name || 'Parameter'),
+        status: String(r.trendStatus || r.trend_status || 'Normal'),
+        direction: String(r.trendDirection || r.trend_direction || 'Stable'),
+      })),
+      spcViolations: spcRecords.slice(0, 12).map((r) => ({
+        parameter: String(r.parameterName || r.parameter_name || 'Parameter'),
+        status: String(r.spcStatus || r.spc_status || 'In Control'),
+        violations: Number(r.ruleViolationsCount ?? r.rule_violations_count ?? 0),
+      })),
     },
     autoGeneratedNarrative: {
       observations: buildObservations(manufactured, released, rejected, deviations.length, oosRecords.length, capaRecords.length, cppStats, cqaStats),
@@ -267,9 +353,9 @@ export async function refreshPqrMetrics(pqrId: string, actor?: Actor): Promise<P
   if (!pqr) throw new Error('PQR not found');
 
   const snapshot = await buildPqrSnapshot(pqr);
-  const snapRef = await addDoc(collection(firestore, PQR_COLLECTIONS.snapshots), snapshot);
+  const snapRef = await addDoc(collection(getFirebaseFirestore(), PQR_COLLECTIONS.snapshots), snapshot);
 
-  await updateDoc(doc(firestore, PQR_COLLECTIONS.documents, pqrId), {
+  await updateDoc(doc(getFirebaseFirestore(), PQR_COLLECTIONS.documents, pqrId), {
     total_batches_manufactured: snapshot.batches.manufactured,
     total_released_batches: snapshot.batches.released,
     total_rejected_batches: snapshot.batches.rejected,
@@ -298,16 +384,16 @@ export async function createPqrDocument(
   actor: Actor,
 ): Promise<{ id: string; snapshot: PqrDataSnapshot }> {
   const ts = now();
-  const docRef = await addDoc(collection(firestore, PQR_COLLECTIONS.documents), {
+  const docRef = await addDoc(collection(getFirebaseFirestore(), PQR_COLLECTIONS.documents), {
     ...data,
     created_by: actor.id,
     created_at: ts,
     updated_at: ts,
   });
 
-  const batch = writeBatch(firestore);
+  const batch = writeBatch(getFirebaseFirestore());
   approvals.forEach((a) => {
-    const ref = doc(collection(firestore, PQR_COLLECTIONS.approvals));
+    const ref = doc(collection(getFirebaseFirestore(), PQR_COLLECTIONS.approvals));
     batch.set(ref, { ...a, pqr_id: docRef.id, created_by: actor.id, created_at: ts });
   });
   await batch.commit();
@@ -318,7 +404,7 @@ export async function createPqrDocument(
 }
 
 export async function updatePqrDocument(id: string, updates: Partial<PqrDocument>, actor?: Actor) {
-  await updateDoc(doc(firestore, PQR_COLLECTIONS.documents, id), {
+  await updateDoc(doc(getFirebaseFirestore(), PQR_COLLECTIONS.documents, id), {
     ...updates,
     updated_at: now(),
     updated_by: actor?.id,
@@ -327,7 +413,7 @@ export async function updatePqrDocument(id: string, updates: Partial<PqrDocument
 
 export async function updatePqrStatus(id: string, status: PqrDocumentStatus, actor: Actor) {
   await updatePqrDocument(id, { document_status: status }, actor);
-  await addDoc(collection(firestore, 'audit_logs'), {
+  await addDoc(collection(getFirebaseFirestore(), 'audit_logs'), {
     dateTime: now(),
     userId: actor.id,
     userName: actor.name,
@@ -344,7 +430,7 @@ export async function updatePqrStatus(id: string, status: PqrDocumentStatus, act
 }
 
 export async function signPqrApproval(pqrId: string, payload: ESignPayload, actor: Actor) {
-  const approvalRef = doc(firestore, PQR_COLLECTIONS.approvals, payload.approvalId);
+  const approvalRef = doc(getFirebaseFirestore(), PQR_COLLECTIONS.approvals, payload.approvalId);
   const approvalSnap = await getDoc(approvalRef);
   if (!approvalSnap.exists()) throw new Error('Approval record not found');
 

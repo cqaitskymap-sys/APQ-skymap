@@ -153,6 +153,12 @@ export function CapaDetailView({ record, onRefresh }: CapaDetailViewProps) {
           <p className="text-muted-foreground">{record.capa_title}</p>
         </div>
         <div className="no-print flex flex-wrap gap-2">
+          <Link href={`/qms/capa/${record.id}/investigation`}>
+            <Button variant="outline" className="gap-1">Investigation & RCA</Button>
+          </Link>
+          <Link href={`/qms/capa/${record.id}/corrective-action`}>
+            <Button variant="outline" className="gap-1">Corrective Actions</Button>
+          </Link>
           {record.capa_status === 'draft' && !readOnly && (
             <Button onClick={handleSubmit} disabled={saving} className="bg-blue-600">Submit CAPA</Button>
           )}

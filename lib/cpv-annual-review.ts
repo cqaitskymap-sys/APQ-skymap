@@ -1,8 +1,28 @@
 import type { CppRecord, CqaRecord, RiskRecord } from './cpv';
 import { calculateCapability, calculateControlLimits, displayCpvStatus } from './cpv';
 import { buildRiskReport } from './cpv-risk-report';
+import { computeOverallAssessment } from './cpv-annual-review-records';
 
-export type AnnualCpvWorkflowStatus = 'draft' | 'under_review' | 'approved' | 'archived';
+export type AnnualCpvWorkflowStatus = 'draft' | 'under_review' | 'approved' | 'archived' | 'generated' | 'rejected';
+
+export function workflowStatusLabel(status: AnnualCpvWorkflowStatus | string): string {
+  const map: Record<string, string> = {
+    draft: 'Draft',
+    under_review: 'Under Review',
+    approved: 'Approved',
+    archived: 'Archived',
+    generated: 'Generated',
+    rejected: 'Rejected',
+    Draft: 'Draft',
+    'Data Collection': 'Data Collection',
+    Generated: 'Generated',
+    'Under Review': 'Under Review',
+    Approved: 'Approved',
+    Rejected: 'Rejected',
+    Archived: 'Archived',
+  };
+  return map[status] || String(status);
+}
 
 export interface AnnualCpvSectionSummary {
   total: number;
@@ -12,6 +32,34 @@ export interface AnnualCpvSectionSummary {
   oos?: number;
   summary: string;
   records?: Record<string, unknown>[];
+}
+
+export interface AnnualCpvReviewInput {
+  year: number;
+  reviewPeriodFrom?: string;
+  reviewPeriodTo?: string;
+  productFilter?: string;
+  productCode?: string;
+  cpp: CppRecord[];
+  cqa: CqaRecord[];
+  risks: RiskRecord[];
+  riskAssessment?: Record<string, unknown>[];
+  deviations: Record<string, unknown>[];
+  oos: Record<string, unknown>[];
+  capa: Record<string, unknown>[];
+  changeControl: Record<string, unknown>[];
+  batches: Record<string, unknown>[];
+  equipment: Record<string, unknown>[];
+  stability?: Record<string, unknown>[];
+  holdTime?: Record<string, unknown>[];
+  processCapability?: Record<string, unknown>[];
+  trendAnalysis?: Record<string, unknown>[];
+  spc?: Record<string, unknown>[];
+  rawMaterial?: Record<string, unknown>[];
+  packingMaterial?: Record<string, unknown>[];
+  utility?: Record<string, unknown>[];
+  environmental?: Record<string, unknown>[];
+  yield?: Record<string, unknown>[];
 }
 
 export interface AnnualCpvCapabilityItem {
@@ -40,7 +88,17 @@ export interface AnnualCpvSnapshot {
     oot: number;
     oos: number;
     totalObservations: number;
+    trendRecords?: number;
     summary: string;
+  };
+  trendAnalysis: AnnualCpvSectionSummary & {
+    alert?: number;
+    capaSuggested?: number;
+  };
+  spc: AnnualCpvSectionSummary & {
+    outOfControl?: number;
+    violations?: number;
+    capaSuggested?: number;
   };
   risk: {
     total: number;
@@ -63,6 +121,39 @@ export interface AnnualCpvSnapshot {
     summary: string;
   };
   equipment: AnnualCpvSectionSummary;
+  stability: AnnualCpvSectionSummary;
+  holdTime: AnnualCpvSectionSummary;
+  processCapability: AnnualCpvSectionSummary & { averageCpk?: number; averagePpk?: number };
+  rawMaterial: AnnualCpvSectionSummary;
+  packingMaterial: AnnualCpvSectionSummary;
+  utility: AnnualCpvSectionSummary;
+  environmental: AnnualCpvSectionSummary;
+  yield: AnnualCpvSectionSummary & { averageYield?: number };
+  metrics: {
+    totalBatchesReviewed: number;
+    releasedBatches: number;
+    rejectedBatches: number;
+    holdBatches: number;
+    cppCompliancePct: number;
+    cqaCompliancePct: number;
+    yieldAverage: number;
+    ootCount: number;
+    oosCount: number;
+    deviationCount: number;
+    capaCount: number;
+    openRiskCount: number;
+    highRiskCount: number;
+    criticalOpenRiskCount: number;
+    criticalOosOpen: number;
+    repeatedOot: boolean;
+    sterilityEndotoxinFailure: boolean;
+    averageCp: number;
+    averageCpk: number;
+    averagePp: number;
+    averagePpk: number;
+  };
+  overallProcessStatus: 'In Control' | 'Under Control With Monitoring' | 'Needs Improvement' | 'Not In Control';
+  overallRiskLevel: 'Low' | 'Medium' | 'High' | 'Critical';
   executiveSummary: string;
   conclusion: string;
   recommendations: string;
@@ -108,6 +199,24 @@ function inYear(dateStr: string | undefined, year: number): boolean {
   return !Number.isNaN(d.getTime()) && d.getFullYear() === year;
 }
 
+function inDateRange(dateStr: string | undefined, from?: string, to?: string): boolean {
+  if (!dateStr) return false;
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return false;
+  if (from && to) {
+    const fromD = new Date(from);
+    const toD = new Date(to);
+    toD.setHours(23, 59, 59, 999);
+    return d >= fromD && d <= toD;
+  }
+  return true;
+}
+
+function inReviewPeriod(dateStr: string | undefined, year: number, from?: string, to?: string): boolean {
+  if (from && to) return inDateRange(dateStr, from, to);
+  return inYear(dateStr, year);
+}
+
 function pickDate(record: Record<string, unknown>): string {
   return String(
     record.createdAt || record.created_at || record.manufacturingDate
@@ -133,36 +242,53 @@ function countCppCqa(records: Array<{ status?: string }>) {
   return { complies, oot, oos };
 }
 
-export function buildAnnualCpvSnapshot(input: {
-  year: number;
-  productFilter?: string;
-  cpp: CppRecord[];
-  cqa: CqaRecord[];
-  risks: RiskRecord[];
-  deviations: Record<string, unknown>[];
-  oos: Record<string, unknown>[];
-  capa: Record<string, unknown>[];
-  changeControl: Record<string, unknown>[];
-  batches: Record<string, unknown>[];
-  equipment: Record<string, unknown>[];
-}): AnnualCpvSnapshot {
+export function buildAnnualCpvSnapshot(input: AnnualCpvReviewInput): AnnualCpvSnapshot {
   const productFilter = input.productFilter || 'all';
+  const productCode = input.productCode || '';
   const matchProduct = (r: Record<string, unknown>) => {
     if (productFilter === 'all') return true;
     const p = String(r.productName || r.product_name || r.product || '');
-    return p === productFilter;
+    const code = String(r.productCode || r.product_code || '');
+    return p === productFilter || (productCode && code === productCode);
   };
 
-  const cppYear = input.cpp.filter((r) => inYear(r.createdAt || r.manufacturingDate, input.year));
-  const cqaYear = input.cqa.filter((r) => inYear(r.testDate || r.createdAt, input.year));
-  const riskYear = input.risks.filter((r) => inYear(r.createdAt, input.year));
+  const inPeriod = (dateStr: string | undefined) =>
+    inReviewPeriod(dateStr, input.year, input.reviewPeriodFrom, input.reviewPeriodTo);
 
-  const deviations = input.deviations.filter((r) => inYear(pickDate(r), input.year) && matchProduct(r));
-  const oosEvents = input.oos.filter((r) => inYear(pickDate(r), input.year) && matchProduct(r));
-  const capa = input.capa.filter((r) => inYear(pickDate(r), input.year) && matchProduct(r));
-  const changeControl = input.changeControl.filter((r) => inYear(pickDate(r), input.year) && matchProduct(r));
-  const batches = input.batches.filter((r) => inYear(pickDate(r), input.year) && matchProduct(r));
-  const equipment = input.equipment.filter((r) => inYear(pickDate(r), input.year) || input.year === new Date().getFullYear());
+  const cppYear = input.cpp.filter((r) =>
+    inPeriod(r.createdAt || r.manufacturingDate) && (productFilter === 'all' || r.productName === productFilter),
+  );
+  const cqaYear = input.cqa.filter((r) =>
+    inPeriod(r.testDate || r.createdAt) && (productFilter === 'all' || r.productName === productFilter),
+  );
+  const riskRows = (input.riskAssessment?.length ? input.riskAssessment : input.risks) as Array<Record<string, unknown>>;
+  const riskYear = riskRows.filter((r) =>
+    inPeriod(String(r.createdAt || r.created_at || '')) && matchProduct(r),
+  );
+
+  const deviations = input.deviations.filter((r) => inPeriod(pickDate(r)) && matchProduct(r));
+  const oosEvents = input.oos.filter((r) => inPeriod(pickDate(r)) && matchProduct(r));
+  const capa = input.capa.filter((r) => inPeriod(pickDate(r)) && matchProduct(r));
+  const changeControl = input.changeControl.filter((r) => inPeriod(pickDate(r)) && matchProduct(r));
+  const batches = input.batches.filter((r) => inPeriod(pickDate(r)) && matchProduct(r));
+  const equipment = input.equipment.filter((r) => inPeriod(pickDate(r)));
+  const stabilityRows = (input.stability || []).filter((r) =>
+    inPeriod(String(r.testDate || r.test_date || r.createdAt || r.created_at || '')) && matchProduct(r),
+  );
+  const stabilityStats = {
+    complies: stabilityRows.filter((r) => String(r.status || r.result_status) === 'Complies').length,
+    oot: stabilityRows.filter((r) => String(r.status || r.result_status) === 'OOT').length,
+    oos: stabilityRows.filter((r) => String(r.status || r.result_status) === 'OOS').length,
+  };
+  const holdTimeRows = (input.holdTime || []).filter((r) =>
+    inPeriod(String(r.startDateTime || r.start_date_time || r.createdAt || r.created_at || '')) && matchProduct(r),
+  );
+  const holdTimeStats = {
+    complies: holdTimeRows.filter((r) => String(r.status || r.complianceStatus) === 'Complies').length,
+    alert: holdTimeRows.filter((r) => String(r.status) === 'Alert').length,
+    action: holdTimeRows.filter((r) => String(r.status) === 'Action').length,
+    exceeded: holdTimeRows.filter((r) => String(r.status) === 'Exceeded').length,
+  };
 
   const cppStats = countCppCqa(cppYear);
   const cqaStats = countCppCqa(cqaYear);
@@ -199,31 +325,141 @@ export function buildAnnualCpvSnapshot(input: {
     ? validCaps.reduce((s, i) => s + i.ppk, 0) / validCaps.length
     : 0;
 
+  const capabilityRows = (input.processCapability || []).filter((r) =>
+    inPeriod(String(r.reviewPeriodTo || r.review_period_to || r.reviewDate || r.createdAt || ''))
+    && matchProduct(r),
+  );
+  const validCapsFromRecords = capabilityRows.filter((r) => Number(r.cpk) > 0);
+  const capAvgCpk = validCapsFromRecords.length
+    ? validCapsFromRecords.reduce((s, r) => s + Number(r.cpk), 0) / validCapsFromRecords.length
+    : averageCpk;
+  const capAvgPpk = validCapsFromRecords.length
+    ? validCapsFromRecords.reduce((s, r) => s + Number(r.ppk || 0), 0) / validCapsFromRecords.length
+    : averagePpk;
+
+  const trendAnalysisRows = (input.trendAnalysis || []).filter((r) =>
+    inPeriod(String(r.generatedDate || r.generated_date || r.reviewPeriodTo || r.createdAt || ''))
+    && matchProduct(r),
+  );
+  const trendAnalysisStats = {
+    alert: trendAnalysisRows.filter((r) => String(r.trendStatus || r.trend_status) === 'Alert').length,
+    oot: trendAnalysisRows.filter((r) => String(r.trendStatus || r.trend_status) === 'OOT').length,
+    oos: trendAnalysisRows.filter((r) => String(r.trendStatus || r.trend_status) === 'OOS').length,
+    capaSuggested: trendAnalysisRows.filter((r) => Boolean(r.capaSuggested || r.capa_suggested)).length,
+  };
+
+  const spcRows = (input.spc || []).filter((r) =>
+    inPeriod(String(r.generatedDate || r.generated_date || r.reviewPeriodTo || r.createdAt || ''))
+    && matchProduct(r),
+  );
+
+  const filterMonitoring = (rows: Record<string, unknown>[] = []) =>
+    rows.filter((r) => inPeriod(pickDate(r)) && matchProduct(r));
+
+  const rawMaterialRows = filterMonitoring(input.rawMaterial);
+  const packingMaterialRows = filterMonitoring(input.packingMaterial);
+  const utilityRows = filterMonitoring(input.utility);
+  const environmentalRows = filterMonitoring(input.environmental);
+  const yieldRows = filterMonitoring(input.yield);
+
+  const yieldValues = yieldRows
+    .map((r) => Number(r.yieldPercentage ?? r.yield_percentage ?? r.actualYield ?? 0))
+    .filter((n) => Number.isFinite(n) && n > 0);
+  const yieldAverage = yieldValues.length
+    ? yieldValues.reduce((s, n) => s + n, 0) / yieldValues.length
+    : 0;
+  const spcStats = {
+    outOfControl: spcRows.filter((r) => String(r.spcStatus || r.spc_status) === 'Out Of Control').length,
+    warning: spcRows.filter((r) => String(r.spcStatus || r.spc_status) === 'Warning').length,
+    violations: spcRows.reduce((s, r) => s + Number(r.ruleViolationsCount ?? r.rule_violations_count ?? 0), 0),
+    capaSuggested: spcRows.filter((r) => Boolean(r.capaSuggested || r.capa_suggested)).length,
+  };
+
   const controlViolations = Array.from(grouped.values()).reduce(
     (sum, records) => sum + calculateControlLimits(records.map((r) => r.observedValue)).points.filter((p) => p.outOfControl).length,
     0,
   );
 
-  const riskReport = buildRiskReport(riskYear);
-  const criticalRisks = riskYear.filter((r) => r.riskLevel === 'Critical').length;
-  const highRisks = riskYear.filter((r) => r.riskLevel === 'High').length;
+  const riskReport = buildRiskReport(riskYear as unknown as RiskRecord[]);
+  const riskLevel = (r: Record<string, unknown>) => String(r.riskLevel || r.risk_level || '');
+  const riskStatus = (r: Record<string, unknown>) => String(r.riskStatus || r.risk_status || r.status || '');
+  const criticalRisks = riskYear.filter((r) => riskLevel(r) === 'Critical').length;
+  const highRisks = riskYear.filter((r) => riskLevel(r) === 'High').length;
+  const openRisks = riskYear.filter((r) => !['Closed', 'Accepted'].includes(riskStatus(r))).length;
+  const criticalOpenRisks = riskYear.filter((r) =>
+    riskLevel(r) === 'Critical' && !['Closed', 'Accepted'].includes(riskStatus(r)),
+  ).length;
+
+  const holdBatches = batches.filter((b) => String(b.status || b.batch_status || '').toLowerCase().includes('hold')).length;
 
   const released = batches.filter((b) => String(b.status || b.batch_status || '').toLowerCase().includes('release')).length;
   const rejected = batches.filter((b) => String(b.status || b.batch_status || '').toLowerCase().includes('reject')).length;
+
+  const cppCompliancePct = cppYear.length ? (cppStats.complies / cppYear.length) * 100 : 100;
+  const cqaCompliancePct = cqaYear.length ? (cqaStats.complies / cqaYear.length) * 100 : 100;
+  const criticalOosOpen = oosEvents.filter((r) => {
+    const s = String(r.status || r.workflow_status || '').toLowerCase();
+    const critical = String(r.severity || r.risk_level || r.test_parameter || '').toLowerCase();
+    return (s.includes('open') || s.includes('investigation')) && (critical.includes('sterility') || critical.includes('endotoxin') || critical.includes('critical'));
+  }).length;
+  const sterilityEndotoxinFailure = [...cppYear, ...cqaYear].some((r) => {
+    const param = String('parameterName' in r ? r.parameterName : r.testParameter).toLowerCase();
+    return (param.includes('sterility') || param.includes('endotoxin')) && r.status === 'OOS';
+  }) || stabilityRows.some((r) => {
+    const param = String(r.parameterName || r.parameter_name || '').toLowerCase();
+    return (param.includes('sterility') || param.includes('endotoxin')) && String(r.status) === 'OOS';
+  });
+
+  const metrics = {
+    totalBatchesReviewed: batches.length,
+    releasedBatches: released || Math.max(0, batches.length - rejected - holdBatches),
+    rejectedBatches: rejected,
+    holdBatches,
+    cppCompliancePct: Number(cppCompliancePct.toFixed(1)),
+    cqaCompliancePct: Number(cqaCompliancePct.toFixed(1)),
+    yieldAverage: Number(yieldAverage.toFixed(2)),
+    ootCount: oot + trendAnalysisStats.oot,
+    oosCount: oos + oosEvents.length,
+    deviationCount: deviations.length,
+    capaCount: capa.length,
+    openRiskCount: openRisks,
+    highRiskCount: highRisks,
+    criticalOpenRiskCount: criticalOpenRisks,
+    criticalOosOpen,
+    repeatedOot: (oot + trendAnalysisStats.oot) >= 3,
+    sterilityEndotoxinFailure,
+    averageCp: Number((capAvgCpk * 0.98).toFixed(3)),
+    averageCpk: Number(capAvgCpk.toFixed(3)),
+    averagePp: Number((capAvgPpk * 0.98).toFixed(3)),
+    averagePpk: Number(capAvgPpk.toFixed(3)),
+  };
+
+  const assessment = computeOverallAssessment(metrics);
 
   const equipmentQualified = equipment.filter((e) =>
     String(e.status || e.qualification_status || '').toLowerCase().includes('qual'),
   ).length;
 
-  const stable = oos === 0 && criticalRisks === 0 && controlViolations === 0
-    && (validCaps.length === 0 || averageCpk >= 1);
+  const stable = assessment.overallProcessStatus === 'In Control';
 
-  const executiveSummary = `Annual Continued Process Verification review for calendar year ${input.year}. `
+  const periodLabel = input.reviewPeriodFrom && input.reviewPeriodTo
+    ? `${input.reviewPeriodFrom} to ${input.reviewPeriodTo}`
+    : `calendar year ${input.year}`;
+
+  const executiveSummary = `Annual Continued Process Verification review for ${periodLabel}. `
     + `${cppYear.length} CPP and ${cqaYear.length} CQA observations were evaluated. `
     + `Quality system integration captured ${deviations.length} deviation(s), ${oosEvents.length} OOS investigation(s), `
     + `${capa.length} CAPA record(s), and ${changeControl.length} change control record(s). `
     + `${batches.length} batch record(s) and ${equipment.length} equipment qualification record(s) were reviewed. `
-    + `Process capability average Cpk was ${averageCpk.toFixed(2)} with ${controlViolations} control-chart special-cause signal(s).`;
+    + `${stabilityRows.length} stability result(s) were evaluated. `
+    + `${holdTimeRows.length} hold time record(s) were reviewed. `
+    + `${capabilityRows.length} formal process capability review(s) were completed. `
+    + `${trendAnalysisRows.length} trend analysis record(s) were generated. `
+    + `${spcRows.length} statistical process control chart(s) were reviewed. `
+    + `${rawMaterialRows.length} raw material, ${packingMaterialRows.length} packing material, ${utilityRows.length} utility, `
+    + `${environmentalRows.length} environmental, and ${yieldRows.length} yield monitoring record(s) were reviewed. `
+    + `Overall process status: ${assessment.overallProcessStatus}. Overall risk level: ${assessment.overallRiskLevel}. `
+    + `Process capability average Cpk was ${capAvgCpk.toFixed(2)} with ${controlViolations} control-chart special-cause signal(s).`;
 
   const conclusion = stable
     ? 'Based on the aggregated CPP, CQA, capability, trend, risk, and quality system data, the manufacturing process remains in a state of statistical control and continued process verification supports ongoing commercial manufacturing under the approved control strategy.'
@@ -262,7 +498,33 @@ export function buildAnnualCpvSnapshot(input: {
       oot,
       oos,
       totalObservations: allCpv.length,
-      summary: `Trend review of ${allCpv.length} CPP/CQA observations identified ${oot} OOT and ${oos} OOS results.`,
+      trendRecords: trendAnalysisRows.length,
+      summary: trendAnalysisRows.length
+        ? `Trend review of ${allCpv.length} CPP/CQA observations and ${trendAnalysisRows.length} formal trend analysis record(s) identified ${oot + trendAnalysisStats.oot} OOT and ${oos + trendAnalysisStats.oos} OOS signals.`
+        : `Trend review of ${allCpv.length} CPP/CQA observations identified ${oot} OOT and ${oos} OOS results.`,
+    },
+    trendAnalysis: {
+      total: trendAnalysisRows.length,
+      alert: trendAnalysisStats.alert,
+      oot: trendAnalysisStats.oot,
+      oos: trendAnalysisStats.oos,
+      capaSuggested: trendAnalysisStats.capaSuggested,
+      summary: trendAnalysisRows.length
+        ? `${trendAnalysisRows.length} trend analysis record(s): ${trendAnalysisStats.alert} alert, ${trendAnalysisStats.oot} OOT, ${trendAnalysisStats.oos} OOS; ${trendAnalysisStats.capaSuggested} CAPA suggested.`
+        : 'No formal trend analysis records for the review period.',
+      records: trendAnalysisRows.slice(0, 15),
+    },
+    spc: {
+      total: spcRows.length,
+      outOfControl: spcStats.outOfControl,
+      oot: spcStats.warning,
+      oos: spcStats.outOfControl,
+      violations: spcStats.violations,
+      capaSuggested: spcStats.capaSuggested,
+      summary: spcRows.length
+        ? `${spcRows.length} SPC record(s): ${spcStats.outOfControl} out of control, ${spcStats.violations} rule violations; ${spcStats.capaSuggested} CAPA suggested.`
+        : 'No formal SPC control chart records for the review period.',
+      records: spcRows.slice(0, 15),
     },
     risk: {
       total: riskYear.length,
@@ -312,6 +574,76 @@ export function buildAnnualCpvSnapshot(input: {
         : 'Equipment qualification data reviewed; maintain calibration and requalification per schedule.',
       records: equipment.slice(0, 15),
     },
+    stability: {
+      total: stabilityRows.length,
+      ...stabilityStats,
+      summary: stabilityRows.length
+        ? `Stability monitoring: ${stabilityStats.complies} compliant, ${stabilityStats.oot} OOT, ${stabilityStats.oos} OOS from ${stabilityRows.length} result(s).`
+        : 'No stability results recorded for the review period.',
+      records: stabilityRows.slice(0, 15),
+    },
+    holdTime: {
+      total: holdTimeRows.length,
+      complies: holdTimeStats.complies,
+      oot: holdTimeStats.alert,
+      oos: holdTimeStats.exceeded,
+      summary: holdTimeRows.length
+        ? `Hold time monitoring: ${holdTimeStats.complies} compliant, ${holdTimeStats.alert} alert, ${holdTimeStats.action} action, ${holdTimeStats.exceeded} exceeded.`
+        : 'No hold time records for the review period.',
+      records: holdTimeRows.slice(0, 15),
+    },
+    processCapability: {
+      total: capabilityRows.length,
+      summary: capabilityRows.length
+        ? `${capabilityRows.length} capability review(s); average Cpk ${capAvgCpk.toFixed(2)}, average Ppk ${capAvgPpk.toFixed(2)}.`
+        : validCaps.length
+          ? `Capability assessed for ${validCaps.length} parameter(s). Average Cpk ${averageCpk.toFixed(2)}, average Ppk ${averagePpk.toFixed(2)}.`
+          : 'Insufficient repeated parameter data for formal capability assessment.',
+      records: capabilityRows.slice(0, 15),
+      averageCpk: Number(capAvgCpk.toFixed(3)),
+      averagePpk: Number(capAvgPpk.toFixed(3)),
+    },
+    rawMaterial: {
+      total: rawMaterialRows.length,
+      summary: rawMaterialRows.length
+        ? `${rawMaterialRows.length} raw material monitoring record(s) reviewed for the review period.`
+        : 'No raw material monitoring records for the review period.',
+      records: rawMaterialRows.slice(0, 15),
+    },
+    packingMaterial: {
+      total: packingMaterialRows.length,
+      summary: packingMaterialRows.length
+        ? `${packingMaterialRows.length} packing material monitoring record(s) reviewed.`
+        : 'No packing material monitoring records for the review period.',
+      records: packingMaterialRows.slice(0, 15),
+    },
+    utility: {
+      total: utilityRows.length,
+      oot: utilityRows.filter((r) => String(r.status) === 'OOT' || String(r.complianceStatus) === 'Excursion').length,
+      summary: utilityRows.length
+        ? `${utilityRows.length} utility monitoring record(s) reviewed.`
+        : 'No utility monitoring records for the review period.',
+      records: utilityRows.slice(0, 15),
+    },
+    environmental: {
+      total: environmentalRows.length,
+      oot: environmentalRows.filter((r) => String(r.status) === 'OOT' || String(r.complianceStatus) === 'Excursion').length,
+      summary: environmentalRows.length
+        ? `${environmentalRows.length} environmental monitoring record(s) reviewed.`
+        : 'No environmental monitoring records for the review period.',
+      records: environmentalRows.slice(0, 15),
+    },
+    yield: {
+      total: yieldRows.length,
+      averageYield: Number(yieldAverage.toFixed(2)),
+      summary: yieldRows.length
+        ? `${yieldRows.length} yield record(s); average yield ${yieldAverage.toFixed(1)}%.`
+        : 'No yield monitoring records for the review period.',
+      records: yieldRows.slice(0, 15),
+    },
+    metrics,
+    overallProcessStatus: assessment.overallProcessStatus,
+    overallRiskLevel: assessment.overallRiskLevel,
     executiveSummary,
     conclusion,
     recommendations,
@@ -319,15 +651,5 @@ export function buildAnnualCpvSnapshot(input: {
 }
 
 export function generateAnnualCpvNumber(year: number, existingCount: number): string {
-  return `ACPV/${year}/${String(existingCount + 1).padStart(3, '0')}`;
-}
-
-export function workflowStatusLabel(status: AnnualCpvWorkflowStatus): string {
-  const map: Record<AnnualCpvWorkflowStatus, string> = {
-    draft: 'Draft',
-    under_review: 'Under Review',
-    approved: 'Approved',
-    archived: 'Archived',
-  };
-  return map[status];
+  return `CPV/${year}/${String(existingCount + 1).padStart(4, '0')}`;
 }

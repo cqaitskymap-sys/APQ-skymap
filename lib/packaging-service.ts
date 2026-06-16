@@ -14,7 +14,7 @@ import {
   writeBatch,
   Timestamp,
 } from 'firebase/firestore';
-import { firestore } from './firebase';
+import { getFirebaseFirestore } from './firebase';
 
 // ============= TYPES =============
 
@@ -156,7 +156,7 @@ export async function createPackagingMaterial(
   userId: string
 ): Promise<PackagingMaterial> {
   const now = new Date().toISOString();
-  const docRef = await addDoc(collection(firestore, 'packaging_material_master'), {
+  const docRef = await addDoc(collection(getFirebaseFirestore(), 'packaging_material_master'), {
     ...material,
     createdBy: userId,
     createdAt: now,
@@ -185,7 +185,7 @@ export async function createPackagingMaterial(
 }
 
 export async function getPackagingMaterial(id: string): Promise<PackagingMaterial> {
-  const docRef = doc(firestore, 'packaging_material_master', id);
+  const docRef = doc(getFirebaseFirestore(), 'packaging_material_master', id);
   const docSnap = await getDoc(docRef);
 
   if (!docSnap.exists()) {
@@ -212,7 +212,7 @@ export async function getPackagingMaterials(filters?: {
 
   constraints.push(orderBy('materialCode', 'asc'));
 
-  const q = query(collection(firestore, 'packaging_material_master'), ...constraints);
+  const q = query(collection(getFirebaseFirestore(), 'packaging_material_master'), ...constraints);
   const querySnapshot = await getDocs(q);
 
   let results = querySnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as PackagingMaterial));
@@ -234,7 +234,7 @@ export async function updatePackagingMaterial(
   updates: Partial<Omit<PackagingMaterial, 'id' | 'createdAt' | 'createdBy'>>,
   userId: string
 ): Promise<void> {
-  const docRef = doc(firestore, 'packaging_material_master', id);
+  const docRef = doc(getFirebaseFirestore(), 'packaging_material_master', id);
   const now = new Date().toISOString();
 
   await updateDoc(docRef, {
@@ -253,7 +253,7 @@ export async function updatePackagingMaterial(
 }
 
 export async function deletePackagingMaterial(id: string, userId: string): Promise<void> {
-  const docRef = doc(firestore, 'packaging_material_master', id);
+  const docRef = doc(getFirebaseFirestore(), 'packaging_material_master', id);
   await deleteDoc(docRef);
 
   await logAuditTrail({
@@ -274,7 +274,7 @@ export async function createPackagingReview(
   const now = new Date().toISOString();
   const state = calculateReviewState(review);
 
-  const docRef = await addDoc(collection(firestore, 'packaging_reviews'), {
+  const docRef = await addDoc(collection(getFirebaseFirestore(), 'packaging_reviews'), {
     ...review,
     ...state,
     createdBy: userId,
@@ -320,7 +320,7 @@ export async function createPackagingReview(
 }
 
 export async function getPackagingReview(id: string): Promise<PackagingReview> {
-  const docRef = doc(firestore, 'packaging_reviews', id);
+  const docRef = doc(getFirebaseFirestore(), 'packaging_reviews', id);
   const docSnap = await getDoc(docRef);
 
   if (!docSnap.exists()) {
@@ -357,7 +357,7 @@ export async function getPackagingReviews(filters?: {
 
   constraints.push(orderBy('createdAt', 'desc'));
 
-  const q = query(collection(firestore, 'packaging_reviews'), ...constraints);
+  const q = query(collection(getFirebaseFirestore(), 'packaging_reviews'), ...constraints);
   const querySnapshot = await getDocs(q);
 
   let results = querySnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as PackagingReview));
@@ -380,7 +380,7 @@ export async function updatePackagingReview(
   updates: Partial<Omit<PackagingReview, 'id' | 'createdAt' | 'createdBy'>>,
   userId: string
 ): Promise<PackagingReview> {
-  const docRef = doc(firestore, 'packaging_reviews', id);
+  const docRef = doc(getFirebaseFirestore(), 'packaging_reviews', id);
   const now = new Date().toISOString();
 
   const currentReview = await getPackagingReview(id);
@@ -407,7 +407,7 @@ export async function updatePackagingReview(
 }
 
 export async function deletePackagingReview(id: string, userId: string): Promise<void> {
-  const docRef = doc(firestore, 'packaging_reviews', id);
+  const docRef = doc(getFirebaseFirestore(), 'packaging_reviews', id);
   await deleteDoc(docRef);
 
   await logAuditTrail({
@@ -428,7 +428,7 @@ export async function createPackagingVendorReview(
   userId: string
 ): Promise<PackagingVendorReview> {
   const now = new Date().toISOString();
-  const docRef = await addDoc(collection(firestore, 'packaging_vendor_review'), {
+  const docRef = await addDoc(collection(getFirebaseFirestore(), 'packaging_vendor_review'), {
     ...vendorReview,
     createdBy: userId,
     createdAt: now,
@@ -445,7 +445,7 @@ export async function createPackagingVendorReview(
 }
 
 export async function getPackagingVendorReview(id: string): Promise<PackagingVendorReview> {
-  const docRef = doc(firestore, 'packaging_vendor_review', id);
+  const docRef = doc(getFirebaseFirestore(), 'packaging_vendor_review', id);
   const docSnap = await getDoc(docRef);
 
   if (!docSnap.exists()) {
@@ -456,7 +456,7 @@ export async function getPackagingVendorReview(id: string): Promise<PackagingVen
 }
 
 export async function getPackagingVendorReviews(): Promise<PackagingVendorReview[]> {
-  const q = query(collection(firestore, 'packaging_vendor_review'), orderBy('vendorName', 'asc'));
+  const q = query(collection(getFirebaseFirestore(), 'packaging_vendor_review'), orderBy('vendorName', 'asc'));
   const querySnapshot = await getDocs(q);
 
   return querySnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as PackagingVendorReview));
@@ -467,7 +467,7 @@ export async function updatePackagingVendorReview(
   updates: Partial<Omit<PackagingVendorReview, 'id' | 'createdAt' | 'createdBy'>>,
   userId: string
 ): Promise<void> {
-  const docRef = doc(firestore, 'packaging_vendor_review', id);
+  const docRef = doc(getFirebaseFirestore(), 'packaging_vendor_review', id);
   const now = new Date().toISOString();
 
   await updateDoc(docRef, {
@@ -577,7 +577,7 @@ export async function createReconciliation(
   userId: string
 ): Promise<ReconciliationRecord> {
   const now = new Date().toISOString();
-  const docRef = await addDoc(collection(firestore, 'packaging_reconciliation'), {
+  const docRef = await addDoc(collection(getFirebaseFirestore(), 'packaging_reconciliation'), {
     ...reconciliation,
     createdAt: now,
   });
@@ -590,7 +590,7 @@ export async function createReconciliation(
 }
 
 export async function getReconciliation(id: string): Promise<ReconciliationRecord> {
-  const docRef = doc(firestore, 'packaging_reconciliation', id);
+  const docRef = doc(getFirebaseFirestore(), 'packaging_reconciliation', id);
   const docSnap = await getDoc(docRef);
 
   if (!docSnap.exists()) {
@@ -609,7 +609,7 @@ export async function getReconciliations(packagingReviewId?: string): Promise<Re
 
   constraints.push(orderBy('createdAt', 'desc'));
 
-  const q = query(collection(firestore, 'packaging_reconciliation'), ...constraints);
+  const q = query(collection(getFirebaseFirestore(), 'packaging_reconciliation'), ...constraints);
   const querySnapshot = await getDocs(q);
 
   return querySnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as ReconciliationRecord));
@@ -620,7 +620,7 @@ export async function resolveReconciliation(
   reason: string,
   userId: string
 ): Promise<void> {
-  const docRef = doc(firestore, 'packaging_reconciliation', id);
+  const docRef = doc(getFirebaseFirestore(), 'packaging_reconciliation', id);
   const now = new Date().toISOString();
 
   await updateDoc(docRef, {
@@ -683,7 +683,7 @@ export async function checkCompliance(reviewId: string): Promise<{
 
 export async function updateCompliance(reviewId: string, userId: string): Promise<void> {
   const { compliant } = await checkCompliance(reviewId);
-  const docRef = doc(firestore, 'packaging_reviews', reviewId);
+  const docRef = doc(getFirebaseFirestore(), 'packaging_reviews', reviewId);
 
   await updateDoc(docRef, {
     complianceStatus: compliant ? 'Compliant' : 'Non-Compliant',
@@ -706,7 +706,7 @@ export async function logAuditTrail(
   auditLog: Omit<PackagingAuditTrail, 'id' | 'performedAt'>
 ): Promise<void> {
   const now = new Date().toISOString();
-  await addDoc(collection(firestore, 'packaging_audit_trail'), {
+  await addDoc(collection(getFirebaseFirestore(), 'packaging_audit_trail'), {
     ...auditLog,
     performedAt: now,
   });
@@ -721,7 +721,7 @@ export async function getAuditTrail(entityId?: string): Promise<PackagingAuditTr
 
   constraints.push(orderBy('performedAt', 'desc'));
 
-  const q = query(collection(firestore, 'packaging_audit_trail'), ...constraints);
+  const q = query(collection(getFirebaseFirestore(), 'packaging_audit_trail'), ...constraints);
   const querySnapshot = await getDocs(q);
 
   return querySnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as PackagingAuditTrail));
@@ -888,11 +888,11 @@ export async function initializeDefaultPackagingMaterials(userId: string): Promi
     return; // Already initialized
   }
 
-  const batch = writeBatch(firestore);
+  const batch = writeBatch(getFirebaseFirestore());
   const now = new Date().toISOString();
 
   DEFAULT_PACKAGING_MATERIALS.forEach((material) => {
-    const docRef = doc(collection(firestore, 'packaging_material_master'));
+    const docRef = doc(collection(getFirebaseFirestore(), 'packaging_material_master'));
     batch.set(docRef, {
       ...material,
       createdBy: userId,

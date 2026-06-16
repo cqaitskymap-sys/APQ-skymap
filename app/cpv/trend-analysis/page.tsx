@@ -1,7 +1,12 @@
+import { TrendAnalysisAccessGuard } from '@/components/cpv/trend-analysis/trend-analysis-access-guard';
+import { TrendAnalysisPage } from '@/components/cpv/trend-analysis/trend-analysis-page';
+
 export const dynamic = 'force-dynamic';
 
-import { LazyTrendWorkspace } from '@/lib/lazy-cpv';
-
-export default function Page() {
-  return <LazyTrendWorkspace />;
+export default function TrendAnalysisRoutePage() {
+  return (
+    <TrendAnalysisAccessGuard>
+      <TrendAnalysisPage />
+    </TrendAnalysisAccessGuard>
+  );
 }

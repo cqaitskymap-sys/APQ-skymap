@@ -19,13 +19,39 @@ export class FirebaseNotConfiguredError extends Error {
   }
 }
 
+// Static process.env references — Next.js only inlines NEXT_PUBLIC_* on the client when
+// accessed literally (dynamic process.env[key] is always undefined in browser bundles).
 export function isFirebaseConfigured(): boolean {
-  return REQUIRED_ENV_KEYS.every((key) => Boolean(process.env[key]?.trim()));
+  return Boolean(
+    process.env.NEXT_PUBLIC_FIREBASE_API_KEY?.trim() &&
+      process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN?.trim() &&
+      process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID?.trim() &&
+      process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET?.trim() &&
+      process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID?.trim() &&
+      process.env.NEXT_PUBLIC_FIREBASE_APP_ID?.trim()
+  );
 }
 
 export function getFirebaseSetupMessage(): string {
   if (isFirebaseConfigured()) return '';
-  const missing = REQUIRED_ENV_KEYS.filter((key) => !process.env[key]?.trim());
+  const missing = REQUIRED_ENV_KEYS.filter((key) => {
+    switch (key) {
+      case 'NEXT_PUBLIC_FIREBASE_API_KEY':
+        return !process.env.NEXT_PUBLIC_FIREBASE_API_KEY?.trim();
+      case 'NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN':
+        return !process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN?.trim();
+      case 'NEXT_PUBLIC_FIREBASE_PROJECT_ID':
+        return !process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID?.trim();
+      case 'NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET':
+        return !process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET?.trim();
+      case 'NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID':
+        return !process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID?.trim();
+      case 'NEXT_PUBLIC_FIREBASE_APP_ID':
+        return !process.env.NEXT_PUBLIC_FIREBASE_APP_ID?.trim();
+      default:
+        return true;
+    }
+  });
   return `Firebase environment variables are missing: ${missing.join(', ')}. Copy .env.local.example to .env.local and add your project credentials.`;
 }
 
@@ -33,7 +59,7 @@ function getFirebaseConfig(): FirebaseOptions {
   if (!isFirebaseConfigured()) {
     throw new FirebaseNotConfiguredError(getFirebaseSetupMessage());
   }
-  return {
+  const config: FirebaseOptions = {
     apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY!,
     authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN!,
     projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID!,
@@ -41,6 +67,13 @@ function getFirebaseConfig(): FirebaseOptions {
     messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID!,
     appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID!,
   };
+  if (process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL?.trim()) {
+    config.databaseURL = process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL.trim();
+  }
+  if (process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID?.trim()) {
+    config.measurementId = process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID.trim();
+  }
+  return config;
 }
 
 let app: FirebaseApp | null = null;
@@ -92,28 +125,6 @@ export function getFirebaseStorage(): FirebaseStorage {
   return storageInstance;
 }
 
-function createLazyProxy<T extends object>(getter: () => T): T {
-  let instance: T | null = null;
-  return new Proxy({} as T, {
-    get(_target, prop) {
-      if (!isFirebaseConfigured()) {
-        throw new FirebaseNotConfiguredError();
-      }
-      if (!instance) instance = getter();
-      const value = Reflect.get(instance, prop, instance);
-      return typeof value === 'function' ? (value as (...args: unknown[]) => unknown).bind(instance) : value;
-    },
-  });
-}
-
-/** @deprecated Prefer getFirebaseAuth() — lazy proxy for backward compatibility */
-export const auth = createLazyProxy(getFirebaseAuth);
-
-/** @deprecated Prefer getFirebaseFirestore() — lazy proxy for backward compatibility */
-export const firestore = createLazyProxy(getFirebaseFirestore);
-
-/** @deprecated Prefer getFirebaseStorage() — lazy proxy for backward compatibility */
-export const storage = createLazyProxy(getFirebaseStorage);
 
 export function isDemoAuthEnabled(): boolean {
   return process.env.NEXT_PUBLIC_DEMO_AUTH === 'true';

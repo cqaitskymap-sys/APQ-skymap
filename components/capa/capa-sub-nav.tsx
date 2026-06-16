@@ -3,14 +3,15 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-  LayoutDashboard, Plus, Link2, Wrench, CheckCircle2, ShieldCheck, FileDown,
+  LayoutDashboard, Plus, Link2, Wrench, CheckCircle2, ShieldCheck, FileDown, ListChecks,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const items = [
-  { label: 'CAPA Dashboard', href: '/qms/capa', icon: LayoutDashboard, exact: true },
-  { label: 'Create CAPA', href: '/qms/capa/create', icon: Plus },
-  { label: 'Investigation Link', href: '/qms/capa/investigation', icon: Link2 },
+  { label: 'CAPA Dashboard', href: '/qms/capa', icon: LayoutDashboard, exact: true, alsoMatch: '/qms/capa/dashboard' },
+  { label: 'Create CAPA', href: '/qms/capa/create', icon: Plus, alsoMatch: '/qms/capa/new' },
+  { label: 'Investigation & RCA', href: '/qms/capa/investigation', icon: Link2 },
+  { label: 'Corrective Actions', href: '/qms/capa/corrective-action', icon: ListChecks },
   { label: 'Implementation', href: '/qms/capa/implementation', icon: Wrench },
   { label: 'Effectiveness Check', href: '/qms/capa/effectiveness', icon: CheckCircle2 },
   { label: 'Approval Workflow', href: '/qms/capa/approval', icon: ShieldCheck },
@@ -29,9 +30,12 @@ export function CapaSubNav() {
         {items.map((item) => {
           const Icon = item.icon;
           const base = item.href.split('?')[0];
+          const alsoMatch = 'alsoMatch' in item ? (item as { alsoMatch?: string }).alsoMatch : undefined;
           const active = item.exact
-            ? pathname === base
-            : pathname.startsWith(base) && !item.exact;
+            ? pathname === base || pathname === alsoMatch
+            : pathname.startsWith(base)
+              || (base === '/qms/capa/investigation' && /\/qms\/capa\/[^/]+\/investigation/.test(pathname))
+              || (base === '/qms/capa/corrective-action' && /\/qms\/capa\/[^/]+\/corrective-action/.test(pathname));
           return (
             <Link
               key={item.href}

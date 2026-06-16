@@ -10,13 +10,14 @@ import {
 
 export function AdminBreadcrumb() {
   const pathname = usePathname();
-  const parts = pathname.replace('/dashboard/admin', '').split('/').filter(Boolean);
+  const adminRoot = pathname.startsWith('/admin') ? '/admin' : '/dashboard/admin';
+  const parts = pathname.replace(adminRoot, '').split('/').filter(Boolean);
 
   const crumbs = [
-    { label: 'Admin', href: '/dashboard/admin' },
+    { label: 'Admin', href: adminRoot },
     ...parts.map((part, i) => ({
       label: part.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
-      href: `/dashboard/admin/${parts.slice(0, i + 1).join('/')}`,
+      href: `${adminRoot}/${parts.slice(0, i + 1).join('/')}`,
     })),
   ];
 

@@ -3,7 +3,7 @@ import {
   type QueryConstraint,
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { firestore, storage } from '@/lib/firebase';
+import { getFirebaseFirestore, getFirebaseStorage } from '@/lib/firebase';
 import { logAuditEvent } from '@/lib/admin/admin-service';
 import { createDeviation } from '@/lib/deviation-service';
 import { downloadCsv } from '@/lib/export-utils';
@@ -35,7 +35,7 @@ async function audit(actor: CsvActor, action: string, recordId: string, oldValue
 async function notify(title: string, message: string, recordId: string, roles: string[]) {
   try {
     for (const role of roles) {
-      await addDoc(collection(firestore, CSV_COLLECTIONS.notifications), {
+      await addDoc(collection(getFirebaseFirestore(), CSV_COLLECTIONS.notifications), {
         title, message, module: 'CSV', record_id: recordId, target_role: role,
         read: false, created_at: now(),
       });
@@ -48,7 +48,7 @@ async function genNumber(prefix: string, collName: string, field: string): Promi
   const p = `${prefix}-${year}-`;
   try {
     const snap = await getDocs(query(
-      collection(firestore, collName),
+      collection(getFirebaseFirestore(), collName),
       where(field, '>=', p), where(field, '<=', `${p}\uf8ff`),
       orderBy(field, 'desc'), limit(1),
     ));
@@ -57,7 +57,7 @@ async function genNumber(prefix: string, collName: string, field: string): Promi
       return `${p}${String(parseInt(last.split('-').pop() || '0', 10) + 1).padStart(4, '0')}`;
     }
   } catch {
-    const all = await getDocs(collection(firestore, collName));
+    const all = await getDocs(collection(getFirebaseFirestore(), collName));
     return `${p}${String(all.size + 1).padStart(4, '0')}`;
   }
   return `${p}0001`;
@@ -69,7 +69,7 @@ async function applySystemAutoRules(systemId: string, system: Partial<CsvSystem>
     part11_required: system.audit_trail_required === true || system.e_signature_required === true,
     updated_at: now(),
   };
-  await updateDoc(doc(firestore, CSV_COLLECTIONS.systems, systemId), updates);
+  await updateDoc(doc(getFirebaseFirestore(), CSV_COLLECTIONS.systems, systemId), updates);
   if (system.gxp_impact) {
     await notify('CSV Validation Package Required', `GxP impact system requires full validation package`, systemId, ['qa_manager', 'it_csv']);
   }
@@ -113,14 +113,14 @@ export async function createSystem(input: SystemCreateInput, actor: CsvActor): P
     created_at: timestamp,
     updated_at: timestamp,
   };
-  const refDoc = await addDoc(collection(firestore, CSV_COLLECTIONS.systems), record);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), CSV_COLLECTIONS.systems), record);
   await audit(actor, 'CREATE', refDoc.id, null, record);
   await applySystemAutoRules(refDoc.id, record);
   return { id: refDoc.id, ...record };
 }
 
 export async function getSystemById(id: string): Promise<CsvSystem | null> {
-  const snap = await getDoc(doc(firestore, CSV_COLLECTIONS.systems, id));
+  const snap = await getDoc(doc(getFirebaseFirestore(), CSV_COLLECTIONS.systems, id));
   if (!snap.exists()) return null;
   return { id: snap.id, ...snap.data() } as CsvSystem;
 }
@@ -133,10 +133,10 @@ export async function listSystems(filters?: CsvFilters): Promise<CsvSystem[]> {
 
   let records: CsvSystem[];
   try {
-    const snap = await getDocs(query(collection(firestore, CSV_COLLECTIONS.systems), ...constraints));
+    const snap = await getDocs(query(collection(getFirebaseFirestore(), CSV_COLLECTIONS.systems), ...constraints));
     records = snap.docs.map((d) => ({ id: d.id, ...d.data() } as CsvSystem));
   } catch {
-    const snap = await getDocs(collection(firestore, CSV_COLLECTIONS.systems));
+    const snap = await getDocs(collection(getFirebaseFirestore(), CSV_COLLECTIONS.systems));
     records = snap.docs.map((d) => ({ id: d.id, ...d.data() } as CsvSystem));
   }
 
@@ -163,7 +163,7 @@ export async function updateSystem(id: string, input: Partial<SystemCreateInput>
     updated_by_name: actor.name,
     updated_at: now(),
   };
-  await updateDoc(doc(firestore, CSV_COLLECTIONS.systems, id), updates);
+  await updateDoc(doc(getFirebaseFirestore(), CSV_COLLECTIONS.systems, id), updates);
   await audit(actor, 'EDIT', id, existing, updates);
   await applySystemAutoRules(id, { ...existing, ...updates });
   return { ...existing, ...updates } as CsvSystem;
@@ -175,12 +175,12 @@ async function listBySystem<T>(coll: string, systemId?: string, orderField = 'cr
   try {
     const constraints: QueryConstraint[] = [orderBy(orderField, 'desc')];
     if (systemId) constraints.unshift(where('system_id', '==', systemId));
-    const snap = await getDocs(query(collection(firestore, coll), ...constraints));
+    const snap = await getDocs(query(collection(getFirebaseFirestore(), coll), ...constraints));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as T));
   } catch {
     const snap = systemId
-      ? await getDocs(query(collection(firestore, coll), where('system_id', '==', systemId)))
-      : await getDocs(collection(firestore, coll));
+      ? await getDocs(query(collection(getFirebaseFirestore(), coll), where('system_id', '==', systemId)))
+      : await getDocs(collection(getFirebaseFirestore(), coll));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as T));
   }
 }
@@ -198,14 +198,14 @@ export async function saveGxpAssessment(input: GxpAssessmentInput, actor: CsvAct
     updated_at: now(),
   };
   if (existing) {
-    await updateDoc(doc(firestore, CSV_COLLECTIONS.gxpAssessment, existing.id), data);
+    await updateDoc(doc(getFirebaseFirestore(), CSV_COLLECTIONS.gxpAssessment, existing.id), data);
     await audit(actor, 'GXP_ASSESSMENT', input.system_id, existing, data);
     return { id: existing.id, ...data };
   }
-  const refDoc = await addDoc(collection(firestore, CSV_COLLECTIONS.gxpAssessment), data);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), CSV_COLLECTIONS.gxpAssessment), data);
   await audit(actor, 'GXP_ASSESSMENT', input.system_id, null, data);
   if (input.gxp_classification === 'GxP Critical') {
-    await updateDoc(doc(firestore, CSV_COLLECTIONS.systems, input.system_id), { gxp_impact: true, validation_package_required: true, updated_at: now() });
+    await updateDoc(doc(getFirebaseFirestore(), CSV_COLLECTIONS.systems, input.system_id), { gxp_impact: true, validation_package_required: true, updated_at: now() });
   }
   return { id: refDoc.id, ...data };
 }
@@ -222,7 +222,7 @@ export async function createRiskAssessment(input: RiskAssessmentInput, actor: Cs
     ...input, rpn, risk_level,
     created_at: now(), updated_at: now(),
   };
-  const refDoc = await addDoc(collection(firestore, CSV_COLLECTIONS.riskAssessment), record);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), CSV_COLLECTIONS.riskAssessment), record);
   await audit(actor, 'RISK_ASSESSMENT', input.system_id, null, record);
   return { id: refDoc.id, ...record };
 }
@@ -236,7 +236,7 @@ export async function listRiskAssessments(systemId?: string) {
 export async function createUrs(input: UrsInput, actor: CsvActor): Promise<UrsRecord> {
   const ursId = await genNumber('URS', CSV_COLLECTIONS.urs, 'urs_id');
   const record: Omit<UrsRecord, 'id'> = { ...input, urs_id: ursId, created_at: now(), updated_at: now() };
-  const refDoc = await addDoc(collection(firestore, CSV_COLLECTIONS.urs), record);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), CSV_COLLECTIONS.urs), record);
   await audit(actor, 'URS_CREATE', input.system_id, null, record);
   return { id: refDoc.id, ...record };
 }
@@ -250,7 +250,7 @@ export async function listUrs(systemId?: string) {
 export async function createFrs(input: FrsInput, actor: CsvActor): Promise<FrsRecord> {
   const frsId = await genNumber('FRS', CSV_COLLECTIONS.frs, 'frs_id');
   const record: Omit<FrsRecord, 'id'> = { ...input, frs_id: frsId, created_at: now(), updated_at: now() };
-  const refDoc = await addDoc(collection(firestore, CSV_COLLECTIONS.frs), record);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), CSV_COLLECTIONS.frs), record);
   await audit(actor, 'FRS_CREATE', input.system_id, null, record);
   return { id: refDoc.id, ...record };
 }
@@ -264,7 +264,7 @@ export async function listFrs(systemId?: string) {
 export async function createDesignSpec(input: DesignSpecInput, actor: CsvActor): Promise<DesignSpecRecord> {
   const dsId = await genNumber('DS', CSV_COLLECTIONS.designSpec, 'ds_id');
   const record: Omit<DesignSpecRecord, 'id'> = { ...input, ds_id: dsId, created_at: now(), updated_at: now() };
-  const refDoc = await addDoc(collection(firestore, CSV_COLLECTIONS.designSpec), record);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), CSV_COLLECTIONS.designSpec), record);
   await audit(actor, 'DS_CREATE', input.system_id, null, record);
   return { id: refDoc.id, ...record };
 }
@@ -293,7 +293,7 @@ async function createDeviationFromTest(system: CsvSystem, test: TestScriptInput,
     }, { id: actor.id, name: actor.name, role: actor.role }, {
       status: 'draft', source: 'manual', source_reference: `${system.system_id}-${test.test_script_no}`,
     });
-    await updateDoc(doc(firestore, CSV_COLLECTIONS.systems, system.id), {
+    await updateDoc(doc(getFirebaseFirestore(), CSV_COLLECTIONS.systems, system.id), {
       validation_status: 'Deviation Observed', updated_at: now(),
     });
     await notify('CSV Test Failure', `${test.test_phase} test failed for ${system.system_name}`, system.id, ['qa_manager', 'it_csv']);
@@ -324,7 +324,7 @@ export async function createTestScript(input: TestScriptInput, actor: CsvActor):
     created_at: now(),
     updated_at: now(),
   };
-  const refDoc = await addDoc(collection(firestore, CSV_COLLECTIONS.testScripts), record);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), CSV_COLLECTIONS.testScripts), record);
   await audit(actor, 'TEST_EXECUTION', input.system_id, null, record);
   return { id: refDoc.id, ...record };
 }
@@ -339,10 +339,10 @@ export async function uploadTestEvidence(
   systemId: string, testId: string, file: File, actor: CsvActor,
 ): Promise<string> {
   const path = `csv/${systemId}/tests/${testId}_${Date.now()}_${file.name}`;
-  const storageRef = ref(storage, path);
+  const storageRef = ref(getFirebaseStorage(), path);
   await uploadBytes(storageRef, file);
   const url = await getDownloadURL(storageRef);
-  await updateDoc(doc(firestore, CSV_COLLECTIONS.testScripts, testId), { evidence_url: url, updated_at: now() });
+  await updateDoc(doc(getFirebaseFirestore(), CSV_COLLECTIONS.testScripts, testId), { evidence_url: url, updated_at: now() });
   await audit(actor, 'ATTACHMENT_UPLOAD', systemId, null, { testId, file: file.name });
   return url;
 }
@@ -355,7 +355,7 @@ export async function saveTraceabilityRow(input: TraceabilityInput, actor: CsvAc
     gap_identified: input.gap_identified || !input.frs_no || !input.ds_no,
     created_at: now(), updated_at: now(),
   };
-  const refDoc = await addDoc(collection(firestore, CSV_COLLECTIONS.traceability), record);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), CSV_COLLECTIONS.traceability), record);
   await audit(actor, 'TRACEABILITY_UPDATE', input.system_id, null, record);
   return { id: refDoc.id, ...record };
 }
@@ -388,10 +388,10 @@ export async function savePart11Assessment(input: Part11Input, actor: CsvActor):
     created_at: existing?.created_at || now(), updated_at: now(),
   };
   if (existing) {
-    await updateDoc(doc(firestore, CSV_COLLECTIONS.part11, existing.id), data);
+    await updateDoc(doc(getFirebaseFirestore(), CSV_COLLECTIONS.part11, existing.id), data);
     return { id: existing.id, ...data };
   }
-  const refDoc = await addDoc(collection(firestore, CSV_COLLECTIONS.part11), data);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), CSV_COLLECTIONS.part11), data);
   await audit(actor, 'PART11_ASSESSMENT', input.system_id, null, data);
   if (assessment_result !== 'Compliant') {
     await notify('Part 11 Gap Identified', `Part 11 assessment gaps for ${input.system_name}`, input.system_id, ['qa_manager', 'it_csv']);
@@ -418,13 +418,13 @@ export async function saveValidationReport(input: ValidationReportInput, actor: 
     updated_at: now(),
   };
   if (existing) {
-    await updateDoc(doc(firestore, CSV_COLLECTIONS.validationReports, existing.id), data);
+    await updateDoc(doc(getFirebaseFirestore(), CSV_COLLECTIONS.validationReports, existing.id), data);
     return { id: existing.id, ...data };
   }
-  const refDoc = await addDoc(collection(firestore, CSV_COLLECTIONS.validationReports), data);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), CSV_COLLECTIONS.validationReports), data);
   await audit(actor, 'VALIDATION_REPORT', input.system_id, null, data);
   if (input.recommended_status === 'Validated') {
-    await updateDoc(doc(firestore, CSV_COLLECTIONS.systems, input.system_id), {
+    await updateDoc(doc(getFirebaseFirestore(), CSV_COLLECTIONS.systems, input.system_id), {
       validation_status: 'Validated', updated_at: now(),
     });
   }
@@ -441,8 +441,8 @@ export async function savePeriodicReview(input: PeriodicReviewInput, actor: CsvA
   const record: Omit<PeriodicReview, 'id'> = {
     ...input, status: 'Completed', created_at: now(), updated_at: now(),
   };
-  const refDoc = await addDoc(collection(firestore, CSV_COLLECTIONS.periodicReviews), record);
-  await updateDoc(doc(firestore, CSV_COLLECTIONS.systems, input.system_id), {
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), CSV_COLLECTIONS.periodicReviews), record);
+  await updateDoc(doc(getFirebaseFirestore(), CSV_COLLECTIONS.systems, input.system_id), {
     next_review_due: input.next_review_due, updated_at: now(),
   });
   await audit(actor, 'PERIODIC_REVIEW', input.system_id, null, record);
@@ -455,7 +455,7 @@ export async function listPeriodicReviews(systemId?: string) {
 
 export async function syncPeriodicReviewDue(): Promise<number> {
   const today = now().split('T')[0];
-  const snap = await getDocs(collection(firestore, CSV_COLLECTIONS.systems));
+  const snap = await getDocs(collection(getFirebaseFirestore(), CSV_COLLECTIONS.systems));
   let count = 0;
   for (const d of snap.docs) {
     const data = d.data() as CsvSystem;
@@ -473,7 +473,7 @@ export async function uploadCsvAttachment(
   systemId: string, file: File, category: string, actor: CsvActor,
 ): Promise<CsvAttachment> {
   const path = `csv/${systemId}/${Date.now()}_${file.name}`;
-  const storageRef = ref(storage, path);
+  const storageRef = ref(getFirebaseStorage(), path);
   await uploadBytes(storageRef, file);
   const downloadUrl = await getDownloadURL(storageRef);
   const attachment: Omit<CsvAttachment, 'id'> = {
@@ -481,7 +481,7 @@ export async function uploadCsvAttachment(
     category, storage_path: path, download_url: downloadUrl,
     uploaded_by: actor.id, uploaded_by_name: actor.name, uploaded_at: now(),
   };
-  const refDoc = await addDoc(collection(firestore, CSV_COLLECTIONS.attachments), attachment);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), CSV_COLLECTIONS.attachments), attachment);
   await audit(actor, 'ATTACHMENT_UPLOAD', systemId, null, { file_name: file.name, category });
   return { id: refDoc.id, ...attachment };
 }
@@ -493,7 +493,7 @@ export async function getCsvAttachments(systemId: string): Promise<CsvAttachment
 export async function getAuditLogsForSystem(systemId: string): Promise<Record<string, unknown>[]> {
   try {
     const snap = await getDocs(query(
-      collection(firestore, CSV_COLLECTIONS.auditLogs),
+      collection(getFirebaseFirestore(), CSV_COLLECTIONS.auditLogs),
       where('recordId', '==', systemId), where('module', '==', 'CSV'),
       orderBy('dateTime', 'desc'), limit(100),
     ));

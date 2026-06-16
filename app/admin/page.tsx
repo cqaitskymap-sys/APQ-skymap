@@ -1,5 +1,7 @@
-import { redirect } from 'next/navigation';
+'use client';
 
-export default function AdminRedirect() {
-  redirect('/dashboard/admin');
+import { AdminDashboard } from '@/components/admin/admin-dashboard';
+
+export default function AdminPage() {
+  return <AdminDashboard basePath="/admin" />;
 }

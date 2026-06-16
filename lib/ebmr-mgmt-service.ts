@@ -3,7 +3,7 @@ import {
   type QueryConstraint,
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { firestore, storage } from '@/lib/firebase';
+import { getFirebaseFirestore, getFirebaseStorage } from '@/lib/firebase';
 import { logAuditEvent } from '@/lib/admin/admin-service';
 import { createDeviation } from '@/lib/deviation-service';
 import { createOosRecord } from '@/lib/oos-service';
@@ -37,7 +37,7 @@ async function auditLog(actor: EbmrActor, action: string, recordId: string, oldV
 async function notify(title: string, message: string, recordId: string, roles: string[]) {
   try {
     for (const role of roles) {
-      await addDoc(collection(firestore, EBMR_COLLECTIONS.notifications), {
+      await addDoc(collection(getFirebaseFirestore(), EBMR_COLLECTIONS.notifications), {
         title, message, module: 'eBMR', record_id: recordId, target_role: role, read: false, created_at: now(),
       });
     }
@@ -49,7 +49,7 @@ async function genNumber(prefix: string, collName: string, field: string): Promi
   const p = `${prefix}-${year}-`;
   try {
     const snap = await getDocs(query(
-      collection(firestore, collName),
+      collection(getFirebaseFirestore(), collName),
       where(field, '>=', p), where(field, '<=', `${p}\uf8ff`),
       orderBy(field, 'desc'), limit(1),
     ));
@@ -58,7 +58,7 @@ async function genNumber(prefix: string, collName: string, field: string): Promi
       return `${p}${String(parseInt(last.split('-').pop() || '0', 10) + 1).padStart(4, '0')}`;
     }
   } catch {
-    const all = await getDocs(collection(firestore, collName));
+    const all = await getDocs(collection(getFirebaseFirestore(), collName));
     return `${p}${String(all.size + 1).padStart(4, '0')}`;
   }
   return `${p}0001`;
@@ -72,7 +72,7 @@ async function getEbmrOrThrow(id: string): Promise<EbmrRecord> {
 }
 
 async function updateBatchStatus(id: string, status: string, extra: Partial<EbmrRecord> = {}) {
-  await updateDoc(doc(firestore, EBMR_COLLECTIONS.records, id), { batch_status: status, updated_at: now(), ...extra });
+  await updateDoc(doc(getFirebaseFirestore(), EBMR_COLLECTIONS.records, id), { batch_status: status, updated_at: now(), ...extra });
 }
 
 // ─── eBMR Record ─────────────────────────────────────────────────────────────
@@ -111,13 +111,13 @@ export async function createEbmr(input: EbmrCreateInput, actor: EbmrActor): Prom
     created_at: timestamp,
     updated_at: timestamp,
   };
-  const refDoc = await addDoc(collection(firestore, EBMR_COLLECTIONS.records), record);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), EBMR_COLLECTIONS.records), record);
   await auditLog(actor, 'CREATE', refDoc.id, null, record);
   return { id: refDoc.id, ...record };
 }
 
 export async function getEbmrById(id: string): Promise<EbmrRecord | null> {
-  const snap = await getDoc(doc(firestore, EBMR_COLLECTIONS.records, id));
+  const snap = await getDoc(doc(getFirebaseFirestore(), EBMR_COLLECTIONS.records, id));
   if (!snap.exists()) return null;
   return { id: snap.id, ...snap.data() } as EbmrRecord;
 }
@@ -125,7 +125,7 @@ export async function getEbmrById(id: string): Promise<EbmrRecord | null> {
 export async function listEbmr(filters?: EbmrFilters): Promise<EbmrRecord[]> {
   const constraints: QueryConstraint[] = [orderBy('updated_at', 'desc')];
   if (filters?.batch_status) constraints.unshift(where('batch_status', '==', filters.batch_status));
-  const snap = await getDocs(query(collection(firestore, EBMR_COLLECTIONS.records), ...constraints));
+  const snap = await getDocs(query(collection(getFirebaseFirestore(), EBMR_COLLECTIONS.records), ...constraints));
   let rows = snap.docs.map((d) => ({ id: d.id, ...d.data() } as EbmrRecord));
   if (filters?.search) {
     const s = filters.search.toLowerCase();
@@ -140,7 +140,7 @@ export async function listEbmr(filters?: EbmrFilters): Promise<EbmrRecord[]> {
 export async function updateEbmr(id: string, input: Partial<EbmrCreateInput>, actor: EbmrActor): Promise<EbmrRecord> {
   const existing = await getEbmrOrThrow(id);
   const updates = { ...input, updated_at: now() };
-  await updateDoc(doc(firestore, EBMR_COLLECTIONS.records, id), updates);
+  await updateDoc(doc(getFirebaseFirestore(), EBMR_COLLECTIONS.records, id), updates);
   await auditLog(actor, 'UPDATE', id, existing, updates);
   return { ...(await getEbmrById(id))! };
 }
@@ -172,7 +172,7 @@ export async function saveLineClearance(input: LineClearanceInput, actor: EbmrAc
     remarks: input.remarks,
     created_at: now(),
   };
-  const refDoc = await addDoc(collection(firestore, EBMR_COLLECTIONS.lineClearance), record);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), EBMR_COLLECTIONS.lineClearance), record);
   await auditLog(actor, 'LINE_CLEARANCE', refDoc.id, null, record);
 
   if (input.qa_verified) {
@@ -184,7 +184,7 @@ export async function saveLineClearance(input: LineClearanceInput, actor: EbmrAc
 
 export async function listLineClearance(ebmrDocId: string): Promise<LineClearanceRecord[]> {
   const snap = await getDocs(query(
-    collection(firestore, EBMR_COLLECTIONS.lineClearance),
+    collection(getFirebaseFirestore(), EBMR_COLLECTIONS.lineClearance),
     where('ebmr_doc_id', '==', ebmrDocId), orderBy('created_at', 'desc'),
   ));
   return snap.docs.map((d) => ({ id: d.id, ...d.data() } as LineClearanceRecord));
@@ -226,7 +226,7 @@ export async function saveEbmrDispensing(input: EbmrDispensingInput, actor: Ebmr
     remarks: input.remarks,
     created_at: now(),
   };
-  const refDoc = await addDoc(collection(firestore, EBMR_COLLECTIONS.dispensing), record);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), EBMR_COLLECTIONS.dispensing), record);
   await auditLog(actor, 'DISPENSING', refDoc.id, null, record);
 
   const allDisp = await listEbmrDispensing(input.ebmr_doc_id);
@@ -239,7 +239,7 @@ export async function saveEbmrDispensing(input: EbmrDispensingInput, actor: Ebmr
 
 export async function listEbmrDispensing(ebmrDocId: string): Promise<EbmrDispensingRecord[]> {
   const snap = await getDocs(query(
-    collection(firestore, EBMR_COLLECTIONS.dispensing),
+    collection(getFirebaseFirestore(), EBMR_COLLECTIONS.dispensing),
     where('ebmr_doc_id', '==', ebmrDocId), orderBy('created_at', 'desc'),
   ));
   return snap.docs.map((d) => ({ id: d.id, ...d.data() } as EbmrDispensingRecord));
@@ -273,7 +273,7 @@ export async function saveManufacturingStep(input: ManufacturingStepInput, actor
     remarks: input.remarks,
     created_at: now(),
   };
-  const refDoc = await addDoc(collection(firestore, EBMR_COLLECTIONS.manufacturingSteps), record);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), EBMR_COLLECTIONS.manufacturingSteps), record);
   await auditLog(actor, 'MFG_STEP', refDoc.id, null, record);
   await updateBatchStatus(input.ebmr_doc_id, 'Manufacturing In Progress');
   return { id: refDoc.id, ...record };
@@ -281,7 +281,7 @@ export async function saveManufacturingStep(input: ManufacturingStepInput, actor
 
 export async function listManufacturingSteps(ebmrDocId: string): Promise<ManufacturingStepRecord[]> {
   const snap = await getDocs(query(
-    collection(firestore, EBMR_COLLECTIONS.manufacturingSteps),
+    collection(getFirebaseFirestore(), EBMR_COLLECTIONS.manufacturingSteps),
     where('ebmr_doc_id', '==', ebmrDocId), orderBy('step_number', 'asc'),
   ));
   return snap.docs.map((d) => ({ id: d.id, ...d.data() } as ManufacturingStepRecord));
@@ -321,14 +321,14 @@ export async function saveEquipmentUsage(input: EquipmentUsageInput, actor: Ebmr
     remarks: input.remarks,
     created_at: now(),
   };
-  const refDoc = await addDoc(collection(firestore, EBMR_COLLECTIONS.equipmentUsage), record);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), EBMR_COLLECTIONS.equipmentUsage), record);
   await auditLog(actor, 'EQUIPMENT_USAGE', refDoc.id, null, record);
   return { id: refDoc.id, ...record };
 }
 
 export async function listEquipmentUsage(ebmrDocId: string): Promise<EquipmentUsageRecord[]> {
   const snap = await getDocs(query(
-    collection(firestore, EBMR_COLLECTIONS.equipmentUsage),
+    collection(getFirebaseFirestore(), EBMR_COLLECTIONS.equipmentUsage),
     where('ebmr_doc_id', '==', ebmrDocId), orderBy('created_at', 'desc'),
   ));
   return snap.docs.map((d) => ({ id: d.id, ...d.data() } as EquipmentUsageRecord));
@@ -340,7 +340,7 @@ async function linkDeviation(ebmrDocId: string, devId: string) {
   const ebmr = await getEbmrById(ebmrDocId);
   if (!ebmr) return;
   const ids = Array.from(new Set([...ebmr.linked_deviation_ids, devId]));
-  await updateDoc(doc(firestore, EBMR_COLLECTIONS.records, ebmrDocId), { linked_deviation_ids: ids, updated_at: now() });
+  await updateDoc(doc(getFirebaseFirestore(), EBMR_COLLECTIONS.records, ebmrDocId), { linked_deviation_ids: ids, updated_at: now() });
 }
 
 async function createDeviationFromCpp(ebmr: EbmrRecord, cpp: CppRecordInput, actor: EbmrActor) {
@@ -394,14 +394,14 @@ export async function saveCppRecord(input: CppRecordInput, actor: EbmrActor): Pr
     remarks: input.remarks,
     created_at: now(),
   };
-  const refDoc = await addDoc(collection(firestore, EBMR_COLLECTIONS.cppRecords), record);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), EBMR_COLLECTIONS.cppRecords), record);
   await auditLog(actor, 'CPP', refDoc.id, null, record);
   return { id: refDoc.id, ...record };
 }
 
 export async function listCppRecords(ebmrDocId: string): Promise<CppRecord[]> {
   const snap = await getDocs(query(
-    collection(firestore, EBMR_COLLECTIONS.cppRecords),
+    collection(getFirebaseFirestore(), EBMR_COLLECTIONS.cppRecords),
     where('ebmr_doc_id', '==', ebmrDocId), orderBy('recorded_time', 'desc'),
   ));
   return snap.docs.map((d) => ({ id: d.id, ...d.data() } as CppRecord));
@@ -444,7 +444,7 @@ export async function saveIpcCheck(input: IpcCheckInput, actor: EbmrActor): Prom
         refNumber = oos.oos_number;
         const ebmr2 = await getEbmrById(input.ebmr_doc_id);
         if (ebmr2) {
-          await updateDoc(doc(firestore, EBMR_COLLECTIONS.records, input.ebmr_doc_id), {
+          await updateDoc(doc(getFirebaseFirestore(), EBMR_COLLECTIONS.records, input.ebmr_doc_id), {
             linked_oos_ids: Array.from(new Set([...ebmr2.linked_oos_ids, oos.id])), updated_at: now(),
           });
         }
@@ -480,7 +480,7 @@ export async function saveIpcCheck(input: IpcCheckInput, actor: EbmrActor): Prom
     remarks: input.remarks,
     created_at: now(),
   };
-  const refDoc = await addDoc(collection(firestore, EBMR_COLLECTIONS.ipcChecks), record);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), EBMR_COLLECTIONS.ipcChecks), record);
   await auditLog(actor, 'IPC', refDoc.id, null, record);
 
   const allIpc = await listIpcChecks(input.ebmr_doc_id);
@@ -490,24 +490,24 @@ export async function saveIpcCheck(input: IpcCheckInput, actor: EbmrActor): Prom
 
 export async function listIpcChecks(ebmrDocId: string): Promise<IpcCheckRecord[]> {
   const snap = await getDocs(query(
-    collection(firestore, EBMR_COLLECTIONS.ipcChecks),
+    collection(getFirebaseFirestore(), EBMR_COLLECTIONS.ipcChecks),
     where('ebmr_doc_id', '==', ebmrDocId), orderBy('check_datetime', 'desc'),
   ));
   return snap.docs.map((d) => ({ id: d.id, ...d.data() } as IpcCheckRecord));
 }
 
 export async function listAllCppRecords(): Promise<CppRecord[]> {
-  const snap = await getDocs(query(collection(firestore, EBMR_COLLECTIONS.cppRecords), orderBy('recorded_time', 'desc')));
+  const snap = await getDocs(query(collection(getFirebaseFirestore(), EBMR_COLLECTIONS.cppRecords), orderBy('recorded_time', 'desc')));
   return snap.docs.map((d) => ({ id: d.id, ...d.data() } as CppRecord));
 }
 
 export async function listAllIpcChecks(): Promise<IpcCheckRecord[]> {
-  const snap = await getDocs(query(collection(firestore, EBMR_COLLECTIONS.ipcChecks), orderBy('check_datetime', 'desc')));
+  const snap = await getDocs(query(collection(getFirebaseFirestore(), EBMR_COLLECTIONS.ipcChecks), orderBy('check_datetime', 'desc')));
   return snap.docs.map((d) => ({ id: d.id, ...d.data() } as IpcCheckRecord));
 }
 
 export async function listAllManufacturingSteps(): Promise<ManufacturingStepRecord[]> {
-  const snap = await getDocs(query(collection(firestore, EBMR_COLLECTIONS.manufacturingSteps), orderBy('created_at', 'desc')));
+  const snap = await getDocs(query(collection(getFirebaseFirestore(), EBMR_COLLECTIONS.manufacturingSteps), orderBy('created_at', 'desc')));
   return snap.docs.map((d) => ({ id: d.id, ...d.data() } as ManufacturingStepRecord));
 }
 
@@ -525,11 +525,11 @@ export async function saveEbmrReview(input: EbmrReviewInput, actor: EbmrActor): 
     comments: input.comments,
     created_at: now(),
   };
-  const refDoc = await addDoc(collection(firestore, EBMR_COLLECTIONS.reviews), record);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), EBMR_COLLECTIONS.reviews), record);
   await auditLog(actor, 'REVIEW', refDoc.id, null, record);
 
   const statusMap: Record<string, string> = { Approved: 'Approved', Rejected: 'Rejected', Hold: 'Hold' };
-  await updateDoc(doc(firestore, EBMR_COLLECTIONS.records, input.ebmr_doc_id), {
+  await updateDoc(doc(getFirebaseFirestore(), EBMR_COLLECTIONS.records, input.ebmr_doc_id), {
     batch_status: statusMap[input.decision] || 'QA Review',
     reviewed_by: actor.id,
     reviewed_by_name: actor.name,
@@ -540,7 +540,7 @@ export async function saveEbmrReview(input: EbmrReviewInput, actor: EbmrActor): 
 
 export async function listEbmrReviews(ebmrDocId: string): Promise<EbmrReviewRecord[]> {
   const snap = await getDocs(query(
-    collection(firestore, EBMR_COLLECTIONS.reviews),
+    collection(getFirebaseFirestore(), EBMR_COLLECTIONS.reviews),
     where('ebmr_doc_id', '==', ebmrDocId), orderBy('created_at', 'desc'),
   ));
   return snap.docs.map((d) => ({ id: d.id, ...d.data() } as EbmrReviewRecord));
@@ -564,17 +564,17 @@ export async function releaseEbmr(input: EbmrReleaseInput, actor: EbmrActor): Pr
     remarks: input.remarks,
     created_at: now(),
   };
-  const refDoc = await addDoc(collection(firestore, EBMR_COLLECTIONS.release), record);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), EBMR_COLLECTIONS.release), record);
   await auditLog(actor, 'RELEASE', refDoc.id, null, record);
 
   if (input.decision === 'Released') {
-    await updateDoc(doc(firestore, EBMR_COLLECTIONS.records, input.ebmr_doc_id), {
+    await updateDoc(doc(getFirebaseFirestore(), EBMR_COLLECTIONS.records, input.ebmr_doc_id), {
       batch_status: 'Released', is_locked: true,
       approved_by: actor.id, approved_by_name: actor.name, updated_at: now(),
     });
     await notify('Batch Released', `${ebmr.product_name} batch ${ebmr.batch_number} released`, input.ebmr_doc_id, ['production_manager', 'qa_manager']);
   } else {
-    await updateDoc(doc(firestore, EBMR_COLLECTIONS.records, input.ebmr_doc_id), {
+    await updateDoc(doc(getFirebaseFirestore(), EBMR_COLLECTIONS.records, input.ebmr_doc_id), {
       batch_status: 'Rejected', updated_at: now(),
     });
   }
@@ -583,7 +583,7 @@ export async function releaseEbmr(input: EbmrReleaseInput, actor: EbmrActor): Pr
 
 export async function listEbmrReleases(ebmrDocId: string): Promise<EbmrReleaseRecord[]> {
   const snap = await getDocs(query(
-    collection(firestore, EBMR_COLLECTIONS.release),
+    collection(getFirebaseFirestore(), EBMR_COLLECTIONS.release),
     where('ebmr_doc_id', '==', ebmrDocId), orderBy('created_at', 'desc'),
   ));
   return snap.docs.map((d) => ({ id: d.id, ...d.data() } as EbmrReleaseRecord));
@@ -594,21 +594,21 @@ export async function listEbmrReleases(ebmrDocId: string): Promise<EbmrReleaseRe
 export async function uploadEbmrAttachment(ebmrDocId: string, file: File, category: string, actor: EbmrActor) {
   await getEbmrOrThrow(ebmrDocId);
   const path = `ebmr/${ebmrDocId}/${Date.now()}_${file.name}`;
-  const storageRef = ref(storage, path);
+  const storageRef = ref(getFirebaseStorage(), path);
   await uploadBytes(storageRef, file);
   const downloadUrl = await getDownloadURL(storageRef);
   const att: Omit<EbmrAttachment, 'id'> = {
     ebmr_doc_id: ebmrDocId, file_name: file.name, file_type: file.type, category,
     download_url: downloadUrl, uploaded_by: actor.id, uploaded_by_name: actor.name, uploaded_at: now(),
   };
-  const refDoc = await addDoc(collection(firestore, EBMR_COLLECTIONS.attachments), att);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), EBMR_COLLECTIONS.attachments), att);
   await auditLog(actor, 'ATTACHMENT', refDoc.id, null, att);
   return { id: refDoc.id, ...att };
 }
 
 export async function getEbmrAttachments(ebmrDocId: string): Promise<EbmrAttachment[]> {
   const snap = await getDocs(query(
-    collection(firestore, EBMR_COLLECTIONS.attachments),
+    collection(getFirebaseFirestore(), EBMR_COLLECTIONS.attachments),
     where('ebmr_doc_id', '==', ebmrDocId), orderBy('uploaded_at', 'desc'),
   ));
   return snap.docs.map((d) => ({ id: d.id, ...d.data() } as EbmrAttachment));
@@ -617,7 +617,7 @@ export async function getEbmrAttachments(ebmrDocId: string): Promise<EbmrAttachm
 export async function getAuditLogsForEbmr(ebmrDocId: string): Promise<Record<string, unknown>[]> {
   try {
     const snap = await getDocs(query(
-      collection(firestore, EBMR_COLLECTIONS.auditLogs),
+      collection(getFirebaseFirestore(), EBMR_COLLECTIONS.auditLogs),
       where('recordId', '==', ebmrDocId), orderBy('timestamp', 'desc'), limit(50),
     ));
     return snap.docs.map((d) => d.data());

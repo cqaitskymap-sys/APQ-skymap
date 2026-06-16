@@ -1,7 +1,12 @@
+import { ProcessCapabilityAccessGuard } from '@/components/cpv/process-capability/process-capability-access-guard';
+import { ProcessCapabilityPage } from '@/components/cpv/process-capability/process-capability-page';
+
 export const dynamic = 'force-dynamic';
 
-import { LazyCapabilityWorkspace } from '@/lib/lazy-cpv';
-
-export default function Page() {
-  return <LazyCapabilityWorkspace />;
+export default function ProcessCapabilityRoutePage() {
+  return (
+    <ProcessCapabilityAccessGuard>
+      <ProcessCapabilityPage />
+    </ProcessCapabilityAccessGuard>
+  );
 }

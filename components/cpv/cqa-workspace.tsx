@@ -16,6 +16,7 @@ import {
 } from '@/lib/cpv';
 import { buildMonthlyCqaReport, cqaMonthlyTrendData, cqaParameterTrendData } from '@/lib/cpv-cqa-report';
 import { createCqa, listCpvRecords, loadCppBatches } from '@/lib/cpv-service';
+import { isCpvProductActiveForEntry } from '@/lib/cpv-product-master-service';
 import { resolveCqaParameterSpec } from '@/lib/cpv-config-service';
 import { useCpvConfig } from '@/hooks/use-cpv-config';
 import { downloadCsv, printPage } from '@/lib/export-utils';
@@ -223,6 +224,11 @@ export function CqaWorkspace() {
 
   const submit = form.handleSubmit(async (values) => {
     try {
+      const active = await isCpvProductActiveForEntry(values.productName);
+      if (!active) {
+        toast.error('This CPV product is inactive. New CQA data entry is not allowed.');
+        return;
+      }
       await createCqa(values, actor);
       toast.success('CQA result saved — auto-linked to batch and PQR data');
       setEntryOpen(false);

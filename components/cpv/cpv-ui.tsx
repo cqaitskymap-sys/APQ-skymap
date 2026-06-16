@@ -63,14 +63,20 @@ export function KpiCard({
 
 export function StatusBadge({ status }: { status: string }) {
   const normalized = status.toLowerCase();
-  const complies = ['complies', 'pass', 'excellent', 'low', 'stable', 'in control'].includes(normalized);
-  const warning = ['oot', 'acceptable', 'medium', 'needs improvement', 'insufficient data', 'high', 'under review'].includes(normalized);
-  const classes = complies
-    ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-    : warning
-      ? 'border-amber-200 bg-amber-50 text-amber-700'
-      : 'border-red-200 bg-red-50 text-red-700';
-  const Icon = complies ? CheckCircle2 : warning ? AlertTriangle : ShieldAlert;
+  const complies = ['complies', 'pass', 'excellent', 'low', 'stable', 'in control', 'approved', 'closed'].includes(normalized);
+  const critical = normalized === 'critical';
+  const pending = normalized.includes('pending') || normalized === 'under review' || normalized === 'in review';
+  const warning = !critical && !pending && ['oot', 'acceptable', 'medium', 'needs improvement', 'insufficient data', 'high'].includes(normalized);
+  const classes = critical
+    ? 'border-red-300 bg-red-900/10 text-red-900 dark:text-red-300'
+    : complies
+      ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+      : pending
+        ? 'border-yellow-200 bg-yellow-50 text-yellow-800'
+        : warning
+          ? 'border-amber-200 bg-amber-50 text-amber-700'
+          : 'border-red-200 bg-red-50 text-red-700';
+  const Icon = complies ? CheckCircle2 : critical || !warning && !pending ? ShieldAlert : AlertTriangle;
   return (
     <Badge variant="outline" className={cn('gap-1 whitespace-nowrap', classes)}>
       <Icon className="h-3 w-3" />

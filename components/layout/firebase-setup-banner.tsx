@@ -1,10 +1,20 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { isDemoAuthEnabled, shouldUseDemoAuth } from '@/lib/demo-auth-config';
 import { isFirebaseConfigured, getFirebaseSetupMessage } from '@/lib/firebase';
 import { AlertTriangle, Info } from 'lucide-react';
 
 export function FirebaseSetupBanner() {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Defer env-dependent UI until after hydration — server/client env reads can diverge in dev.
+  if (!mounted) return null;
+
   if (shouldUseDemoAuth()) {
     const isExplicitDemo = isDemoAuthEnabled();
     return (

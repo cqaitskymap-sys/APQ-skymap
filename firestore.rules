@@ -130,6 +130,12 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    match /esign_records/{recordId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update, delete: if false;
+    }
+
     match /cpv_audit_trail/{logId} {
       allow read: if isAuthenticated();
       allow create: if isNotReadOnly();

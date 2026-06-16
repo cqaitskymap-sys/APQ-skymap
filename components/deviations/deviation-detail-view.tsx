@@ -7,7 +7,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
 import Link from 'next/link';
 import {
-  ArrowLeft, Send, UserPlus, Link2, CheckCircle, XCircle, Upload, Trash2, Printer, Lock,
+  ArrowLeft, Send, UserPlus, CheckCircle, XCircle, Upload, Trash2, Printer, Lock,
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -19,16 +19,17 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { DeviationStatusBadge, DeviationCriticalityBadge } from './deviation-sub-nav';
 import { DeviationTimeline, DeviationPdfDocument } from './deviation-pdf-document';
-import { DeviationForm } from './deviation-form';
+import { DeviationAuditTimeline } from './audit-trail/deviation-audit-timeline';
+import { DeviationForm, mapRecordToFormInput, mapFormInputToRecord } from './deviation-form';
 import {
-  investigationSchema, impactAssessmentSchema, approvalSchema, assignInvestigatorSchema,
-  type InvestigationInput, type ImpactAssessmentInput, type ApprovalInput,
+  investigationSchema, assignInvestigatorSchema,
+  type InvestigationInput,
 } from '@/lib/deviation-schemas';
 import { RCA_METHODS } from '@/lib/deviation-types';
 import {
   getDeviationById, getInvestigation, getImpactAssessment, getApprovals, getAttachments,
-  getAuditLogsForDeviation, saveInvestigation, saveImpactAssessment, submitApproval,
-  assignInvestigator, linkCapa, createCapaFromDeviation, closeDeviation, updateDeviation,
+  getAuditLogsForDeviation, saveInvestigation,
+  assignInvestigator, updateDeviation,
   submitDeviation, uploadAttachment, deleteAttachment, canUserAccessDeviation,
 } from '@/lib/deviation-service';
 import type {
@@ -54,7 +55,6 @@ export function DeviationDetailView({ id, defaultTab = 'overview' }: DeviationDe
   const [attachments, setAttachments] = useState<DeviationAttachment[]>([]);
   const [auditLogs, setAuditLogs] = useState<Record<string, unknown>[]>([]);
   const [loading, setLoading] = useState(true);
-  const [capaNumber, setCapaNumber] = useState('');
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -119,11 +119,10 @@ export function DeviationDetailView({ id, defaultTab = 'overview' }: DeviationDe
               catch (e) { toast.error(e instanceof Error ? e.message : 'Submit failed'); }
             }}><Send className="h-4 w-4" />Submit</Button>
           )}
-          {(record.status === 'approved') && canClose && (
-            <Button variant="outline" className="gap-1" onClick={async () => {
-              try { await closeDeviation(id, actor); toast.success('Deviation closed'); refresh(); }
-              catch (e) { toast.error(e instanceof Error ? e.message : 'Close failed'); }
-            }}><Lock className="h-4 w-4" />Close</Button>
+          {(record.status === 'approved' || record.status === 'qa_review') && canClose && (
+            <Link href={`/qms/deviation/${id}/closure`}>
+              <Button variant="outline" className="gap-1"><Lock className="h-4 w-4" />Closure Module</Button>
+            </Link>
           )}
           <Button variant="outline" className="gap-1" onClick={() => printPage()}><Printer className="h-4 w-4" />Print PDF</Button>
         </div>
@@ -131,8 +130,8 @@ export function DeviationDetailView({ id, defaultTab = 'overview' }: DeviationDe
 
       <Tabs defaultValue={defaultTab} className="space-y-4">
         <TabsList className="flex flex-wrap h-auto gap-1">
-          {['overview', 'investigation', 'impact', 'capa', 'attachments', 'approval', 'audit'].map((t) => (
-            <TabsTrigger key={t} value={t} className="capitalize">{t === 'impact' ? 'Impact Assessment' : t === 'audit' ? 'Audit Trail' : t === 'capa' ? 'CAPA' : t === 'approval' ? 'Approval History' : t}</TabsTrigger>
+          {['overview', 'investigation', 'impact', 'capa', 'attachments', 'approval', 'closure', 'audit'].map((t) => (
+            <TabsTrigger key={t} value={t} className="capitalize">{t === 'impact' ? 'Impact Assessment' : t === 'audit' ? 'Audit Trail' : t === 'capa' ? 'CAPA' : t === 'approval' ? 'Approval History' : t === 'closure' ? 'Closure' : t}</TabsTrigger>
           ))}
         </TabsList>
 
@@ -141,11 +140,11 @@ export function DeviationDetailView({ id, defaultTab = 'overview' }: DeviationDe
             <Card><CardHeader><CardTitle>Edit Draft</CardTitle></CardHeader>
               <CardContent>
                 <DeviationForm
-                  defaultValues={record as unknown as Parameters<typeof DeviationForm>[0]['defaultValues']}
+                  defaultValues={mapRecordToFormInput(record as unknown as Record<string, unknown>)}
                   submitLabel="Update Draft"
                   onSubmit={async (data) => {
                     try {
-                      await updateDeviation(id, data as Partial<DeviationRecord>, actor);
+                      await updateDeviation(id, mapFormInputToRecord(data), actor);
                       toast.success('Draft updated'); refresh();
                     } catch (e) { toast.error(e instanceof Error ? e.message : 'Update failed'); }
                   }}
@@ -158,6 +157,14 @@ export function DeviationDetailView({ id, defaultTab = 'overview' }: DeviationDe
         </TabsContent>
 
         <TabsContent value="investigation">
+          <Card className="mb-4 border-blue-200 bg-blue-50/40">
+            <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm">Use the full investigation workspace for RCA, impact assessment, CAPA linkage, and QA review.</p>
+              <Link href={`/qms/deviation/${id}/investigation`}>
+                <Button className="bg-blue-600 hover:bg-blue-700">Open Investigation Module</Button>
+              </Link>
+            </CardContent>
+          </Card>
           <InvestigationPanel
             deviationId={id} record={record} investigation={investigation}
             actor={actor} canInvestigate={canInvestigate} onSaved={refresh}
@@ -165,14 +172,27 @@ export function DeviationDetailView({ id, defaultTab = 'overview' }: DeviationDe
         </TabsContent>
 
         <TabsContent value="impact">
-          <ImpactPanel deviationId={id} impact={impact} actor={actor} canInvestigate={canInvestigate} onSaved={refresh} />
+          <Card className="mb-4 border-blue-200 bg-blue-50/40">
+            <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm">Use the full impact assessment workspace for GMP impact checklist, risk scoring, CAPA recommendation, and QA review.</p>
+              <Link href={`/qms/deviation/${id}/impact-assessment`}>
+                <Button className="bg-blue-600 hover:bg-blue-700">Open Impact Assessment Module</Button>
+              </Link>
+            </CardContent>
+          </Card>
+          <ImpactSummaryPanel impact={impact} record={record} />
         </TabsContent>
 
         <TabsContent value="capa">
-          <CapaPanel
-            record={record} capaNumber={capaNumber} setCapaNumber={setCapaNumber}
-            actor={actor} onSaved={refresh}
-          />
+          <Card className="mb-4 border-blue-200 bg-blue-50/40">
+            <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm">Use the full CAPA link workspace to create, link, track effectiveness, and review CAPA actions.</p>
+              <Link href={`/qms/deviation/${id}/capa`}>
+                <Button className="bg-blue-600 hover:bg-blue-700">Open CAPA Link Module</Button>
+              </Link>
+            </CardContent>
+          </Card>
+          <CapaSummaryPanel record={record} />
         </TabsContent>
 
         <TabsContent value="attachments">
@@ -183,15 +203,73 @@ export function DeviationDetailView({ id, defaultTab = 'overview' }: DeviationDe
         </TabsContent>
 
         <TabsContent value="approval">
-          <ApprovalPanel
-            deviationId={id} record={record} approvals={approvals}
-            actor={actor} canApprove={canApprove} onSaved={refresh}
-          />
+          <Card className="mb-4 border-blue-200 bg-blue-50/40">
+            <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm">Use the full approval workflow for GMP review, e-signature, escalation, and final approval.</p>
+              <Link href={`/qms/deviation/${id}/approval`}>
+                <Button className="bg-blue-600 hover:bg-blue-700">Open Approval Workflow</Button>
+              </Link>
+            </CardContent>
+          </Card>
+          <ApprovalSummaryPanel record={record} approvals={approvals} />
+        </TabsContent>
+
+        <TabsContent value="closure">
+          <Card className="mb-4 border-blue-200 bg-blue-50/40">
+            <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm">Use the closure workspace for pre-closure checklist, QA review, e-signature, and GMP-compliant deviation closure.</p>
+              <Link href={`/qms/deviation/${id}/closure`}>
+                <Button className="bg-blue-600 hover:bg-blue-700">Open Closure Module</Button>
+              </Link>
+            </CardContent>
+          </Card>
+          <Card><CardContent className="p-4 text-sm">
+            <p className="text-xs text-muted-foreground">Status</p>
+            <p className="font-medium capitalize">{record.status === 'closed' ? 'Closed — read only' : record.status.replace(/_/g, ' ')}</p>
+            {record.actual_closure_date && <p className="text-xs text-muted-foreground mt-2">Closed on {record.actual_closure_date}</p>}
+          </CardContent></Card>
         </TabsContent>
 
         <TabsContent value="audit">
-          <Card><CardHeader><CardTitle>Audit Trail</CardTitle><CardDescription>21 CFR Part 11 compliant activity log</CardDescription></CardHeader>
-            <CardContent><DeviationTimeline events={timeline} /></CardContent>
+          <Card>
+            <CardHeader className="flex flex-row items-start justify-between gap-4">
+              <div>
+                <CardTitle>Audit Trail</CardTitle>
+                <CardDescription>21 CFR Part 11 compliant read-only activity log</CardDescription>
+              </div>
+              <Link href={`/qms/deviation/${id}/audit-trail`}>
+                <Button variant="outline" size="sm">Full Audit Trail</Button>
+              </Link>
+            </CardHeader>
+            <CardContent>
+              {auditLogs.length ? (
+                <DeviationAuditTimeline
+                  entries={auditLogs.map((log) => ({
+                    id: String(log.id || ''),
+                    audit_id: String(log.auditId || log.id || ''),
+                    deviation_id: id,
+                    deviation_number: record.deviation_number,
+                    module_name: String(log.moduleName || log.module || 'Deviation'),
+                    action_type: String(log.actionType || log.action || 'Updated'),
+                    action_description: String(log.actionDescription || log.action || ''),
+                    field_name: String(log.fieldName || ''),
+                    old_value: String(log.oldValue || ''),
+                    new_value: String(log.newValue || ''),
+                    changed_by: String(log.userId || ''),
+                    changed_by_name: String(log.userName || ''),
+                    changed_by_role: String(log.changedByRole || ''),
+                    department: String(log.department || ''),
+                    reason: String(log.reason || ''),
+                    ip_address: String(log.ipAddress || ''),
+                    device_info: String(log.device || log.deviceInfo || ''),
+                    date_time: String(log.dateTime || ''),
+                    status: String(log.status || 'Success'),
+                  }))}
+                />
+              ) : (
+                <DeviationTimeline events={timeline} />
+              )}
+            </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
@@ -242,9 +320,9 @@ function InvestigationPanel({
   const form = useForm<InvestigationInput>({
     resolver: zodResolver(investigationSchema),
     defaultValues: {
-      rca_method: (investigation?.rca_method as InvestigationInput['rca_method']) || '5 Why',
-      root_cause_details: investigation?.root_cause_details || '',
       investigation_summary: investigation?.investigation_summary || '',
+      root_cause_details: investigation?.root_cause_details || '',
+      rca_method: (investigation?.rca_method as InvestigationInput['rca_method']) || '5 Why',
     },
   });
 
@@ -301,96 +379,55 @@ function InvestigationPanel({
   );
 }
 
-function ImpactPanel({
-  deviationId, impact, actor, canInvestigate, onSaved,
+function ImpactSummaryPanel({
+  impact, record,
 }: {
-  deviationId: string; impact: DeviationImpactAssessment | null;
-  actor: ReturnType<typeof useDeviationActor>; canInvestigate: boolean; onSaved: () => void;
+  impact: DeviationImpactAssessment | null; record: DeviationRecord;
 }) {
-  const form = useForm<ImpactAssessmentInput>({
-    resolver: zodResolver(impactAssessmentSchema),
-    defaultValues: {
-      impact_summary: impact?.impact_summary || '',
-      batch_impact_details: impact?.batch_impact_details || '',
-      product_quality_impact_details: impact?.product_quality_impact_details || '',
-      patient_safety_impact_details: impact?.patient_safety_impact_details || '',
-      regulatory_impact_details: impact?.regulatory_impact_details || '',
-      capa_required: impact?.capa_required ?? false,
-      capa_justification: impact?.capa_justification || '',
-    },
-  });
-
   return (
-    <Card><CardHeader><CardTitle className="text-base">Impact Assessment</CardTitle>
-      <CardDescription>Product quality impact = Yes mandates CAPA</CardDescription></CardHeader>
-      <CardContent>
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(async (data) => {
-            if (!canInvestigate) { toast.error('No permission'); return; }
-            try {
-              await saveImpactAssessment(deviationId, {
-                ...data,
-                assessed_by: actor.id, assessed_by_name: actor.name,
-                assessed_at: new Date().toISOString(),
-              }, actor);
-              toast.success('Impact assessment saved'); onSaved();
-            } catch (e) { toast.error(e instanceof Error ? e.message : 'Failed'); }
-          })} className="space-y-4">
-            <FormField control={form.control} name="impact_summary" render={({ field }) => (
-              <FormItem><FormLabel>Impact Summary *</FormLabel><FormControl><Textarea rows={3} {...field} disabled={!canInvestigate} /></FormControl><FormMessage /></FormItem>
-            )} />
-            {(['batch_impact_details', 'product_quality_impact_details', 'patient_safety_impact_details', 'regulatory_impact_details'] as const).map((name) => (
-              <FormField key={name} control={form.control} name={name} render={({ field }) => (
-                <FormItem><FormLabel>{name.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}</FormLabel>
-                  <FormControl><Textarea rows={2} {...field} disabled={!canInvestigate} /></FormControl></FormItem>
-              )} />
-            ))}
-            <FormField control={form.control} name="capa_required" render={({ field }) => (
-              <FormItem className="flex items-center gap-3"><FormLabel>CAPA Required?</FormLabel>
-                <FormControl><input type="checkbox" checked={field.value} onChange={field.onChange} disabled={!canInvestigate} className="h-4 w-4" /></FormControl></FormItem>
-            )} />
-            <FormField control={form.control} name="capa_justification" render={({ field }) => (
-              <FormItem><FormLabel>CAPA Justification</FormLabel><FormControl><Textarea rows={2} {...field} disabled={!canInvestigate} /></FormControl></FormItem>
-            )} />
-            {canInvestigate && <Button type="submit" className="bg-blue-600 hover:bg-blue-700">Save Impact Assessment</Button>}
-          </form>
-        </Form>
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Impact Assessment Summary</CardTitle>
+        <CardDescription>
+          {impact ? `Status: ${impact.status || 'Draft'} — Risk: ${impact.risk_score ?? '—'} (${impact.risk_level || '—'})` : 'No impact assessment recorded yet'}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-3 sm:grid-cols-2 text-sm">
+        {[['Batch Impact', impact?.batch_impact || (record.batch_impacted ? 'Yes' : 'No')],
+          ['Product Quality', impact?.product_quality_impact || (record.product_quality_impacted ? 'Yes' : 'No')],
+          ['Patient Safety', impact?.patient_safety_impact || (record.patient_safety_impacted ? 'Yes' : 'No')],
+          ['CAPA Required', (impact?.capa_required ?? record.capa_required) ? 'Yes' : 'No'],
+          ['Recall Evaluation', impact?.recall_evaluation_required ? 'Yes' : 'No'],
+          ['Assessed By', impact?.assessed_by_name || '—'],
+        ].map(([l, v]) => (
+          <div key={String(l)}><p className="text-xs text-muted-foreground">{l}</p><p className="font-medium">{v}</p></div>
+        ))}
+        {impact?.impact_summary && (
+          <div className="sm:col-span-2"><p className="text-xs text-muted-foreground">Summary</p><p>{impact.impact_summary}</p></div>
+        )}
       </CardContent>
     </Card>
   );
 }
 
-function CapaPanel({
-  record, capaNumber, setCapaNumber, actor, onSaved,
-}: {
-  record: DeviationRecord; capaNumber: string; setCapaNumber: (v: string) => void;
-  actor: ReturnType<typeof useDeviationActor>; onSaved: () => void;
-}) {
+function CapaSummaryPanel({ record }: { record: DeviationRecord }) {
   return (
-    <Card><CardHeader><CardTitle className="text-base">CAPA Link</CardTitle>
-      <CardDescription>Link existing CAPA or create new from deviation</CardDescription></CardHeader>
-      <CardContent className="space-y-4">
-        {record.linked_capa_number ? (
-          <div className="rounded-lg border p-4 bg-green-50 dark:bg-green-950/20">
-            <p className="font-mono font-semibold">{record.linked_capa_number}</p>
-            <Link href="/dashboard/capa" className="text-sm text-blue-600 hover:underline">View in CAPA Module →</Link>
-          </div>
-        ) : (
-          <div className="flex flex-col sm:flex-row gap-3">
-            <Input placeholder="CAPA Number" value={capaNumber} onChange={(e) => setCapaNumber(e.target.value)} className="max-w-xs" />
-            <Button variant="outline" className="gap-1" onClick={async () => {
-              if (!capaNumber) { toast.error('Enter CAPA number'); return; }
-              try { await linkCapa(record.id, capaNumber, null, actor); toast.success('CAPA linked'); onSaved(); }
-              catch (e) { toast.error(e instanceof Error ? e.message : 'Failed'); }
-            }}><Link2 className="h-4 w-4" />Link CAPA</Button>
-            <Button className="bg-blue-600 hover:bg-blue-700 gap-1" onClick={async () => {
-              try { const r = await createCapaFromDeviation(record.id, actor); toast.success(`CAPA ${r.capaNumber} created`); onSaved(); }
-              catch (e) { toast.error(e instanceof Error ? e.message : 'Failed'); }
-            }}>Create CAPA</Button>
-          </div>
-        )}
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">CAPA Link Summary</CardTitle>
+        <CardDescription>
+          {record.linked_capa_number ? `Linked: ${record.linked_capa_number}` : record.capa_required ? 'CAPA required — not yet linked' : 'No CAPA required'}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-3 sm:grid-cols-2 text-sm">
+        {[['CAPA Required', record.capa_required ? 'Yes' : 'No'],
+          ['Linked CAPA', record.linked_capa_number || '—'],
+          ['Deviation Status', record.status.replace(/_/g, ' ')],
+        ].map(([l, v]) => (
+          <div key={String(l)}><p className="text-xs text-muted-foreground">{l}</p><p className="font-medium capitalize">{v}</p></div>
+        ))}
         {record.capa_required && !record.linked_capa_number && (
-          <p className="text-sm text-orange-600">CAPA is mandatory for this deviation.</p>
+          <p className="sm:col-span-2 text-sm text-orange-600">Mandatory CAPA must be linked and closed before deviation closure.</p>
         )}
       </CardContent>
     </Card>
@@ -437,63 +474,28 @@ function AttachmentsPanel({
   );
 }
 
-function ApprovalPanel({
-  deviationId, record, approvals, actor, canApprove, onSaved,
+function ApprovalSummaryPanel({
+  record, approvals,
 }: {
-  deviationId: string; record: DeviationRecord; approvals: DeviationApproval[];
-  actor: ReturnType<typeof useDeviationActor>; canApprove: boolean; onSaved: () => void;
+  record: DeviationRecord; approvals: DeviationApproval[];
 }) {
-  const form = useForm<ApprovalInput>({ resolver: zodResolver(approvalSchema), defaultValues: { decision: 'approved', comments: '', e_signature: '' } });
-  const pendingApproval = ['submitted', 'under_investigation', 'qa_review', 'capa_required'].includes(record.status);
-
+  const pending = approvals.find((a) => ['Pending', 'Escalated'].includes(a.approval_status || ''));
   return (
     <div className="space-y-4">
-      {approvals.map((a) => (
+      {approvals.slice(-3).reverse().map((a) => (
         <Card key={a.id}><CardContent className="p-4 flex flex-wrap items-center justify-between gap-2">
           <div>
-            <p className="font-medium">{a.approver_name} <span className="text-muted-foreground text-sm">({a.approver_role})</span></p>
-            <p className="text-sm">{a.comments}</p>
-            <p className="text-xs text-muted-foreground italic">E-Sig: {a.e_signature}</p>
+            <p className="font-medium">{a.approver_name || a.current_workflow_step} <span className="text-muted-foreground text-sm">({a.approver_role || a.current_role})</span></p>
+            <p className="text-sm">{a.comments || a.rejection_reason || '—'}</p>
           </div>
-          <DeviationStatusBadge status={a.decision} />
+          <DeviationStatusBadge status={a.approval_status || a.decision} />
         </CardContent></Card>
       ))}
-
-      {canApprove && pendingApproval && (
-        <Card><CardHeader><CardTitle className="text-base">Approve / Reject</CardTitle>
-          {requiresHeadQaApproval(record.criticality) && actor.role !== 'head_qa' && (
-            <CardDescription className="text-red-600">Critical deviation — requires Head QA final approval</CardDescription>
-          )}</CardHeader>
-          <CardContent>
-            <Form {...form}>
-              <form onSubmit={form.handleSubmit(async (data) => {
-                try { await submitApproval(deviationId, data, actor); toast.success(data.decision === 'approved' ? 'Approved' : 'Rejected'); onSaved(); form.reset(); }
-                catch (e) { toast.error(e instanceof Error ? e.message : 'Failed'); }
-              })} className="space-y-4">
-                <FormField control={form.control} name="decision" render={({ field }) => (
-                  <FormItem><FormLabel>Decision</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                      <SelectContent>
-                        <SelectItem value="approved">Approve</SelectItem>
-                        <SelectItem value="rejected">Reject</SelectItem>
-                      </SelectContent>
-                    </Select></FormItem>
-                )} />
-                <FormField control={form.control} name="comments" render={({ field }) => (
-                  <FormItem><FormLabel>Comments *</FormLabel><FormControl><Textarea rows={3} {...field} /></FormControl><FormMessage /></FormItem>
-                )} />
-                <FormField control={form.control} name="e_signature" render={({ field }) => (
-                  <FormItem><FormLabel>E-Signature (Type Full Name) *</FormLabel><FormControl><Input {...field} placeholder="Typed signature per 21 CFR Part 11" /></FormControl><FormMessage /></FormItem>
-                )} />
-                <div className="flex gap-2">
-                  <Button type="submit" className="bg-green-600 hover:bg-green-700 gap-1"><CheckCircle className="h-4 w-4" />Submit Decision</Button>
-                </div>
-              </form>
-            </Form>
-          </CardContent>
-        </Card>
-      )}
+      <Card><CardContent className="p-4 text-sm">
+        <p className="text-xs text-muted-foreground">Current Step</p>
+        <p className="font-medium">{pending?.current_workflow_step || (record.status === 'approved' ? 'Final Approval Complete' : '—')}</p>
+        {pending && <p className="text-xs text-muted-foreground mt-1">Pending with: {pending.current_role?.replace(/_/g, ' ')}</p>}
+      </CardContent></Card>
     </div>
   );
 }

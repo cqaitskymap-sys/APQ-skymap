@@ -8,7 +8,7 @@ import {
 import { Activity, AlertTriangle, Save } from 'lucide-react';
 import { addDoc, collection } from 'firebase/firestore';
 import { toast } from 'sonner';
-import { firestore } from '@/lib/firebase';
+import { getFirebaseFirestore } from '@/lib/firebase';
 import {
   CPV_COLLECTIONS, calculateCapability, calculateControlLimits,
 } from '@/lib/cpv';
@@ -38,7 +38,7 @@ export function ProcessCapabilityPage() {
 
   const save = async () => {
     if (result.status === 'Insufficient Data') return toast.error('At least two observations are required');
-    await addDoc(collection(firestore, CPV_COLLECTIONS.capability), {
+    await addDoc(collection(getFirebaseFirestore(), CPV_COLLECTIONS.capability), {
       source, parameter: selectedParameter, lsl, usl, ...result,
       createdAt: new Date().toISOString(), createdBy: user?.uid || 'system',
       createdByName: profile?.full_name || 'System',

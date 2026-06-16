@@ -5,12 +5,21 @@ export const CAPA_COLLECTIONS = {
   approvals: 'capa_approvals',
   attachments: 'capa_attachments',
   sourceLinks: 'capa_source_links',
+  investigations: 'capa_investigations',
+  rootCauseAnalysis: 'capa_root_cause_analysis',
+  correctiveActions: 'capa_corrective_actions',
   auditLogs: 'audit_logs',
   notifications: 'notifications',
   deviations: 'deviations',
   oos: 'oos_records',
   risks: 'cpv_risk_assessment',
   batches: 'batches',
+  products: 'products',
+  complaints: 'complaints',
+  changeControls: 'change_controls',
+  audits: 'audits',
+  departments: 'departments',
+  users: 'users',
 } as const;
 
 export const CAPA_SOURCES = [
@@ -74,6 +83,10 @@ export interface CapaRecord {
   capa_status: CapaStatus | string;
   qa_remarks: string;
   priority: CapaPriority | string;
+  criticality?: string;
+  qa_reviewer?: string;
+  qa_reviewer_name?: string;
+  head_qa_approval_required?: boolean;
   /** Linked source IDs */
   deviation_id: string | null;
   oos_id: string | null;
@@ -167,17 +180,41 @@ export interface CapaFilters {
   priority?: string;
   search?: string;
   due_this_week?: boolean;
+  capa_number?: string;
+  owner?: string;
+  effectiveness_result?: string;
+  date_from?: string;
+  date_to?: string;
+  overdue_only?: boolean;
+  kpi_filter?: string;
+}
+
+export interface CapaActivityEntry {
+  date: string;
+  title: string;
+  description: string;
+  user: string;
+  capa_id?: string;
+  capa_number?: string;
 }
 
 export interface CapaDashboardMetrics {
   total: number;
   open: number;
   closed: number;
+  draft: number;
+  underImplementation: number;
+  effectivenessPending: number;
   overdue: number;
+  critical: number;
+  highPriority: number;
   effective: number;
   notEffective: number;
-  critical: number;
   dueThisWeek: number;
+  deviationLinked: number;
+  oosLinked: number;
+  auditLinked: number;
+  avgClosureDays: number;
 }
 
 export function isCapaClosed(status: string): boolean {
@@ -195,13 +232,19 @@ export function requiresHeadQaApproval(priority: string): boolean {
 import { normalizeRole } from '@/lib/permissions';
 
 export function canUserAccessCapa(role: string): boolean {
-  return Boolean(role);
+  const r = normalizeRole(role);
+  return Boolean(r) && ![''].includes(r);
 }
 
-export function canCreateCapa(role: string): boolean {
-  const r = normalizeRole(role);
-  return ['super_admin', 'admin', 'qa_manager', 'head_qa', 'qc_manager', 'production_manager'].includes(r)
-    || role === 'qa' || role === 'super_admin';
+export function canCreateCapa(role?: string | null): boolean {
+  const r = normalizeRole(role || '');
+  if (['super_admin', 'admin', 'qa_manager', 'head_qa', 'qa', 'qa_executive'].includes(r)) return true;
+  if (['qc_manager', 'qc', 'production_manager', 'production'].includes(r)) return true;
+  return false;
+}
+
+export function canCreateCapaCreate(role?: string | null): boolean {
+  return canCreateCapa(role) && !isCapaReadOnly(role || '');
 }
 
 export function canApproveCapa(role: string): boolean {
@@ -217,3 +260,209 @@ export function canImplementCapa(role: string): boolean {
 export function isCapaReadOnly(role: string): boolean {
   return ['auditor', 'viewer'].includes(role);
 }
+
+export const CAPA_INVESTIGATION_STATUSES = [
+  'draft', 'under_investigation', 'qa_review', 'approved', 'rejected', 'closed',
+] as const;
+
+export const CAPA_RCA_METHODS = [
+  '5 Why Analysis', 'Fishbone Diagram', 'Fault Tree Analysis', 'Human Error Analysis',
+  'Risk Based RCA', 'Brainstorming', 'Other',
+] as const;
+
+export const CAPA_RCA_CATEGORIES = [
+  'People', 'Process', 'Procedure', 'Equipment', 'Material', 'Environment',
+  'Measurement', 'Management', 'Training', 'Software / CSV', 'Other',
+] as const;
+
+export const CAPA_FISHBONE_CATEGORIES = [
+  'Man', 'Machine', 'Method', 'Material', 'Measurement', 'Environment',
+] as const;
+
+export type CapaInvestigationStatus = typeof CAPA_INVESTIGATION_STATUSES[number];
+export type CapaRcaMethod = typeof CAPA_RCA_METHODS[number];
+export type CapaRcaCategory = typeof CAPA_RCA_CATEGORIES[number];
+
+export interface CapaFiveWhyAnalysis {
+  why1: string;
+  why2: string;
+  why3: string;
+  why4: string;
+  why5: string;
+  final_root_cause: string;
+}
+
+export interface CapaFishboneAnalysis {
+  Man: string;
+  Machine: string;
+  Method: string;
+  Material: string;
+  Measurement: string;
+  Environment: string;
+}
+
+export interface CapaInvestigationEvidence {
+  id: string;
+  name: string;
+  description: string;
+  file_url?: string;
+  added_at: string;
+  added_by: string;
+  added_by_name: string;
+}
+
+export interface CapaInvestigation {
+  id: string;
+  investigation_id: string;
+  capa_id: string;
+  capa_number: string;
+  source_type: string;
+  source_reference: string;
+  investigation_date: string;
+  investigator: string;
+  investigator_name: string;
+  department: string;
+  problem_statement: string;
+  observed_issue: string;
+  issue_description: string;
+  immediate_containment_action: string;
+  root_cause_method: CapaRcaMethod | string;
+  root_cause_category: CapaRcaCategory | string;
+  root_cause_description: string;
+  contributing_factors: string;
+  evidence_summary: string;
+  evidence_items: CapaInvestigationEvidence[];
+  risk_assessment_result: string;
+  corrective_action_recommendation: string;
+  preventive_action_recommendation: string;
+  investigation_conclusion: string;
+  qa_review_comments: string;
+  five_why: CapaFiveWhyAnalysis;
+  fishbone: CapaFishboneAnalysis;
+  auto_recommendations: string[];
+  status: CapaInvestigationStatus | string;
+  is_deleted: boolean;
+  created_at: string;
+  updated_at: string;
+  created_by: string;
+  created_by_name: string;
+  updated_by: string;
+  updated_by_name: string;
+}
+
+export interface CapaRootCauseAnalysis {
+  id: string;
+  investigation_id: string;
+  capa_id: string;
+  capa_number: string;
+  root_cause_method: string;
+  root_cause_category: string;
+  root_cause_description: string;
+  contributing_factors: string;
+  five_why: CapaFiveWhyAnalysis;
+  fishbone: CapaFishboneAnalysis;
+  auto_recommendations: string[];
+  status: string;
+  is_deleted: boolean;
+  created_at: string;
+  updated_at: string;
+  created_by: string;
+  created_by_name: string;
+  updated_by: string;
+  updated_by_name: string;
+}
+
+export interface CapaInvestigationDashboardMetrics {
+  total: number;
+  open: number;
+  approved: number;
+  rejected: number;
+  pendingQaReview: number;
+  trainingRelated: number;
+  equipmentRelated: number;
+  processRelated: number;
+}
+
+export interface CapaInvestigationTimelineEntry {
+  action: string;
+  user: string;
+  at: string;
+  detail?: string;
+}
+
+export const CAPA_CA_PRIORITIES = ['low', 'medium', 'high', 'critical'] as const;
+
+export const CAPA_CA_IMPLEMENTATION_STATUSES = [
+  'not_started', 'in_progress', 'implemented', 'delayed', 'rejected',
+] as const;
+
+export const CAPA_CA_ACTION_STATUSES = [
+  'draft', 'assigned', 'under_implementation', 'implemented', 'qa_verification',
+  'approved', 'rejected', 'closed', 'overdue',
+] as const;
+
+export type CapaCaPriority = typeof CAPA_CA_PRIORITIES[number];
+export type CapaCaImplementationStatus = typeof CAPA_CA_IMPLEMENTATION_STATUSES[number];
+export type CapaCaActionStatus = typeof CAPA_CA_ACTION_STATUSES[number];
+
+export interface CapaCorrectiveActionEvidence {
+  id: string;
+  file_name: string;
+  description: string;
+  file_url?: string;
+  uploaded_at: string;
+  uploaded_by: string;
+  uploaded_by_name: string;
+}
+
+export interface CapaCorrectiveAction {
+  id: string;
+  corrective_action_id: string;
+  capa_id: string;
+  capa_number: string;
+  action_number: string;
+  root_cause_reference: string;
+  corrective_action_description: string;
+  action_owner: string;
+  action_owner_name: string;
+  department: string;
+  priority: CapaCaPriority | string;
+  target_completion_date: string;
+  actual_completion_date: string | null;
+  implementation_status: CapaCaImplementationStatus | string;
+  implementation_evidence: string;
+  evidence_items: CapaCorrectiveActionEvidence[];
+  verification_required: boolean;
+  verified_by: string;
+  verified_by_name: string;
+  verification_date: string | null;
+  verification_comments: string;
+  qa_review_comments: string;
+  action_status: CapaCaActionStatus | string;
+  remarks: string;
+  is_deleted: boolean;
+  created_at: string;
+  updated_at: string;
+  created_by: string;
+  created_by_name: string;
+  updated_by: string;
+  updated_by_name: string;
+}
+
+export interface CapaCorrectiveActionDashboardMetrics {
+  total: number;
+  open: number;
+  implemented: number;
+  qaVerificationPending: number;
+  overdue: number;
+  rejected: number;
+  closed: number;
+}
+
+export interface CapaCorrectiveActionTimelineEntry {
+  action: string;
+  user: string;
+  at: string;
+  detail?: string;
+}
+

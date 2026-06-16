@@ -3,9 +3,14 @@ import {
   query, where, orderBy, limit, writeBatch,
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { firestore, storage } from '@/lib/firebase';
+import { getFirebaseFirestore, getFirebaseStorage, isFirebaseConfigured } from '@/lib/firebase';
+import { createAuditLog } from '@/lib/audit-trail';
 import { logAuditEvent } from '@/lib/admin/admin-service';
 import { downloadCsv } from '@/lib/export-utils';
+import {
+  computeExtendedDashboardMetrics,
+  applyOverdueCheck,
+} from '@/lib/deviation-dashboard-metrics';
 import {
   DEVIATION_COLLECTIONS, type DeviationRecord, type DeviationInvestigation,
   type DeviationImpactAssessment, type DeviationApproval, type DeviationAttachment,
@@ -22,20 +27,39 @@ async function audit(
   oldValue: unknown,
   newValue: unknown,
   reason = '',
+  extra?: { fieldName?: string; documentNumber?: string; moduleName?: string },
 ) {
-  await logAuditEvent({
-    userId: actor.id,
-    userName: actor.name,
-    module: 'Deviation',
+  await createAuditLog({
+    moduleName: extra?.moduleName || 'Deviation Management',
+    collectionName: DEVIATION_COLLECTIONS.deviations,
     recordId,
-    action,
-    oldValue: oldValue ? JSON.stringify(oldValue) : '',
-    newValue: newValue ? JSON.stringify(newValue) : '',
+    documentNumber: extra?.documentNumber,
+    actionType: action,
+    actionDescription: reason || `${action.replace(/_/g, ' ')} on deviation`,
+    fieldName: extra?.fieldName,
+    oldValue,
+    newValue,
     reason,
-    ipAddress: typeof window !== 'undefined' ? 'client' : 'server',
-    device: typeof navigator !== 'undefined' ? navigator.userAgent : 'server',
+    user: { id: actor.id, name: actor.name, role: actor.role },
     status: 'Success',
   });
+  try {
+    await logAuditEvent({
+      userId: actor.id,
+      userName: actor.name,
+      module: 'Deviation',
+      recordId,
+      action,
+      oldValue: oldValue ? JSON.stringify(oldValue) : '',
+      newValue: newValue ? JSON.stringify(newValue) : '',
+      reason,
+      ipAddress: typeof window !== 'undefined' ? 'client' : 'server',
+      device: typeof navigator !== 'undefined' ? navigator.userAgent : 'server',
+      status: 'Success',
+    });
+  } catch {
+    // legacy log optional
+  }
 }
 
 async function notify(
@@ -45,7 +69,7 @@ async function notify(
   userId: string,
 ) {
   try {
-    await addDoc(collection(firestore, DEVIATION_COLLECTIONS.notifications), {
+    await addDoc(collection(getFirebaseFirestore(), DEVIATION_COLLECTIONS.notifications), {
       title,
       message,
       module: 'Deviation',
@@ -63,7 +87,7 @@ export async function generateDeviationNumber(): Promise<string> {
   const year = new Date().getFullYear();
   const prefix = `DEV-${year}-`;
   const q = query(
-    collection(firestore, DEVIATION_COLLECTIONS.deviations),
+    collection(getFirebaseFirestore(), DEVIATION_COLLECTIONS.deviations),
     where('deviation_number', '>=', prefix),
     where('deviation_number', '<=', `${prefix}\uf8ff`),
     orderBy('deviation_number', 'desc'),
@@ -77,7 +101,7 @@ export async function generateDeviationNumber(): Promise<string> {
       return `${prefix}${String(seq).padStart(4, '0')}`;
     }
   } catch {
-    const all = await getDocs(collection(firestore, DEVIATION_COLLECTIONS.deviations));
+    const all = await getDocs(collection(getFirebaseFirestore(), DEVIATION_COLLECTIONS.deviations));
     const count = all.size + 1;
     return `${prefix}${String(count).padStart(4, '0')}`;
   }
@@ -88,7 +112,7 @@ async function linkBatchData(batchNumber: string): Promise<{ batch_id: string | 
   if (!batchNumber) return { batch_id: null, pqr_id: null };
   try {
     const q = query(
-      collection(firestore, DEVIATION_COLLECTIONS.batches),
+      collection(getFirebaseFirestore(), DEVIATION_COLLECTIONS.batches),
       where('batch_number', '==', batchNumber),
       limit(1),
     );
@@ -169,7 +193,7 @@ export async function createDeviation(
     updated_at: timestamp,
   };
 
-  const ref = await addDoc(collection(firestore, DEVIATION_COLLECTIONS.deviations), record);
+  const ref = await addDoc(collection(getFirebaseFirestore(), DEVIATION_COLLECTIONS.deviations), record);
   await audit(actor, 'CREATE', ref.id, null, record);
   await notify('New Deviation Created', `${deviationNumber} — ${input.title}`, ref.id, actor.id);
   return { id: ref.id, ...record };
@@ -185,7 +209,7 @@ export async function createDeviationFromCpv(
 ): Promise<DeviationRecord | null> {
   if (!['OOT', 'OOS'].includes(cpvData.status)) return null;
   const existing = await getDocs(query(
-    collection(firestore, DEVIATION_COLLECTIONS.deviations),
+    collection(getFirebaseFirestore(), DEVIATION_COLLECTIONS.deviations),
     where('cpv_record_id', '==', cpvData.id),
     limit(1),
   ));
@@ -216,18 +240,20 @@ export async function createDeviationFromCpv(
 }
 
 export async function getDeviationById(id: string): Promise<DeviationRecord | null> {
-  const snap = await getDoc(doc(firestore, DEVIATION_COLLECTIONS.deviations, id));
+  const snap = await getDoc(doc(getFirebaseFirestore(), DEVIATION_COLLECTIONS.deviations, id));
   if (!snap.exists()) return null;
   return { id: snap.id, ...snap.data() } as DeviationRecord;
 }
 
 export async function listDeviations(filters?: DeviationFilters): Promise<DeviationRecord[]> {
-  const snap = await getDocs(query(
-    collection(firestore, DEVIATION_COLLECTIONS.deviations),
-    orderBy('created_at', 'desc'),
-    limit(1000),
-  ));
-  let results = snap.docs.map((d) => ({ id: d.id, ...d.data() } as DeviationRecord));
+  if (!isFirebaseConfigured()) return [];
+  try {
+    const snap = await getDocs(query(
+      collection(getFirebaseFirestore(), DEVIATION_COLLECTIONS.deviations),
+      orderBy('created_at', 'desc'),
+      limit(1000),
+    ));
+    let results = snap.docs.map((d) => ({ id: d.id, ...d.data() } as DeviationRecord));
 
   if (filters?.status) {
     results = results.filter((r) => r.status === filters.status);
@@ -269,20 +295,25 @@ export async function listDeviations(filters?: DeviationFilters): Promise<Deviat
       r.batch_number.toLowerCase().includes(q),
     );
   }
+  if (filters?.assigned_to) {
+    const q = filters.assigned_to.toLowerCase();
+    results = results.filter((r) => (r.assigned_investigator_name || '').toLowerCase().includes(q));
+  }
+  if (filters?.overdue_only) {
+    results = results.filter((r) => {
+      const checked = applyOverdueCheck(r);
+      return checked.status === 'overdue';
+    });
+  }
 
   return results.map(applyOverdueCheck);
+  } catch (e) {
+    console.error('listDeviations', e);
+    return [];
+  }
 }
 
-function applyOverdueCheck(record: DeviationRecord): DeviationRecord {
-  if (!record.target_closure_date || record.status === 'closed' || record.status === 'approved') {
-    return record;
-  }
-  const today = new Date().toISOString().split('T')[0];
-  if (record.target_closure_date < today && isOpenStatus(record.status)) {
-    return { ...record, status: 'overdue' };
-  }
-  return record;
-}
+export { applyOverdueCheck };
 
 export async function updateDeviation(
   id: string,
@@ -319,7 +350,7 @@ export async function updateDeviation(
     payload.capa_required = computeCapaRequired({ ...existing, ...updates });
   }
 
-  await updateDoc(doc(firestore, DEVIATION_COLLECTIONS.deviations, id), payload);
+  await updateDoc(doc(getFirebaseFirestore(), DEVIATION_COLLECTIONS.deviations, id), payload);
   await audit(actor, 'UPDATE', id, existing, { ...existing, ...payload });
   return { ...existing, ...payload } as DeviationRecord;
 }
@@ -330,12 +361,15 @@ export async function submitDeviation(id: string, actor: DeviationActor): Promis
   if (existing.status !== 'draft') throw new Error('Only draft deviations can be submitted');
 
   const capaRequired = computeCapaRequired(existing);
-  const status = capaRequired ? 'capa_required' : 'submitted';
-  return updateDeviation(id, { status, capa_required: capaRequired }, actor, { workflow: true }).then(async (r) => {
-    await audit(actor, 'SUBMIT', id, existing, r);
-    await notify('Deviation Submitted', `${existing.deviation_number} submitted for investigation`, id, actor.id);
-    return r;
-  });
+  await updateDeviation(id, { capa_required: capaRequired }, actor, { workflow: true });
+
+  const { initializeApprovalWorkflow } = await import('./deviation-approval-service');
+  await initializeApprovalWorkflow(id, { id: actor.id, name: actor.name, role: actor.role });
+
+  const r = await getDeviationById(id);
+  if (!r) throw new Error('Deviation not found');
+  await audit(actor, 'SUBMIT', id, existing, r);
+  return r;
 }
 
 export async function assignInvestigator(
@@ -362,12 +396,12 @@ export async function saveInvestigation(
   let result: DeviationInvestigation;
 
   if (existing) {
-    await updateDoc(doc(firestore, DEVIATION_COLLECTIONS.investigations, existing.id), {
+    await updateDoc(doc(getFirebaseFirestore(), DEVIATION_COLLECTIONS.investigations, existing.id), {
       ...data, updated_at: timestamp,
     });
     result = { ...existing, ...data, updated_at: timestamp };
   } else {
-    const ref = await addDoc(collection(firestore, DEVIATION_COLLECTIONS.investigations), {
+    const ref = await addDoc(collection(getFirebaseFirestore(), DEVIATION_COLLECTIONS.investigations), {
       deviation_id: deviationId, ...data, created_at: timestamp, updated_at: timestamp,
     });
     result = { id: ref.id, deviation_id: deviationId, ...data, created_at: timestamp, updated_at: timestamp };
@@ -383,7 +417,7 @@ export async function saveInvestigation(
 
 export async function getInvestigation(deviationId: string): Promise<DeviationInvestigation | null> {
   const q = query(
-    collection(firestore, DEVIATION_COLLECTIONS.investigations),
+    collection(getFirebaseFirestore(), DEVIATION_COLLECTIONS.investigations),
     where('deviation_id', '==', deviationId),
     limit(1),
   );
@@ -402,12 +436,12 @@ export async function saveImpactAssessment(
   let result: DeviationImpactAssessment;
 
   if (existing) {
-    await updateDoc(doc(firestore, DEVIATION_COLLECTIONS.impactAssessments, existing.id), {
+    await updateDoc(doc(getFirebaseFirestore(), DEVIATION_COLLECTIONS.impactAssessments, existing.id), {
       ...data, updated_at: timestamp,
     });
     result = { ...existing, ...data, updated_at: timestamp };
   } else {
-    const ref = await addDoc(collection(firestore, DEVIATION_COLLECTIONS.impactAssessments), {
+    const ref = await addDoc(collection(getFirebaseFirestore(), DEVIATION_COLLECTIONS.impactAssessments), {
       deviation_id: deviationId, ...data, created_at: timestamp, updated_at: timestamp,
     });
     result = { id: ref.id, deviation_id: deviationId, ...data, created_at: timestamp, updated_at: timestamp };
@@ -421,7 +455,7 @@ export async function saveImpactAssessment(
 
 export async function getImpactAssessment(deviationId: string): Promise<DeviationImpactAssessment | null> {
   const q = query(
-    collection(firestore, DEVIATION_COLLECTIONS.impactAssessments),
+    collection(getFirebaseFirestore(), DEVIATION_COLLECTIONS.impactAssessments),
     where('deviation_id', '==', deviationId),
     limit(1),
   );
@@ -436,28 +470,33 @@ export async function linkCapa(
   capaId: string | null,
   actor: DeviationActor,
 ): Promise<DeviationRecord> {
-  const updated = await updateDeviation(deviationId, {
-    linked_capa_number: capaNumber,
-    linked_capa_id: capaId,
-    status: 'capa_required',
-    capa_required: true,
-  }, actor, { workflow: true });
-  await audit(actor, 'CAPA_LINK', deviationId, null, { capaNumber, capaId });
-  await notify('CAPA Linked', `CAPA ${capaNumber} linked to deviation`, deviationId, actor.id);
-  return updated;
+  const { linkExistingCapaToDeviation } = await import('./deviation-capa-service');
+  const result = await linkExistingCapaToDeviation(deviationId, capaNumber, '', {
+    id: actor.id, name: actor.name, role: actor.role,
+  });
+  if (result.error) throw new Error(result.error);
+  const record = await getDeviationById(deviationId);
+  if (!record) throw new Error('Deviation not found');
+  return record;
 }
 
 export async function createCapaFromDeviation(
   deviationId: string,
   actor: DeviationActor,
 ): Promise<{ capaNumber: string; capaId: string }> {
-  const { createCapaFromDeviation: createFromDev } = await import('./capa-service');
-  const record = await createFromDev(deviationId, {
-    id: actor.id,
-    name: actor.name,
-    role: actor.role,
-  });
-  return { capaNumber: record.capa_number, capaId: record.id };
+  const record = await getDeviationById(deviationId);
+  if (!record) throw new Error('Deviation not found');
+  const { createCapaLinkFromDeviation, mapCapaLinkFormDefaults } = await import('./deviation-capa-service');
+  const input = mapCapaLinkFormDefaults(record);
+  const result = await createCapaLinkFromDeviation(deviationId, {
+    ...input,
+    root_cause: input.root_cause || record.root_cause || 'Pending investigation',
+    corrective_action: input.corrective_action || 'To be defined',
+    preventive_action: input.preventive_action || 'To be defined',
+    responsible_person_name: input.responsible_person_name || actor.name,
+  }, { id: actor.id, name: actor.name, role: actor.role });
+  if (result.error || !result.capa) throw new Error(result.error || 'Failed to create CAPA');
+  return { capaNumber: result.capa.capa_number, capaId: result.capa.id };
 }
 
 export async function submitApproval(
@@ -465,6 +504,24 @@ export async function submitApproval(
   data: { decision: 'approved' | 'rejected'; comments: string; e_signature: string },
   actor: DeviationActor,
 ): Promise<DeviationApproval> {
+  const { getCurrentPendingApproval } = await import('./deviation-approval-records');
+  const {
+    approveDeviationStep,
+    rejectDeviationStep,
+    getDeviationApprovals,
+  } = await import('./deviation-approval-service');
+
+  const approvals = await getDeviationApprovals(deviationId);
+  const current = getCurrentPendingApproval(approvals);
+
+  if (current) {
+    const result = data.decision === 'rejected'
+      ? await rejectDeviationStep(deviationId, current.id, data.comments, data.comments, { id: actor.id, name: actor.name, role: actor.role })
+      : await approveDeviationStep(deviationId, current.id, data.comments, data.e_signature, { id: actor.id, name: actor.name, role: actor.role });
+    if (result.error) throw new Error(result.error);
+    return { ...current, decision: data.decision, comments: data.comments, e_signature: data.e_signature, signed_at: now() };
+  }
+
   const deviation = await getDeviationById(deviationId);
   if (!deviation) throw new Error('Deviation not found');
 
@@ -485,7 +542,7 @@ export async function submitApproval(
     created_at: timestamp,
   };
 
-  const ref = await addDoc(collection(firestore, DEVIATION_COLLECTIONS.approvals), approval);
+  const ref = await addDoc(collection(getFirebaseFirestore(), DEVIATION_COLLECTIONS.approvals), approval);
 
   let newStatus: string;
   if (data.decision === 'rejected') {
@@ -513,17 +570,37 @@ export async function submitApproval(
 }
 
 export async function closeDeviation(id: string, actor: DeviationActor): Promise<DeviationRecord> {
-  const updated = await updateDeviation(id, {
-    status: 'closed',
-    actual_closure_date: now().split('T')[0],
-  }, actor, { workflow: true });
-  await audit(actor, 'CLOSE', id, null, updated);
+  const existing = await getDeviationById(id);
+  if (!existing) throw new Error('Deviation not found');
+
+  const { closeDeviationWithClosure, getDeviationClosure } = await import('./deviation-closure-service');
+  const closureRecord = await getDeviationClosure(id);
+
+  const result = await closeDeviationWithClosure(id, {
+    investigation_completed: true,
+    impact_assessment_completed: true,
+    root_cause_identified: Boolean(existing.root_cause),
+    capa_required: existing.capa_required,
+    capa_linked: Boolean(existing.linked_capa_number),
+    capa_completed: true,
+    effectiveness_check_completed: true,
+    product_quality_impact_resolved: !existing.product_quality_impacted,
+    patient_safety_impact_resolved: !existing.patient_safety_impacted,
+    regulatory_impact_resolved: !existing.regulatory_impact,
+    all_attachments_reviewed: true,
+    qa_closure_comments: closureRecord?.qa_closure_comments || existing.qa_remarks || 'Closed via deviation service',
+    final_closure_conclusion: closureRecord?.final_closure_conclusion || 'Deviation closed per QA review.',
+  }, actor.name, { id: actor.id, name: actor.name, role: actor.role });
+
+  if (result.error) throw new Error(result.error);
+  const updated = await getDeviationById(id);
+  if (!updated) throw new Error('Deviation not found');
   return updated;
 }
 
 export async function getApprovals(deviationId: string): Promise<DeviationApproval[]> {
   const q = query(
-    collection(firestore, DEVIATION_COLLECTIONS.approvals),
+    collection(getFirebaseFirestore(), DEVIATION_COLLECTIONS.approvals),
     where('deviation_id', '==', deviationId),
     orderBy('created_at', 'desc'),
   );
@@ -532,7 +609,7 @@ export async function getApprovals(deviationId: string): Promise<DeviationApprov
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as DeviationApproval));
   } catch {
     const snap = await getDocs(query(
-      collection(firestore, DEVIATION_COLLECTIONS.approvals),
+      collection(getFirebaseFirestore(), DEVIATION_COLLECTIONS.approvals),
       where('deviation_id', '==', deviationId),
     ));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as DeviationApproval));
@@ -545,7 +622,7 @@ export async function uploadAttachment(
   actor: DeviationActor,
 ): Promise<DeviationAttachment> {
   const path = `deviations/${deviationId}/${Date.now()}_${file.name}`;
-  const storageRef = ref(storage, path);
+  const storageRef = ref(getFirebaseStorage(), path);
   await uploadBytes(storageRef, file);
   const fileUrl = await getDownloadURL(storageRef);
   const timestamp = now();
@@ -561,14 +638,14 @@ export async function uploadAttachment(
     uploaded_at: timestamp,
   };
 
-  const ref2 = await addDoc(collection(firestore, DEVIATION_COLLECTIONS.attachments), attachment);
+  const ref2 = await addDoc(collection(getFirebaseFirestore(), DEVIATION_COLLECTIONS.attachments), attachment);
   await audit(actor, 'ATTACHMENT_UPLOAD', deviationId, null, { file_name: file.name });
   return { id: ref2.id, ...attachment };
 }
 
 export async function getAttachments(deviationId: string): Promise<DeviationAttachment[]> {
   const q = query(
-    collection(firestore, DEVIATION_COLLECTIONS.attachments),
+    collection(getFirebaseFirestore(), DEVIATION_COLLECTIONS.attachments),
     where('deviation_id', '==', deviationId),
   );
   const snap = await getDocs(q);
@@ -576,85 +653,31 @@ export async function getAttachments(deviationId: string): Promise<DeviationAtta
 }
 
 export async function deleteAttachment(attachmentId: string, actor: DeviationActor): Promise<void> {
-  const snap = await getDoc(doc(firestore, DEVIATION_COLLECTIONS.attachments, attachmentId));
+  const snap = await getDoc(doc(getFirebaseFirestore(), DEVIATION_COLLECTIONS.attachments, attachmentId));
   if (!snap.exists()) return;
   const data = snap.data() as DeviationAttachment;
-  await deleteDoc(doc(firestore, DEVIATION_COLLECTIONS.attachments, attachmentId));
+  await deleteDoc(doc(getFirebaseFirestore(), DEVIATION_COLLECTIONS.attachments, attachmentId));
   await audit(actor, 'ATTACHMENT_DELETE', data.deviation_id, data, null);
 }
 
 export async function getAuditLogsForDeviation(deviationId: string) {
-  const q = query(
-    collection(firestore, DEVIATION_COLLECTIONS.auditLogs),
-    where('recordId', '==', deviationId),
-    where('module', '==', 'Deviation'),
-    orderBy('dateTime', 'desc'),
-    limit(100),
-  );
-  try {
-    const snap = await getDocs(q);
-    return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-  } catch {
-    const snap = await getDocs(query(
-      collection(firestore, DEVIATION_COLLECTIONS.auditLogs),
-      where('recordId', '==', deviationId),
-    ));
-    return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-  }
+  const { getAuditLogsForDeviation: fetchLogs } = await import('@/lib/deviation-audit-trail-service');
+  return fetchLogs(deviationId);
 }
 
 export function computeDashboardMetrics(records: DeviationRecord[]): DeviationDashboardMetrics {
-  const checked = records.map(applyOverdueCheck);
-  const deptMap = new Map<string, number>();
-  const catMap = new Map<string, number>();
-  const critMap = new Map<string, number>();
-  const monthMap = new Map<string, number>();
-  const trendMap = new Map<string, { open: number; closed: number }>();
-
-  for (const r of checked) {
-    deptMap.set(r.department, (deptMap.get(r.department) || 0) + 1);
-    catMap.set(r.category, (catMap.get(r.category) || 0) + 1);
-    critMap.set(r.criticality, (critMap.get(r.criticality) || 0) + 1);
-    const month = r.deviation_date?.slice(0, 7) || r.created_at?.slice(0, 7) || 'Unknown';
-    monthMap.set(month, (monthMap.get(month) || 0) + 1);
-    const trend = trendMap.get(month) || { open: 0, closed: 0 };
-    if (isOpenStatus(r.status)) trend.open++;
-    else if (r.status === 'closed' || r.status === 'approved') trend.closed++;
-    trendMap.set(month, trend);
-  }
-
-  const toSorted = (m: Map<string, number>) =>
-    Array.from(m.entries()).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
-
-  return {
-    total: checked.length,
-    open: checked.filter((r) => isOpenStatus(r.status)).length,
-    closed: checked.filter((r) => r.status === 'closed' || r.status === 'approved').length,
-    overdue: checked.filter((r) => r.status === 'overdue').length,
-    critical: checked.filter((r) => r.criticality === 'Critical').length,
-    repeat: checked.filter((r) => r.repeat_deviation).length,
-    capaRequired: checked.filter((r) => r.capa_required).length,
-    byDepartment: toSorted(deptMap),
-    byCategory: toSorted(catMap),
-    byCriticality: toSorted(critMap),
-    monthlyTrend: Array.from(monthMap.entries())
-      .map(([month, count]) => ({ month, count }))
-      .sort((a, b) => a.month.localeCompare(b.month)),
-    openClosedTrend: Array.from(trendMap.entries())
-      .map(([month, v]) => ({ month, ...v }))
-      .sort((a, b) => a.month.localeCompare(b.month)),
-  };
+  return computeExtendedDashboardMetrics(records);
 }
 
 export async function syncOverdueStatuses(): Promise<number> {
   const records = await listDeviations();
   const today = new Date().toISOString().split('T')[0];
   let count = 0;
-  const batch = writeBatch(firestore);
+  const batch = writeBatch(getFirebaseFirestore());
 
   for (const r of records) {
     if (r.target_closure_date && r.target_closure_date < today && isOpenStatus(r.status) && r.status !== 'overdue') {
-      batch.update(doc(firestore, DEVIATION_COLLECTIONS.deviations, r.id), { status: 'overdue', updated_at: now() });
+      batch.update(doc(getFirebaseFirestore(), DEVIATION_COLLECTIONS.deviations, r.id), { status: 'overdue', updated_at: now() });
       count++;
     }
   }

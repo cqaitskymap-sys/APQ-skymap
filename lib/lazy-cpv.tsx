@@ -8,12 +8,12 @@ const loading = () => <TableSkeleton rows={10} cols={6} />;
 const dashboardLoading = () => <KpiSkeleton count={8} />;
 
 export const LazyCppWorkspace = dynamic(
-  () => import('@/components/cpv/cpp-workspace').then((m) => m.CppWorkspace),
+  () => import('@/components/cpv/cpp-monitoring/cpp-monitoring-page').then((m) => m.CppMonitoringPage),
   { loading, ssr: false },
 );
 
 export const LazyCqaWorkspace = dynamic(
-  () => import('@/components/cpv/cqa-workspace').then((m) => m.CqaWorkspace),
+  () => import('@/components/cpv/cqa-monitoring/cqa-monitoring-page').then((m) => m.CqaMonitoringPage),
   { loading, ssr: false },
 );
 

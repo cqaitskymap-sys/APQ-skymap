@@ -5,6 +5,9 @@ export interface CpvDashboardFilters {
   year?: string;
   month?: string;
   quarter?: string;
+  batchNo?: string;
+  riskLevel?: string;
+  status?: string;
 }
 
 type DatedRecord = {
@@ -29,9 +32,21 @@ function matchesQuarter(month: number, quarter: string): boolean {
   return month >= start && month <= start + 2;
 }
 
+function matchesBatch(record: DatedRecord & { batchNo?: string }, batchNo?: string): boolean {
+  if (!batchNo || batchNo === 'all') return true;
+  return record.batchNo === batchNo;
+}
+
+function matchesStatus(record: { status?: string }, status?: string): boolean {
+  if (!status || status === 'all') return true;
+  return String(record.status || '').toLowerCase() === status.toLowerCase();
+}
+
 export function filterCpvRecords<T extends DatedRecord>(records: T[], filters: CpvDashboardFilters): T[] {
   return records.filter((record) => {
     if (filters.product && filters.product !== 'all' && record.productName !== filters.product) return false;
+    if (!matchesBatch(record as DatedRecord & { batchNo?: string }, filters.batchNo)) return false;
+    if (!matchesStatus(record as { status?: string }, filters.status)) return false;
     const date = getRecordDate(record);
     if (!date && (filters.year || filters.month || filters.quarter)) return false;
     if (date) {
@@ -46,6 +61,8 @@ export function filterCpvRecords<T extends DatedRecord>(records: T[], filters: C
 export function filterRiskRecords(records: RiskRecord[], filters: CpvDashboardFilters): RiskRecord[] {
   return records.filter((record) => {
     if (filters.product && filters.product !== 'all' && record.productName !== filters.product) return false;
+    if (filters.riskLevel && filters.riskLevel !== 'all' && record.riskLevel !== filters.riskLevel) return false;
+    if (!matchesBatch(record, filters.batchNo)) return false;
     const date = getRecordDate(record);
     if (date) {
       if (filters.year && filters.year !== 'all' && String(date.getFullYear()) !== filters.year) return false;
@@ -167,7 +184,80 @@ export function productCompliance(cpp: CppRecord[], cqa: CqaRecord[]) {
 }
 
 export function openRiskCount(risks: RiskRecord[]): number {
-  return risks.filter((r) => ['High', 'Critical', 'Medium'].includes(r.riskLevel)).length;
+  return risks.filter((r) => {
+    const st = String(r.status || '').toLowerCase();
+    return st !== 'closed' && st !== 'close';
+  }).length;
+}
+
+export function highRiskCount(risks: RiskRecord[]): number {
+  return risks.filter((r) => r.riskLevel === 'High' || r.riskLevel === 'Critical').length;
+}
+
+export function compliancePercent(complies: number, total: number): number {
+  return total > 0 ? Math.round((complies / total) * 100) : 0;
+}
+
+export function ootOosMonthlyTrend(cpp: CppRecord[], cqa: CqaRecord[]) {
+  const map = new Map<string, { oot: number; oos: number }>();
+  const add = (r: { status?: string; manufacturingDate?: string; createdAt?: string }) => {
+    const d = getRecordDate(r);
+    if (!d || r.status !== 'OOT' && r.status !== 'OOS') return;
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const entry = map.get(key) || { oot: 0, oos: 0 };
+    if (r.status === 'OOT') entry.oot += 1;
+    if (r.status === 'OOS') entry.oos += 1;
+    map.set(key, entry);
+  };
+  cpp.forEach(add);
+  cqa.forEach(add);
+  return Array.from(map.entries())
+    .map(([month, v]) => ({ month, oot: v.oot, oos: v.oos }))
+    .sort((a, b) => a.month.localeCompare(b.month));
+}
+
+export function riskLevelDistribution(risks: RiskRecord[]) {
+  const levels = ['Low', 'Medium', 'High', 'Critical'] as const;
+  return levels.map((level) => ({
+    name: level,
+    value: risks.filter((r) => r.riskLevel === level).length,
+  })).filter((x) => x.value > 0);
+}
+
+export function cpkMonthlyTrend(capability: Array<{ cpk?: number; createdAt?: string; date?: string }>) {
+  const map = new Map<string, { sum: number; count: number }>();
+  capability.forEach((r) => {
+    const cpk = Number(r.cpk);
+    if (!Number.isFinite(cpk)) return;
+    const raw = r.createdAt || r.date;
+    if (!raw) return;
+    const d = new Date(raw);
+    if (Number.isNaN(d.getTime())) return;
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const entry = map.get(key) || { sum: 0, count: 0 };
+    entry.sum += cpk;
+    entry.count += 1;
+    map.set(key, entry);
+  });
+  return Array.from(map.entries())
+    .map(([month, v]) => ({ month, cpk: v.count ? Number((v.sum / v.count).toFixed(2)) : 0 }))
+    .sort((a, b) => a.month.localeCompare(b.month));
+}
+
+export function batchReviewTrend(records: DatedRecord[]) {
+  const map = new Map<string, Set<string>>();
+  records.forEach((r) => {
+    const d = getRecordDate(r);
+    const batch = (r as { batchNo?: string }).batchNo;
+    if (!d || !batch) return;
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const set = map.get(key) || new Set<string>();
+    set.add(batch);
+    map.set(key, set);
+  });
+  return Array.from(map.entries())
+    .map(([month, batches]) => ({ month, batches: batches.size }))
+    .sort((a, b) => a.month.localeCompare(b.month));
 }
 
 export interface OotOosAlert {
@@ -213,11 +303,11 @@ export interface CpvActivity {
 export function mapAuditToActivities(audit: Record<string, unknown>[]): CpvActivity[] {
   return audit.map((a) => ({
     id: a.id as string,
-    timestamp: String(a.timestamp || a.createdAt || ''),
-    action: String(a.action || ''),
-    module: String(a.module || ''),
-    actorName: String(a.actorName || 'System'),
-    recordId: String(a.recordId || ''),
+    timestamp: String(a.timestamp || a.dateTime || a.createdAt || ''),
+    action: String(a.action || a.actionType || ''),
+    module: String(a.module || a.moduleName || ''),
+    actorName: String(a.actorName || a.changedByUserName || a.userName || 'System'),
+    recordId: String(a.recordId || a.documentId || ''),
   })).sort((a, b) => b.timestamp.localeCompare(a.timestamp)).slice(0, 25);
 }
 

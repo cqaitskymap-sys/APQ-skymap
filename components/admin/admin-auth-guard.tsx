@@ -26,7 +26,7 @@ export function AdminAuthGuard({
   useEffect(() => {
     if (authLoading || perms.loading) return;
     if (!user) {
-      router.replace('/auth/login?redirect=/dashboard/admin');
+      router.replace('/auth/login?redirect=/admin');
       return;
     }
     if (!perms.canAccessAdmin) {

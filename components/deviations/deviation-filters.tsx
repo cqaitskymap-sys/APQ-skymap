@@ -72,6 +72,17 @@ export function DeviationFiltersBar({ filters, onChange }: DeviationFiltersBarPr
         </Select>
         <Input type="date" placeholder="From" value={filters.date_from || ''} onChange={(e) => set('date_from', e.target.value)} />
         <Input type="date" placeholder="To" value={filters.date_to || ''} onChange={(e) => set('date_to', e.target.value)} />
+        <Input placeholder="Assigned To" value={filters.assigned_to || ''} onChange={(e) => set('assigned_to', e.target.value)} />
+        <Select
+          value={filters.overdue_only ? 'yes' : 'all'}
+          onValueChange={(v) => onChange({ ...filters, overdue_only: v === 'yes' ? true : undefined })}
+        >
+          <SelectTrigger><SelectValue placeholder="Overdue" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Records</SelectItem>
+            <SelectItem value="yes">Overdue Only</SelectItem>
+          </SelectContent>
+        </Select>
         <Select
           value={filters.capa_required === undefined ? 'all' : filters.capa_required ? 'yes' : 'no'}
           onValueChange={(v) => onChange({ ...filters, capa_required: v === 'all' ? undefined : v === 'yes' })}

@@ -1,7 +1,12 @@
+import { SpcAccessGuard } from '@/components/cpv/statistical-process-control/spc-access-guard';
+import { SpcPage } from '@/components/cpv/statistical-process-control/spc-page';
+
 export const dynamic = 'force-dynamic';
 
-import { LazySpcWorkspace } from '@/lib/lazy-cpv';
-
-export default function Page() {
-  return <LazySpcWorkspace />;
+export default function ControlChartsRoutePage() {
+  return (
+    <SpcAccessGuard>
+      <SpcPage />
+    </SpcAccessGuard>
+  );
 }

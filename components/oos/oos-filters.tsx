@@ -3,8 +3,10 @@
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
 import { Search, X } from 'lucide-react';
-import { DEPARTMENTS, OOS_STATUSES } from '@/lib/oos-types';
+import { DEPARTMENTS, OOS_STATUSES, ROOT_CAUSE_CATEGORIES } from '@/lib/oos-types';
 import type { OosFilters } from '@/lib/oos-types';
 
 export function OosFiltersBar({ filters, onChange }: { filters: OosFilters; onChange: (f: OosFilters) => void }) {
@@ -26,17 +28,35 @@ export function OosFiltersBar({ filters, onChange }: { filters: OosFilters; onCh
         </Select>
         <Input placeholder="Product" value={filters.product_name || ''} onChange={(e) => set('product_name', e.target.value)} />
         <Input placeholder="Test Name" value={filters.test_name || ''} onChange={(e) => set('test_name', e.target.value)} />
+        <Select value={filters.root_cause || 'all'} onValueChange={(v) => set('root_cause', v === 'all' ? '' : v)}>
+          <SelectTrigger><SelectValue placeholder="Root Cause" /></SelectTrigger>
+          <SelectContent><SelectItem value="all">All</SelectItem>{ROOT_CAUSE_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+        </Select>
         <Select value={filters.status || 'all'} onValueChange={(v) => set('status', v === 'all' ? '' : v)}>
           <SelectTrigger><SelectValue placeholder="Status" /></SelectTrigger>
           <SelectContent><SelectItem value="all">All</SelectItem>{OOS_STATUSES.map((s) => <SelectItem key={s} value={s}>{s.replace(/_/g, ' ')}</SelectItem>)}</SelectContent>
         </Select>
-        <Input type="date" value={filters.date_from || ''} onChange={(e) => set('date_from', e.target.value)} />
-        <Input type="date" value={filters.date_to || ''} onChange={(e) => set('date_to', e.target.value)} />
+        <Select value={filters.capa_required === undefined ? 'all' : filters.capa_required ? 'yes' : 'no'} onValueChange={(v) => onChange({ ...filters, capa_required: v === 'all' ? undefined : v === 'yes' })}>
+          <SelectTrigger><SelectValue placeholder="CAPA Required" /></SelectTrigger>
+          <SelectContent><SelectItem value="all">All</SelectItem><SelectItem value="yes">CAPA Required</SelectItem><SelectItem value="no">No CAPA Required</SelectItem></SelectContent>
+        </Select>
+        <Input placeholder="Assigned To" value={filters.assigned_to || ''} onChange={(e) => set('assigned_to', e.target.value)} />
+        <Input type="date" placeholder="From" value={filters.date_from || ''} onChange={(e) => set('date_from', e.target.value)} />
+        <Input type="date" placeholder="To" value={filters.date_to || ''} onChange={(e) => set('date_to', e.target.value)} />
         <Select value={filters.capa_linked === undefined ? 'all' : filters.capa_linked ? 'yes' : 'no'} onValueChange={(v) => onChange({ ...filters, capa_linked: v === 'all' ? undefined : v === 'yes' })}>
           <SelectTrigger><SelectValue placeholder="CAPA Linked" /></SelectTrigger>
           <SelectContent><SelectItem value="all">All</SelectItem><SelectItem value="yes">CAPA Linked</SelectItem><SelectItem value="no">No CAPA</SelectItem></SelectContent>
         </Select>
+        <div className="flex items-center gap-2 rounded-md border px-3 py-2">
+          <Checkbox
+            id="overdue_only"
+            checked={Boolean(filters.overdue_only)}
+            onCheckedChange={(checked) => onChange({ ...filters, overdue_only: checked === true ? true : undefined })}
+          />
+          <Label htmlFor="overdue_only" className="text-sm font-normal cursor-pointer">Overdue Only</Label>
+        </div>
       </div>
     </div>
   );
 }
+

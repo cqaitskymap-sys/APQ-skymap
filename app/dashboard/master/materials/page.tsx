@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Plus, Edit, Trash2, Search, Beaker, Download } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc, orderBy, query } from 'firebase/firestore';
-import { firestore } from '@/lib/firebase';
+import { getFirebaseFirestore } from '@/lib/firebase';
 import { PageLoader } from '@/components/loaders/page-loader';
 
 interface Material {
@@ -104,7 +104,7 @@ export default function MaterialMasterPage() {
 
   const fetchMaterials = async () => {
     try {
-      const q = query(collection(firestore, 'material_master'), orderBy('material_code'));
+      const q = query(collection(getFirebaseFirestore(), 'material_master'), orderBy('material_code'));
       const querySnapshot = await getDocs(q);
       const data = querySnapshot.docs.map(doc => ({
         id: doc.id,
@@ -144,9 +144,9 @@ export default function MaterialMasterPage() {
 
     try {
       if (editingId) {
-        await updateDoc(doc(firestore, 'material_master', editingId), form);
+        await updateDoc(doc(getFirebaseFirestore(), 'material_master', editingId), form);
       } else {
-        const materialRef = doc(collection(firestore, 'material_master'));
+        const materialRef = doc(collection(getFirebaseFirestore(), 'material_master'));
         await setDoc(materialRef, form);
       }
 
@@ -195,7 +195,7 @@ export default function MaterialMasterPage() {
   const handleDelete = async (id: string) => {
     if (confirm('Are you sure you want to delete this material?')) {
       try {
-        await deleteDoc(doc(firestore, 'material_master', id));
+        await deleteDoc(doc(getFirebaseFirestore(), 'material_master', id));
         fetchMaterials();
       } catch (error) {
         console.error('Error deleting material:', error);

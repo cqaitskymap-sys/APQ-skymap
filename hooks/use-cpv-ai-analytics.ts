@@ -27,7 +27,7 @@ export function useCpvAiAnalytics(filters: AiAnalyticsFilters = {}) {
       try {
         const { loadAnnualReviewSourceData } = await import('@/lib/cpv-annual-review-service');
         const source = await loadAnnualReviewSourceData(new Date().getFullYear(), filters.product || 'all');
-        equipment = source.raw.equipment;
+        equipment = source.raw?.equipment || [];
       } catch {
         equipment = [];
       }

@@ -1,5 +1,5 @@
-import { UtilityMonitoringWorkspace } from '@/components/cpv/cpv-module-workspaces';
+import { redirect } from 'next/navigation';
 
-export default function Page() {
-  return <UtilityMonitoringWorkspace />;
+export default function UtilityLegacyPage() {
+  redirect('/cpv/utility-monitoring');
 }

@@ -1,6 +1,7 @@
 'use client';
 
-import { Bell, Search, Sun, Moon, ChevronRight, Settings, LogOut } from 'lucide-react';
+import { Search, Sun, Moon, ChevronRight, Settings, LogOut } from 'lucide-react';
+import { NotificationBell } from '@/components/layout/notification-bell';
 import { MobileNav } from '@/components/layout/mobile-nav';
 import { useTheme } from 'next-themes';
 import { Button } from '@/components/ui/button';
@@ -99,40 +100,7 @@ export function Header() {
           <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
         </Button>
 
-        {/* Notifications */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-8 w-8 relative">
-              <Bell className="h-4 w-4" />
-              <span className="absolute top-0.5 right-0.5 w-4 h-4 bg-red-500 text-white text-[10px] rounded-full flex items-center justify-center font-bold">9</span>
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-80">
-            <DropdownMenuLabel className="flex items-center justify-between">
-              <span>Notifications</span>
-              <Badge variant="destructive" className="text-xs">9 new</Badge>
-            </DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            {[
-              { title: 'CAPA Due Date', desc: 'CAPA-2024-015 due in 2 days', type: 'warning', time: '2m ago' },
-              { title: 'New OOS Raised', desc: 'OOS-2024-005 raised for AMK-100', type: 'error', time: '15m ago' },
-              { title: 'Batch Released', desc: 'BTH-2024-005 successfully released', type: 'success', time: '1h ago' },
-              { title: 'Equipment Alert', desc: 'FIL-003 calibration due in 5 days', type: 'info', time: '3h ago' },
-            ].map((n, i) => (
-              <DropdownMenuItem key={i} className="flex flex-col items-start gap-0.5 py-2.5 cursor-pointer">
-                <div className="flex items-center justify-between w-full">
-                  <span className={cn('text-sm font-medium', n.type === 'error' ? 'text-red-600 dark:text-red-400' : n.type === 'warning' ? 'text-amber-600 dark:text-amber-400' : n.type === 'success' ? 'text-green-600 dark:text-green-400' : 'text-foreground')}>{n.title}</span>
-                  <span className="text-xs text-muted-foreground">{n.time}</span>
-                </div>
-                <span className="text-xs text-muted-foreground">{n.desc}</span>
-              </DropdownMenuItem>
-            ))}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem className="text-center text-sm text-primary justify-center">
-              <Link href="/dashboard/notifications">View all notifications</Link>
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <NotificationBell />
 
         {/* User menu */}
         <DropdownMenu>

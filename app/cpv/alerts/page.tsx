@@ -1,5 +1,12 @@
-import { AlertsWorkspace } from '@/components/cpv/cpv-module-workspaces';
+import { AlertEngineAccessGuard } from '@/components/cpv/alert-engine/alert-engine-access-guard';
+import { AlertEnginePage } from '@/components/cpv/alert-engine/alert-engine-page';
 
-export default function Page() {
-  return <AlertsWorkspace />;
+export const dynamic = 'force-dynamic';
+
+export default function AlertsRoutePage() {
+  return (
+    <AlertEngineAccessGuard>
+      <AlertEnginePage />
+    </AlertEngineAccessGuard>
+  );
 }

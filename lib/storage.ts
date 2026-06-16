@@ -74,7 +74,7 @@ export async function uploadFile(options: UploadFileOptions): Promise<FileMetada
   try {
     const storage = getFirebaseStorage();
     const path = getStoragePath(moduleName, documentId, fileName);
-    const storageRef = ref(storage, path);
+    const storageRef = ref(getFirebaseStorage(), path);
 
     const mimeType = file instanceof File ? file.type : 'application/octet-stream';
     if (!isAllowedFileType(mimeType)) {
@@ -128,7 +128,7 @@ export async function deleteFile(
   try {
     const storage = getFirebaseStorage();
     const path = getStoragePath(moduleName, documentId, fileName);
-    await deleteObject(ref(storage, path));
+    await deleteObject(ref(getFirebaseStorage(), path));
     return true;
   } catch (error) {
     console.error('deleteFile failed:', error);

@@ -1,5 +1,5 @@
-import { redirect } from 'next/navigation';
+import { PqrDashboardPage } from '@/components/pqr/dashboard/pqr-dashboard-page';
 
-export default function PqrRedirect() {
-  redirect('/dashboard/pqr');
+export default function Page() {
+  return <PqrDashboardPage />;
 }

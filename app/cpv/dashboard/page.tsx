@@ -1,5 +1,5 @@
-import { redirect } from 'next/navigation';
+import { LazyCpvDashboard } from '@/lib/lazy-cpv';
 
-export default function CpvDashboardRedirect() {
-  redirect('/cpv');
+export default function CpvDashboardRoutePage() {
+  return <LazyCpvDashboard />;
 }

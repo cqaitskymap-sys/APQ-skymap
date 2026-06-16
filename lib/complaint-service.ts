@@ -2,7 +2,7 @@ import {
   addDoc, collection, doc, getDoc, getDocs, limit, orderBy, query, updateDoc, where,
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { firestore, storage } from '@/lib/firebase';
+import { getFirebaseFirestore, getFirebaseStorage } from '@/lib/firebase';
 import { logAuditEvent } from '@/lib/admin/admin-service';
 import { downloadCsv } from '@/lib/export-utils';
 import { createCapa } from '@/lib/capa-service';
@@ -29,7 +29,7 @@ async function audit(actor: ComplaintActor, action: string, recordId: string, ol
 async function notify(title: string, message: string, recordId: string, roles: string[]) {
   try {
     for (const role of roles) {
-      await addDoc(collection(firestore, COMPLAINT_COLLECTIONS.notifications), {
+      await addDoc(collection(getFirebaseFirestore(), COMPLAINT_COLLECTIONS.notifications), {
         title, message, module: 'Complaint', record_id: recordId, target_role: role,
         read: false, created_at: now(),
       });
@@ -42,7 +42,7 @@ export async function generateComplaintNumber(): Promise<string> {
   const prefix = `CMP-${year}-`;
   try {
     const snap = await getDocs(query(
-      collection(firestore, COMPLAINT_COLLECTIONS.records),
+      collection(getFirebaseFirestore(), COMPLAINT_COLLECTIONS.records),
       where('complaint_number', '>=', prefix),
       where('complaint_number', '<=', `${prefix}\uf8ff`),
       orderBy('complaint_number', 'desc'),
@@ -53,7 +53,7 @@ export async function generateComplaintNumber(): Promise<string> {
       return `${prefix}${String(parseInt(last.split('-').pop() || '0', 10) + 1).padStart(4, '0')}`;
     }
   } catch {
-    const all = await getDocs(collection(firestore, COMPLAINT_COLLECTIONS.records));
+    const all = await getDocs(collection(getFirebaseFirestore(), COMPLAINT_COLLECTIONS.records));
     return `${prefix}${String(all.size + 1).padStart(4, '0')}`;
   }
   return `${prefix}0001`;
@@ -63,7 +63,7 @@ async function linkBatch(batchNumber: string) {
   if (!batchNumber) return { batch_id: null, pqr_id: null };
   try {
     const snap = await getDocs(query(
-      collection(firestore, COMPLAINT_COLLECTIONS.batches),
+      collection(getFirebaseFirestore(), COMPLAINT_COLLECTIONS.batches),
       where('batch_number', '==', batchNumber),
       limit(1),
     ));
@@ -120,7 +120,7 @@ export async function createComplaint(input: ComplaintCreateInput, actor: Compla
     updated_at: timestamp,
   };
 
-  const refDoc = await addDoc(collection(firestore, COMPLAINT_COLLECTIONS.records), record);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), COMPLAINT_COLLECTIONS.records), record);
   await audit(actor, 'CREATE', refDoc.id, null, record);
 
   if (input.complaint_criticality === 'Critical') {
@@ -131,7 +131,7 @@ export async function createComplaint(input: ComplaintCreateInput, actor: Compla
 }
 
 export async function getComplaintById(id: string): Promise<ComplaintRecord | null> {
-  const snap = await getDoc(doc(firestore, COMPLAINT_COLLECTIONS.records, id));
+  const snap = await getDoc(doc(getFirebaseFirestore(), COMPLAINT_COLLECTIONS.records, id));
   if (!snap.exists()) return null;
   return { id: snap.id, ...snap.data() } as ComplaintRecord;
 }
@@ -139,13 +139,13 @@ export async function getComplaintById(id: string): Promise<ComplaintRecord | nu
 export async function listComplaints(filters?: ComplaintFilters): Promise<ComplaintRecord[]> {
   try {
     const snap = await getDocs(query(
-      collection(firestore, COMPLAINT_COLLECTIONS.records),
+      collection(getFirebaseFirestore(), COMPLAINT_COLLECTIONS.records),
       orderBy('updated_at', 'desc'),
       limit(1000),
     ));
     return applyFilters(snap.docs.map((d) => ({ id: d.id, ...d.data() } as ComplaintRecord)), filters);
   } catch {
-    const snap = await getDocs(collection(firestore, COMPLAINT_COLLECTIONS.records));
+    const snap = await getDocs(collection(getFirebaseFirestore(), COMPLAINT_COLLECTIONS.records));
     return applyFilters(snap.docs.map((d) => ({ id: d.id, ...d.data() } as ComplaintRecord)), filters);
   }
 }
@@ -178,7 +178,7 @@ export async function updateComplaint(
   if (!existing) throw new Error('Complaint not found');
   if (!workflow && existing.status !== 'draft') throw new Error('Only draft complaints can be edited');
   const payload = { ...patch, updated_by: actor.id, updated_by_name: actor.name, updated_at: now() };
-  await updateDoc(doc(firestore, COMPLAINT_COLLECTIONS.records, id), payload);
+  await updateDoc(doc(getFirebaseFirestore(), COMPLAINT_COLLECTIONS.records, id), payload);
   await audit(actor, 'UPDATE', id, existing, { ...existing, ...payload });
   return { ...existing, ...payload } as ComplaintRecord;
 }
@@ -215,7 +215,7 @@ async function createRecallEvaluationTask(complaint: ComplaintRecord, actor: Com
     qa_remarks: 'Auto-generated recall evaluation task from product safety complaint',
   }, actor, { status: 'draft', fromComplaint: true });
 
-  await updateDoc(doc(firestore, COMPLAINT_COLLECTIONS.records, complaint.id), {
+  await updateDoc(doc(getFirebaseFirestore(), COMPLAINT_COLLECTIONS.records, complaint.id), {
     linked_recall_id: recall.id,
     linked_recall_number: recall.recall_number,
     updated_at: now(),
@@ -239,10 +239,10 @@ export async function saveInvestigation(
 
   let refId: string;
   if (existing) {
-    await updateDoc(doc(firestore, COMPLAINT_COLLECTIONS.investigations, existing.id), payload);
+    await updateDoc(doc(getFirebaseFirestore(), COMPLAINT_COLLECTIONS.investigations, existing.id), payload);
     refId = existing.id;
   } else {
-    const ref = await addDoc(collection(firestore, COMPLAINT_COLLECTIONS.investigations), { ...payload, created_at: timestamp });
+    const ref = await addDoc(collection(getFirebaseFirestore(), COMPLAINT_COLLECTIONS.investigations), { ...payload, created_at: timestamp });
     refId = ref.id;
   }
 
@@ -264,7 +264,7 @@ export async function saveInvestigation(
 
 export async function getInvestigation(complaintId: string): Promise<ComplaintInvestigation | null> {
   const snap = await getDocs(query(
-    collection(firestore, COMPLAINT_COLLECTIONS.investigations),
+    collection(getFirebaseFirestore(), COMPLAINT_COLLECTIONS.investigations),
     where('complaint_id', '==', complaintId),
     limit(1),
   ));
@@ -302,7 +302,7 @@ export async function createCapaFromComplaint(complaintId: string, actor: Compla
     qa_remarks: complaint.qa_remarks,
   }, actor, { status: 'submitted' });
 
-  await updateDoc(doc(firestore, COMPLAINT_COLLECTIONS.records, complaintId), {
+  await updateDoc(doc(getFirebaseFirestore(), COMPLAINT_COLLECTIONS.records, complaintId), {
     linked_capa_id: capa.id,
     linked_capa_number: capa.capa_number,
     capa_required: true,
@@ -336,7 +336,7 @@ export async function syncOverdueComplaints(): Promise<number> {
   for (const r of records) {
     if (isComplaintClosed(r.status) || r.status === 'overdue') continue;
     if (r.complaint_date < cutoffStr && !['closed', 'qa_review'].includes(r.status)) {
-      await updateDoc(doc(firestore, COMPLAINT_COLLECTIONS.records, r.id), { status: 'overdue', updated_at: now() });
+      await updateDoc(doc(getFirebaseFirestore(), COMPLAINT_COLLECTIONS.records, r.id), { status: 'overdue', updated_at: now() });
       count++;
     }
   }
@@ -344,13 +344,13 @@ export async function syncOverdueComplaints(): Promise<number> {
 }
 
 export async function getAttachments(complaintId: string): Promise<ComplaintAttachment[]> {
-  const snap = await getDocs(query(collection(firestore, COMPLAINT_COLLECTIONS.attachments), where('complaint_id', '==', complaintId)));
+  const snap = await getDocs(query(collection(getFirebaseFirestore(), COMPLAINT_COLLECTIONS.attachments), where('complaint_id', '==', complaintId)));
   return snap.docs.map((d) => ({ id: d.id, ...d.data() } as ComplaintAttachment));
 }
 
 export async function uploadAttachment(complaintId: string, file: File, actor: ComplaintActor): Promise<ComplaintAttachment> {
   const path = `complaints/${complaintId}/${Date.now()}_${file.name}`;
-  const storageRef = ref(storage, path);
+  const storageRef = ref(getFirebaseStorage(), path);
   await uploadBytes(storageRef, file);
   const url = await getDownloadURL(storageRef);
   const timestamp = now();
@@ -358,13 +358,13 @@ export async function uploadAttachment(complaintId: string, file: File, actor: C
     complaint_id: complaintId, file_name: file.name, file_url: url, file_type: file.type,
     uploaded_by: actor.id, uploaded_by_name: actor.name, uploaded_at: timestamp,
   };
-  const refDoc = await addDoc(collection(firestore, COMPLAINT_COLLECTIONS.attachments), attachment);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), COMPLAINT_COLLECTIONS.attachments), attachment);
   await audit(actor, 'ATTACHMENT_UPLOAD', complaintId, null, { file_name: file.name });
   return { id: refDoc.id, ...attachment };
 }
 
 export async function getAuditLogsForComplaint(complaintId: string) {
-  const snap = await getDocs(query(collection(firestore, COMPLAINT_COLLECTIONS.auditLogs), where('recordId', '==', complaintId), limit(100)));
+  const snap = await getDocs(query(collection(getFirebaseFirestore(), COMPLAINT_COLLECTIONS.auditLogs), where('recordId', '==', complaintId), limit(100)));
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 }
 

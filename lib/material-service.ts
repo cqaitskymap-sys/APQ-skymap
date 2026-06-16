@@ -13,7 +13,7 @@ import {
   Query,
   writeBatch,
 } from 'firebase/firestore';
-import { firestore } from './firebase';
+import { getFirebaseFirestore } from './firebase';
 import { MaterialMaster, VendorMaster, MaterialReview, AuditLogMaterial, DEFAULT_MATERIALS } from './material-schemas';
 
 // ============= MATERIAL MASTER OPERATIONS =============
@@ -23,7 +23,7 @@ export async function createMaterialMaster(
   userId: string
 ) {
   const now = new Date().toISOString();
-  const docRef = await addDoc(collection(firestore, 'material_master'), {
+  const docRef = await addDoc(collection(getFirebaseFirestore(), 'material_master'), {
     ...material,
     createdBy: userId,
     createdAt: now,
@@ -35,7 +35,7 @@ export async function createMaterialMaster(
 }
 
 export async function getMaterialMasterById(id: string) {
-  const docRef = doc(firestore, 'material_master', id);
+  const docRef = doc(getFirebaseFirestore(), 'material_master', id);
   const docSnap = await getDoc(docRef);
   
   if (!docSnap.exists()) {
@@ -64,7 +64,7 @@ export async function getMaterialMasters(
 
   constraints.push(orderBy('materialCode', 'asc'));
 
-  const q = query(collection(firestore, 'material_master'), ...constraints);
+  const q = query(collection(getFirebaseFirestore(), 'material_master'), ...constraints);
   const querySnapshot = await getDocs(q);
   
   let results = querySnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as MaterialMaster));
@@ -87,7 +87,7 @@ export async function updateMaterialMaster(
   updates: Partial<Omit<MaterialMaster, 'id' | 'createdBy' | 'createdAt'>>,
   userId: string
 ) {
-  const docRef = doc(firestore, 'material_master', id);
+  const docRef = doc(getFirebaseFirestore(), 'material_master', id);
   const now = new Date().toISOString();
   
   await updateDoc(docRef, {
@@ -101,7 +101,7 @@ export async function updateMaterialMaster(
 }
 
 export async function deleteMaterialMaster(id: string) {
-  const docRef = doc(firestore, 'material_master', id);
+  const docRef = doc(getFirebaseFirestore(), 'material_master', id);
   await deleteDoc(docRef);
 }
 
@@ -109,18 +109,18 @@ export async function deleteMaterialMaster(id: string) {
  * Initialize default materials if not already present
  */
 export async function initializeDefaultMaterials() {
-  const q = query(collection(firestore, 'material_master'), limit(1));
+  const q = query(collection(getFirebaseFirestore(), 'material_master'), limit(1));
   const querySnapshot = await getDocs(q);
 
   if (querySnapshot.docs.length > 0) {
     return; // Materials already exist
   }
 
-  const batch = writeBatch(firestore);
+  const batch = writeBatch(getFirebaseFirestore());
   const now = new Date().toISOString();
 
   DEFAULT_MATERIALS.forEach((material) => {
-    const docRef = doc(collection(firestore, 'material_master'));
+    const docRef = doc(collection(getFirebaseFirestore(), 'material_master'));
     batch.set(docRef, {
       ...material,
       createdBy: 'system',
@@ -140,7 +140,7 @@ export async function createVendorMaster(
   userId: string
 ) {
   const now = new Date().toISOString();
-  const docRef = await addDoc(collection(firestore, 'vendor_master'), {
+  const docRef = await addDoc(collection(getFirebaseFirestore(), 'vendor_master'), {
     ...vendor,
     createdBy: userId,
     createdAt: now,
@@ -152,7 +152,7 @@ export async function createVendorMaster(
 }
 
 export async function getVendorMasterById(id: string) {
-  const docRef = doc(firestore, 'vendor_master', id);
+  const docRef = doc(getFirebaseFirestore(), 'vendor_master', id);
   const docSnap = await getDoc(docRef);
 
   if (!docSnap.exists()) {
@@ -187,7 +187,7 @@ export async function getVendorMasters(
 
   constraints.push(orderBy('vendorCode', 'asc'));
 
-  const q = query(collection(firestore, 'vendor_master'), ...constraints);
+  const q = query(collection(getFirebaseFirestore(), 'vendor_master'), ...constraints);
   const querySnapshot = await getDocs(q);
 
   let results = querySnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as VendorMaster));
@@ -248,7 +248,7 @@ export async function updateVendorMaster(
   updates: Partial<Omit<VendorMaster, 'id' | 'createdBy' | 'createdAt'>>,
   userId: string
 ) {
-  const docRef = doc(firestore, 'vendor_master', id);
+  const docRef = doc(getFirebaseFirestore(), 'vendor_master', id);
   const now = new Date().toISOString();
 
   await updateDoc(docRef, {
@@ -262,7 +262,7 @@ export async function updateVendorMaster(
 }
 
 export async function deleteVendorMaster(id: string) {
-  const docRef = doc(firestore, 'vendor_master', id);
+  const docRef = doc(getFirebaseFirestore(), 'vendor_master', id);
   await deleteDoc(docRef);
 }
 
@@ -273,7 +273,7 @@ export async function createMaterialReview(
   userId: string
 ) {
   const now = new Date().toISOString();
-  const docRef = await addDoc(collection(firestore, 'material_review'), {
+  const docRef = await addDoc(collection(getFirebaseFirestore(), 'material_review'), {
     ...review,
     createdBy: userId,
     createdAt: now,
@@ -285,7 +285,7 @@ export async function createMaterialReview(
 }
 
 export async function getMaterialReviewById(id: string) {
-  const docRef = doc(firestore, 'material_review', id);
+  const docRef = doc(getFirebaseFirestore(), 'material_review', id);
   const docSnap = await getDoc(docRef);
 
   if (!docSnap.exists()) {
@@ -330,7 +330,7 @@ export async function getMaterialReviewsByPQR(
 
   constraints.push(orderBy('createdAt', 'desc'));
 
-  const q = query(collection(firestore, 'material_review'), ...constraints);
+  const q = query(collection(getFirebaseFirestore(), 'material_review'), ...constraints);
   const querySnapshot = await getDocs(q);
 
   let results = querySnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as MaterialReview));
@@ -372,7 +372,7 @@ export async function updateMaterialReview(
   updates: Partial<Omit<MaterialReview, 'id' | 'createdBy' | 'createdAt' | 'pqrId'>>,
   userId: string
 ) {
-  const docRef = doc(firestore, 'material_review', id);
+  const docRef = doc(getFirebaseFirestore(), 'material_review', id);
   const now = new Date().toISOString();
 
   await updateDoc(docRef, {
@@ -386,7 +386,7 @@ export async function updateMaterialReview(
 }
 
 export async function deleteMaterialReview(id: string) {
-  const docRef = doc(firestore, 'material_review', id);
+  const docRef = doc(getFirebaseFirestore(), 'material_review', id);
   await deleteDoc(docRef);
 }
 
@@ -397,7 +397,7 @@ export async function logMaterialAudit(
   userId: string
 ) {
   const now = new Date().toISOString();
-  const docRef = await addDoc(collection(firestore, 'audit_logs_material'), {
+  const docRef = await addDoc(collection(getFirebaseFirestore(), 'audit_logs_material'), {
     ...audit,
     changedAt: now,
   });
@@ -425,7 +425,7 @@ export async function getMaterialAuditLogs(
 
   constraints.push(orderBy('changedAt', 'desc'));
 
-  const q = query(collection(firestore, 'audit_logs_material'), ...constraints);
+  const q = query(collection(getFirebaseFirestore(), 'audit_logs_material'), ...constraints);
   const querySnapshot = await getDocs(q);
 
   let results = querySnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as AuditLogMaterial));
@@ -445,7 +445,7 @@ export async function getMaterialAuditLogs(
 // ============= VALIDATION HELPERS =============
 
 export async function checkDuplicateARNo(arNo: string, excludeId?: string): Promise<boolean> {
-  const q = query(collection(firestore, 'material_review'), where('arNo', '==', arNo));
+  const q = query(collection(getFirebaseFirestore(), 'material_review'), where('arNo', '==', arNo));
   const querySnapshot = await getDocs(q);
 
   if (excludeId) {
@@ -457,7 +457,7 @@ export async function checkDuplicateARNo(arNo: string, excludeId?: string): Prom
 
 export async function checkMaterialExists(materialId: string): Promise<boolean> {
   try {
-    const docRef = doc(firestore, 'material_master', materialId);
+    const docRef = doc(getFirebaseFirestore(), 'material_master', materialId);
     const docSnap = await getDoc(docRef);
     return docSnap.exists();
   } catch (error) {
@@ -467,7 +467,7 @@ export async function checkMaterialExists(materialId: string): Promise<boolean> 
 
 export async function checkVendorExists(vendorId: string): Promise<boolean> {
   try {
-    const docRef = doc(firestore, 'vendor_master', vendorId);
+    const docRef = doc(getFirebaseFirestore(), 'vendor_master', vendorId);
     const docSnap = await getDoc(docRef);
     return docSnap.exists();
   } catch (error) {

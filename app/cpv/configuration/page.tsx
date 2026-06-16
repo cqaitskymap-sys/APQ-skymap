@@ -1,5 +1,7 @@
-import { ConfigWorkspace } from '@/components/cpv/config-workspace';
+import { ConfigurationPageWithGuard } from '@/components/cpv/configuration/configuration-page';
 
-export default function Page() {
-  return <ConfigWorkspace />;
+export const dynamic = 'force-dynamic';
+
+export default function CpvConfigurationRoutePage() {
+  return <ConfigurationPageWithGuard />;
 }

@@ -1,145 +1,314 @@
 'use client';
 
-import { useMemo, useState, useEffect } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
-  ArrowRight, Printer, Package, FlaskConical, CheckCircle2,
-  AlertTriangle, ShieldAlert, BarChart3, Activity, TestTube, TrendingUp,
+  RefreshCw, Download, FileSpreadsheet, ChevronRight, AlertTriangle,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, Legend, Cell, ComposedChart,
+  ResponsiveContainer, Legend, Cell, PieChart, Pie,
 } from 'recharts';
-import { CPV_COLLECTIONS } from '@/lib/cpv';
-import { useCpvData } from '@/hooks/use-cpv-data';
-import { listCpvRecords } from '@/lib/cpv-service';
-import { printPage } from '@/lib/export-utils';
 import {
-  filterCpvRecords, filterRiskRecords, uniqueProducts, uniqueBatches,
-  countByStatus, computeCapabilityAverages, monthlyTrend, complianceTrend,
-  riskTrend, productCompliance, openRiskCount, buildOotOosAlerts,
-  mapAuditToActivities, availableYears, type CpvDashboardFilters,
+  filterCpvRecords, filterRiskRecords, uniqueProducts, countByStatus,
+  complianceTrend, productCompliance, openRiskCount, highRiskCount,
+  compliancePercent, ootOosMonthlyTrend, riskLevelDistribution,
+  cpkMonthlyTrend, batchReviewTrend, mapAuditToActivities,
+  availableYears, type CpvDashboardFilters,
 } from '@/lib/cpv-dashboard';
+import {
+  fetchCpvDashboardData, buildCppAlerts, buildCqaAlerts, pendingCpvReviews,
+  pendingApprovalCount, annualReviewCount, averageCpkFromCapability,
+  uniqueBatchNumbers, logCpvDashboardAudit, type CpvDashboardRawData,
+} from '@/lib/cpv-dashboard-service';
+import { downloadCsv, printPage } from '@/lib/export-utils';
+import { useAuth } from '@/contexts/auth-context';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { DataState, KpiCard, PageHeading, StatusBadge } from '@/components/cpv/cpv-ui';
+import { DataState, KpiCard, StatusBadge } from '@/components/cpv/cpv-ui';
+import { ErrorCard } from '@/components/admin/dashboard/error-card';
 
 const MONTHS = [
-  { value: '01', label: 'January' }, { value: '02', label: 'February' }, { value: '03', label: 'March' },
-  { value: '04', label: 'April' }, { value: '05', label: 'May' }, { value: '06', label: 'June' },
-  { value: '07', label: 'July' }, { value: '08', label: 'August' }, { value: '09', label: 'September' },
-  { value: '10', label: 'October' }, { value: '11', label: 'November' }, { value: '12', label: 'December' },
+  { value: '01', label: 'Jan' }, { value: '02', label: 'Feb' }, { value: '03', label: 'Mar' },
+  { value: '04', label: 'Apr' }, { value: '05', label: 'May' }, { value: '06', label: 'Jun' },
+  { value: '07', label: 'Jul' }, { value: '08', label: 'Aug' }, { value: '09', label: 'Sep' },
+  { value: '10', label: 'Oct' }, { value: '11', label: 'Nov' }, { value: '12', label: 'Dec' },
 ];
 
+const CHART_COLORS = ['#2563eb', '#059669', '#d97706', '#dc2626', '#7c3aed', '#64748b'];
+
+function EmptyChart() {
+  return (
+    <div className="flex h-full min-h-[200px] items-center justify-center text-sm text-muted-foreground">
+      No data for selected filters
+    </div>
+  );
+}
+
 export function CpvDashboardPage() {
-  const { loading, cpp, cqa, risks, integrations, modules } = useCpvData(true);
-  const [audit, setAudit] = useState<Record<string, unknown>[]>([]);
+  const { user, profile } = useAuth();
+  const [data, setData] = useState<CpvDashboardRawData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [filters, setFilters] = useState<CpvDashboardFilters>({
     product: 'all', year: 'all', month: 'all', quarter: 'all',
+    batchNo: 'all', riskLevel: 'all', status: 'all',
   });
-  const [generatedAt] = useState(() => new Date().toISOString());
 
-  useEffect(() => {
-    listCpvRecords<Record<string, unknown>>(CPV_COLLECTIONS.audit, 50).then(setAudit);
+  const load = useCallback(async (isRefresh = false) => {
+    if (isRefresh) setRefreshing(true);
+    else setLoading(true);
+    const result = await fetchCpvDashboardData();
+    setData(result);
+    setLoading(false);
+    setRefreshing(false);
+    if (result.error) toast.error(result.error);
+    return result;
   }, []);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const cpp = useMemo(() => data?.cpp ?? [], [data?.cpp]);
+  const cqa = useMemo(() => data?.cqa ?? [], [data?.cqa]);
+  const risks = useMemo(() => data?.risks ?? [], [data?.risks]);
 
   const filteredCpp = useMemo(() => filterCpvRecords(cpp, filters), [cpp, filters]);
   const filteredCqa = useMemo(() => filterCpvRecords(cqa, filters), [cqa, filters]);
   const filteredRisks = useMemo(() => filterRiskRecords(risks, filters), [risks, filters]);
-  const allFiltered = useMemo(() => [...filteredCpp, ...filteredCqa], [filteredCpp, filteredCqa]);
 
-  const products = useMemo(() => uniqueProducts(cpp, cqa), [cpp, cqa]);
+  const products = useMemo(() => {
+    const fromData = uniqueProducts(cpp, cqa);
+    const fromMaster = (data?.products || []).map((p) =>
+      String(p.productName || p.product_name || p.name || ''),
+    ).filter(Boolean);
+    return Array.from(new Set([...fromData, ...fromMaster])).sort();
+  }, [cpp, cqa, data?.products]);
+
+  const batchNumbers = useMemo(() => uniqueBatchNumbers(cpp, cqa), [cpp, cqa]);
   const years = useMemo(() => availableYears([...cpp, ...cqa]), [cpp, cqa]);
 
   const cppStats = useMemo(() => countByStatus(filteredCpp), [filteredCpp]);
   const cqaStats = useMemo(() => countByStatus(filteredCqa), [filteredCqa]);
-  const totalStats = useMemo(() => ({
-    complies: cppStats.complies + cqaStats.complies,
-    oot: cppStats.oot + cqaStats.oot,
-    oos: cppStats.oos + cqaStats.oos,
-  }), [cppStats, cqaStats]);
+  const cppCompliancePct = compliancePercent(cppStats.complies, filteredCpp.length);
+  const cqaCompliancePct = compliancePercent(cqaStats.complies, filteredCqa.length);
 
   const { averageCpk, averagePpk } = useMemo(
-    () => computeCapabilityAverages(filteredCpp, filteredCqa),
-    [filteredCpp, filteredCqa],
+    () => averageCpkFromCapability(data?.processCapability || [], filteredCpp, filteredCqa),
+    [data?.processCapability, filteredCpp, filteredCqa],
   );
 
-  const batches = useMemo(
-    () => (integrations?.batches || []) as Record<string, unknown>[],
-    [integrations?.batches],
-  );
-  const openAlerts = modules?.alerts?.filter((a) => a.status === 'Open').length || 0;
-  const annualCompliance = totalStats.complies + totalStats.oot + totalStats.oos > 0
-    ? Math.round((totalStats.complies / (totalStats.complies + totalStats.oot + totalStats.oos)) * 100)
-    : 100;
+  const productsUnderCpv = filters.product && filters.product !== 'all'
+    ? 1
+    : Math.max(products.length, (data?.products || []).length);
+
+  const batchesReviewed = useMemo(() => {
+    const set = new Set<string>();
+    filteredCpp.forEach((r) => r.batchNo && set.add(r.batchNo));
+    filteredCqa.forEach((r) => r.batchNo && set.add(r.batchNo));
+    return set.size;
+  }, [filteredCpp, filteredCqa]);
+
+  const stabilityStats = useMemo(() => {
+    const rows = data?.stabilityResults || [];
+    return {
+      studies: data?.stabilityStudies?.length || 0,
+      results: rows.length,
+      oos: rows.filter((r) => String(r.status) === 'OOS').length,
+      oot: rows.filter((r) => String(r.status) === 'OOT').length,
+    };
+  }, [data?.stabilityResults, data?.stabilityStudies]);
+
+  const holdTimeStats = useMemo(() => {
+    const rows = data?.holdTimeRecords || [];
+    return {
+      total: rows.length,
+      exceeded: rows.filter((r) => String(r.status) === 'Exceeded').length,
+      compliant: rows.filter((r) => String(r.status) === 'Complies').length,
+    };
+  }, [data?.holdTimeRecords]);
+
+  const capabilityStats = useMemo(() => {
+    const rows = data?.processCapability || [];
+    return {
+      total: rows.length,
+      notCapable: rows.filter((r) => ['Not Capable', 'Poor'].includes(String(r.capabilityStatus || r.capability_status))).length,
+      avgCpk: rows.filter((r) => Number(r.cpk) > 0).length
+        ? rows.filter((r) => Number(r.cpk) > 0).reduce((s, r) => s + Number(r.cpk), 0)
+          / rows.filter((r) => Number(r.cpk) > 0).length
+        : 0,
+    };
+  }, [data?.processCapability]);
+
+  const trendAnalysisStats = useMemo(() => {
+    const rows = data?.trendAnalysisRecords || [];
+    return {
+      total: rows.length,
+      alert: rows.filter((r) => String(r.trendStatus || r.trend_status) === 'Alert').length,
+      oot: rows.filter((r) => String(r.trendStatus || r.trend_status) === 'OOT').length,
+      oos: rows.filter((r) => String(r.trendStatus || r.trend_status) === 'OOS').length,
+      highRisk: rows.filter((r) => ['High', 'Critical'].includes(String(r.riskLevel || r.risk_level))).length,
+    };
+  }, [data?.trendAnalysisRecords]);
+
+  const spcStats = useMemo(() => {
+    const rows = data?.controlChartRecords || [];
+    return {
+      total: rows.length,
+      outOfControl: rows.filter((r) => String(r.spcStatus || r.spc_status) === 'Out Of Control').length,
+      violations: rows.reduce((s, r) => s + Number(r.ruleViolationsCount ?? r.rule_violations_count ?? 0), 0),
+      highRisk: rows.filter((r) => ['High', 'Critical'].includes(String(r.riskLevel || r.risk_level))).length,
+    };
+  }, [data?.controlChartRecords]);
 
   const kpis = useMemo(() => ({
-    products: filters.product && filters.product !== 'all' ? 1 : products.length,
-    batches: uniqueBatches(filteredCpp, filteredCqa, batches),
-    cppParams: filteredCpp.length,
-    cqaParams: filteredCqa.length,
-    compliant: totalStats.complies,
-    oot: totalStats.oot,
-    oos: totalStats.oos,
+    products: productsUnderCpv,
+    batchesReviewed,
+    cppParams: data?.cppParameters?.length || filteredCpp.length,
+    cqaParams: data?.cqaParameters?.length || filteredCqa.length,
+    cppCompliancePct,
+    cqaCompliancePct,
+    oot: cppStats.oot + cqaStats.oot,
+    oos: cqaStats.oos,
     openRisks: openRiskCount(filteredRisks),
-    openAlerts,
+    highRisks: highRiskCount(filteredRisks),
     avgCpk: averageCpk,
     avgPpk: averagePpk,
-    annualCompliance,
-  }), [filters, products, filteredCpp, filteredCqa, batches, totalStats, filteredRisks, averageCpk, averagePpk, openAlerts, annualCompliance]);
+    annualReviews: annualReviewCount(data?.cpvReviews || []),
+    pendingApprovals: pendingApprovalCount(data?.cpvReviews || []),
+    stabilityStudies: stabilityStats.studies,
+    stabilityOos: stabilityStats.oos,
+    holdTimeRecords: holdTimeStats.total,
+    holdTimeExceeded: holdTimeStats.exceeded,
+    capabilityReviews: capabilityStats.total,
+    capabilityNotCapable: capabilityStats.notCapable,
+    trendAnalysisTotal: trendAnalysisStats.total,
+    trendAnalysisIssues: trendAnalysisStats.alert + trendAnalysisStats.oot + trendAnalysisStats.oos,
+    spcTotal: spcStats.total,
+    spcOutOfControl: spcStats.outOfControl,
+  }), [
+    productsUnderCpv, batchesReviewed, data, filteredCpp, filteredCqa,
+    cppCompliancePct, cqaCompliancePct, cppStats, cqaStats, filteredRisks,
+    averageCpk, averagePpk, stabilityStats, holdTimeStats, capabilityStats, trendAnalysisStats, spcStats,
+  ]);
 
   const charts = useMemo(() => ({
-    monthly: monthlyTrend(allFiltered),
     cppCompliance: complianceTrend(filteredCpp),
     cqaCompliance: complianceTrend(filteredCqa),
-    risk: riskTrend(filteredRisks),
+    ootOos: ootOosMonthlyTrend(filteredCpp, filteredCqa),
     product: productCompliance(filteredCpp, filteredCqa),
-  }), [allFiltered, filteredCpp, filteredCqa, filteredRisks]);
+    riskDist: riskLevelDistribution(filteredRisks),
+    cpkTrend: cpkMonthlyTrend(data?.processCapability || []),
+    batchTrend: batchReviewTrend([...filteredCpp, ...filteredCqa]),
+  }), [filteredCpp, filteredCqa, filteredRisks, data?.processCapability]);
 
-  const alerts = useMemo(() => buildOotOosAlerts(filteredCpp, filteredCqa), [filteredCpp, filteredCqa]);
-  const activities = useMemo(() => mapAuditToActivities(audit), [audit]);
+  const cppAlerts = useMemo(() => buildCppAlerts(filteredCpp), [filteredCpp]);
+  const cqaAlerts = useMemo(() => buildCqaAlerts(filteredCqa), [filteredCqa]);
+  const pendingReviews = useMemo(() => pendingCpvReviews(data?.cpvReviews || []), [data?.cpvReviews]);
+  const activities = useMemo(() => mapAuditToActivities(data?.auditTrail || []), [data?.auditTrail]);
 
   const setFilter = (key: keyof CpvDashboardFilters, value: string) =>
     setFilters((prev) => ({ ...prev, [key]: value }));
 
+  const handleRefresh = async () => {
+    await load(true);
+    await logCpvDashboardAudit('Refresh', {
+      id: user?.uid,
+      name: profile?.full_name || profile?.email,
+    });
+    toast.success('Dashboard refreshed');
+  };
+
+  const handleExportPdf = async () => {
+    printPage();
+    await logCpvDashboardAudit('Export', {
+      id: user?.uid,
+      name: profile?.full_name || profile?.email,
+    }, 'PDF summary');
+    toast.success('PDF export opened — use browser print to save');
+  };
+
+  const handleExportExcel = async () => {
+    downloadCsv(
+      `cpv_dashboard_${new Date().toISOString().split('T')[0]}.csv`,
+      ['Metric', 'Value'],
+      [
+        ['Products Under CPV', kpis.products],
+        ['Batches Reviewed', kpis.batchesReviewed],
+        ['CPP Parameters', kpis.cppParams],
+        ['CQA Parameters', kpis.cqaParams],
+        ['CPP Compliant %', kpis.cppCompliancePct],
+        ['CQA Compliant %', kpis.cqaCompliancePct],
+        ['OOT Count', kpis.oot],
+        ['OOS Count', kpis.oos],
+        ['Open Risks', kpis.openRisks],
+        ['High Risk Count', kpis.highRisks],
+        ['Average Cpk', kpis.avgCpk.toFixed(2)],
+        ['Average Ppk', kpis.avgPpk.toFixed(2)],
+        ['Annual CPV Reviews', kpis.annualReviews],
+        ['Pending Approvals', kpis.pendingApprovals],
+      ],
+    );
+    await logCpvDashboardAudit('Export', {
+      id: user?.uid,
+      name: profile?.full_name || profile?.email,
+    }, 'Excel summary');
+    toast.success('Dashboard summary exported');
+  };
+
   const cpkTone = averageCpk >= 1.33 ? 'green' : averageCpk >= 1 ? 'amber' : 'red';
-  const ppkTone = averagePpk >= 1.33 ? 'green' : averagePpk >= 1 ? 'amber' : 'red';
+
+  if (loading && !data) {
+    return <DataState loading empty={false} />;
+  }
+
+  if (data?.error && !cpp.length && !cqa.length) {
+    return (
+      <ErrorCard message={data.error} onRetry={() => load(true)} />
+    );
+  }
 
   return (
     <div id="cpv-dashboard-root" className="space-y-6">
-      {/* Print-only header */}
-      <div className="hidden print:block border-2 border-black mb-4">
-        <div className="grid grid-cols-3 border-b border-black">
-          <div className="p-3 border-r border-black text-center font-bold text-blue-800 text-sm">SKYMAP PHARMACEUTICALS</div>
-          <div className="p-3 border-r border-black text-center"><p className="font-bold text-sm uppercase">CPV Dashboard Report</p><p className="text-[10px]">FDA Stage 3 | ALCOA+ | 21 CFR Part 11</p></div>
-          <div className="p-3 text-[10px]"><p><strong>Generated:</strong> {new Date(generatedAt).toLocaleString('en-GB')}</p></div>
+      {/* Breadcrumb */}
+      <nav className="no-print flex flex-wrap items-center gap-1 text-sm text-muted-foreground">
+        <Link href="/dashboard" className="hover:text-blue-600">Dashboard</Link>
+        <ChevronRight className="h-3 w-3" />
+        <Link href="/cpv" className="hover:text-blue-600">Continued Process Verification</Link>
+        <ChevronRight className="h-3 w-3" />
+        <span className="font-medium text-slate-900">CPV Dashboard</span>
+      </nav>
+
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">CPV Dashboard</h1>
+          <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+            Continued Process Verification overview and process health monitoring
+          </p>
+        </div>
+        <div className="no-print flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" onClick={handleRefresh} disabled={refreshing}>
+            <RefreshCw className={`h-4 w-4 mr-1 ${refreshing ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+          <Button variant="outline" size="sm" onClick={handleExportPdf}>
+            <Download className="h-4 w-4 mr-1" />Export PDF
+          </Button>
+          <Button variant="outline" size="sm" onClick={handleExportExcel}>
+            <FileSpreadsheet className="h-4 w-4 mr-1" />Export Excel
+          </Button>
         </div>
       </div>
 
-      <div className="no-print">
-        <PageHeading
-          title="CPV Dashboard"
-          description="Continued Process Verification command center — process performance, product quality, statistical control, and risk monitoring."
-          actions={
-            <>
-              <Button variant="outline" className="gap-2" onClick={() => printPage()}>
-                <Printer className="h-4 w-4" />Export PDF
-              </Button>
-              <Link href="/cpv/annual-review">
-                <Button className="gap-2">Annual Review<ArrowRight className="h-4 w-4" /></Button>
-              </Link>
-            </>
-          }
-        />
-      </div>
-
       {/* Filters */}
-      <Card className="no-print">
-        <CardHeader className="pb-3"><CardTitle className="text-base">Dashboard Filters</CardTitle></CardHeader>
+      <Card className="no-print border-slate-200 shadow-sm">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Filters</CardTitle>
+        </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
             <Select value={filters.product || 'all'} onValueChange={(v) => setFilter('product', v)}>
               <SelectTrigger><SelectValue placeholder="Product" /></SelectTrigger>
               <SelectContent>
@@ -165,238 +334,350 @@ export function CpvDashboardPage() {
               <SelectTrigger><SelectValue placeholder="Quarter" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Quarters</SelectItem>
-                <SelectItem value="Q1">Q1 (Jan–Mar)</SelectItem>
-                <SelectItem value="Q2">Q2 (Apr–Jun)</SelectItem>
-                <SelectItem value="Q3">Q3 (Jul–Sep)</SelectItem>
-                <SelectItem value="Q4">Q4 (Oct–Dec)</SelectItem>
+                <SelectItem value="Q1">Q1</SelectItem>
+                <SelectItem value="Q2">Q2</SelectItem>
+                <SelectItem value="Q3">Q3</SelectItem>
+                <SelectItem value="Q4">Q4</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={filters.batchNo || 'all'} onValueChange={(v) => setFilter('batchNo', v)}>
+              <SelectTrigger><SelectValue placeholder="Batch" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Batches</SelectItem>
+                {batchNumbers.map((b) => <SelectItem key={b} value={b}>{b}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={filters.riskLevel || 'all'} onValueChange={(v) => setFilter('riskLevel', v)}>
+              <SelectTrigger><SelectValue placeholder="Risk" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Risk Levels</SelectItem>
+                {['Low', 'Medium', 'High', 'Critical'].map((r) => (
+                  <SelectItem key={r} value={r}>{r}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={filters.status || 'all'} onValueChange={(v) => setFilter('status', v)}>
+              <SelectTrigger><SelectValue placeholder="Status" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Status</SelectItem>
+                <SelectItem value="Complies">Complies</SelectItem>
+                <SelectItem value="OOT">OOT</SelectItem>
+                <SelectItem value="OOS">OOS</SelectItem>
               </SelectContent>
             </Select>
           </div>
         </CardContent>
       </Card>
 
-      <DataState loading={loading} empty={false} />
+      {/* KPI Cards */}
+      <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
+        <KpiCard label="Products Under CPV" value={kpis.products} tone="blue" />
+        <KpiCard label="Batches Reviewed" value={kpis.batchesReviewed} tone="blue" />
+        <KpiCard label="CPP Parameters" value={kpis.cppParams} tone="blue" />
+        <KpiCard label="CQA Parameters" value={kpis.cqaParams} tone="blue" />
+        <KpiCard label="CPP Compliant %" value={`${kpis.cppCompliancePct}%`} tone={kpis.cppCompliancePct >= 95 ? 'green' : 'amber'} />
+        <KpiCard label="CQA Compliant %" value={`${kpis.cqaCompliancePct}%`} tone={kpis.cqaCompliancePct >= 95 ? 'green' : 'amber'} />
+        <KpiCard label="OOT Count" value={kpis.oot} tone={kpis.oot ? 'amber' : 'green'} />
+        <KpiCard label="OOS Count" value={kpis.oos} tone={kpis.oos ? 'red' : 'green'} />
+        <KpiCard label="Open Risks" value={kpis.openRisks} tone={kpis.openRisks ? 'amber' : 'green'} />
+        <KpiCard label="High Risk Count" value={kpis.highRisks} tone={kpis.highRisks ? 'red' : 'green'} />
+        <KpiCard label="Average Cpk" value={kpis.avgCpk.toFixed(2)} tone={cpkTone} />
+        <KpiCard label="Average Ppk" value={kpis.avgPpk.toFixed(2)} tone={cpkTone} />
+        <KpiCard label="Annual CPV Reviews" value={kpis.annualReviews} tone="blue" />
+        <KpiCard label="Pending Approvals" value={kpis.pendingApprovals} tone={kpis.pendingApprovals ? 'amber' : 'green'} />
+        <Link href="/cpv/stability-monitoring" className="block">
+          <KpiCard label="Stability Studies" value={kpis.stabilityStudies} tone="blue" />
+        </Link>
+        <Link href="/cpv/stability-monitoring" className="block">
+          <KpiCard label="Stability OOS" value={kpis.stabilityOos} tone={kpis.stabilityOos ? 'red' : 'green'} />
+        </Link>
+        <Link href="/cpv/hold-time-monitoring" className="block">
+          <KpiCard label="Hold Time Records" value={kpis.holdTimeRecords} tone="blue" />
+        </Link>
+        <Link href="/cpv/hold-time-monitoring" className="block">
+          <KpiCard label="Hold Time Exceeded" value={kpis.holdTimeExceeded} tone={kpis.holdTimeExceeded ? 'red' : 'green'} />
+        </Link>
+        <Link href="/cpv/process-capability" className="block">
+          <KpiCard label="Capability Reviews" value={kpis.capabilityReviews} tone="blue" />
+        </Link>
+        <Link href="/cpv/process-capability" className="block">
+          <KpiCard label="Not Capable" value={kpis.capabilityNotCapable} tone={kpis.capabilityNotCapable ? 'red' : 'green'} />
+        </Link>
+        <Link href="/cpv/trend-analysis" className="block">
+          <KpiCard label="Trend Analysis" value={kpis.trendAnalysisTotal} tone="blue" />
+        </Link>
+        <Link href="/cpv/trend-analysis" className="block">
+          <KpiCard label="Trend Issues" value={kpis.trendAnalysisIssues} tone={kpis.trendAnalysisIssues ? 'amber' : 'green'} />
+        </Link>
+        <Link href="/cpv/control-charts" className="block">
+          <KpiCard label="SPC Charts" value={kpis.spcTotal} tone="blue" />
+        </Link>
+        <Link href="/cpv/control-charts" className="block">
+          <KpiCard label="SPC Out Of Control" value={kpis.spcOutOfControl} tone={kpis.spcOutOfControl ? 'red' : 'green'} />
+        </Link>
+      </div>
 
-      {!loading && (
-        <>
-          {/* KPI Cards */}
-          <div className="grid gap-3 grid-cols-2 md:grid-cols-3 xl:grid-cols-5">
-            <KpiCard label="Products Under CPV" value={kpis.products} detail="Unique products monitored" tone="blue" />
-            <KpiCard label="Batches Reviewed" value={kpis.batches} detail="Unique batch numbers" tone="blue" />
-            <KpiCard label="CPP Parameters" value={kpis.cppParams} detail="Critical process parameters" tone="blue" />
-            <KpiCard label="CQA Parameters" value={kpis.cqaParams} detail="Critical quality attributes" tone="blue" />
-            <KpiCard label="Compliant Parameters" value={kpis.compliant} tone="green" />
-            <KpiCard label="OOT Parameters" value={kpis.oot} tone={kpis.oot ? 'amber' : 'green'} />
-            <KpiCard label="OOS Parameters" value={kpis.oos} tone={kpis.oos ? 'red' : 'green'} />
-            <KpiCard label="Open Risks" value={kpis.openRisks} tone={kpis.openRisks ? 'red' : 'green'} />
-            <KpiCard label="Open Alerts" value={kpis.openAlerts} tone={kpis.openAlerts ? 'red' : 'green'} />
-            <KpiCard label="Annual Compliance %" value={`${kpis.annualCompliance}%`} tone={kpis.annualCompliance >= 95 ? 'green' : 'amber'} />
-            <KpiCard label="Average Cpk" value={averageCpk.toFixed(2)} tone={cpkTone} />
-            <KpiCard label="Average Ppk" value={averagePpk.toFixed(2)} tone={ppkTone} />
-          </div>
+      {/* Charts */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card className="shadow-sm">
+          <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">CPP Compliance Trend</CardTitle></CardHeader>
+          <CardContent className="h-[280px]">
+            {charts.cppCompliance.length ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={charts.cppCompliance}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+                  <YAxis domain={[0, 100]} unit="%" tick={{ fontSize: 11 }} />
+                  <Tooltip formatter={(v) => [`${v}%`, 'Compliance']} />
+                  <Line type="monotone" dataKey="rate" stroke="#059669" strokeWidth={2} dot={{ r: 3 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : <EmptyChart />}
+          </CardContent>
+        </Card>
 
-          {/* Module Quick Links */}
-          <Card className="no-print">
-            <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">CPV Module Navigation</CardTitle></CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
-                {[
-                  ['Product Master', '/cpv/products'], ['Batch Registration', '/cpv/batches'],
-                  ['CPP Monitoring', '/cpv/cpp'], ['CQA Monitoring', '/cpv/cqa'],
-                  ['Raw Materials', '/cpv/raw-materials'], ['Packing Materials', '/cpv/packing-materials'],
-                  ['Utility', '/cpv/utility'], ['Environmental', '/cpv/environmental'],
-                  ['Yield', '/cpv/yield'], ['Stability', '/cpv/stability'],
-                  ['Hold Time', '/cpv/hold-time'], ['Process Capability', '/cpv/process-capability'],
-                  ['Trend Analysis', '/cpv/trend-analysis'], ['Control Charts', '/cpv/control-charts'],
-                  ['Risk Assessment', '/cpv/risk-assessment'], ['Reports', '/cpv/reports'],
-                  ['Alerts', '/cpv/alerts'], ['Annual Review', '/cpv/annual-review'],
-                ].map(([label, href]) => (
-                  <Link key={href} href={href}>
-                    <Button variant="outline" size="sm" className="w-full justify-start text-xs h-8">{label}</Button>
-                  </Link>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+        <Card className="shadow-sm">
+          <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">CQA Compliance Trend</CardTitle></CardHeader>
+          <CardContent className="h-[280px]">
+            {charts.cqaCompliance.length ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={charts.cqaCompliance}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+                  <YAxis domain={[0, 100]} unit="%" tick={{ fontSize: 11 }} />
+                  <Tooltip formatter={(v) => [`${v}%`, 'Compliance']} />
+                  <Line type="monotone" dataKey="rate" stroke="#7c3aed" strokeWidth={2} dot={{ r: 3 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : <EmptyChart />}
+          </CardContent>
+        </Card>
 
-          {/* Charts */}
-          <div className="grid gap-4 lg:grid-cols-2">
-            <Card>
-              <CardHeader className="pb-2"><CardTitle className="text-sm font-medium flex items-center gap-2"><TrendingUp className="h-4 w-4 text-blue-600" />Monthly CPV Trend</CardTitle></CardHeader>
-              <CardContent className="h-[280px]">
-                {charts.monthly.length ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={charts.monthly}>
-                      <CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="month" tick={{ fontSize: 11 }} /><YAxis /><Tooltip /><Legend />
-                      <Line type="monotone" dataKey="count" name="Records" stroke="#2563eb" strokeWidth={2} dot={{ r: 4 }} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                ) : <DataState loading={false} empty emptyText="No CPV data for selected filters." />}
-              </CardContent>
-            </Card>
+        <Card className="shadow-sm">
+          <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Monthly OOT/OOS Trend</CardTitle></CardHeader>
+          <CardContent className="h-[280px]">
+            {charts.ootOos.length ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={charts.ootOos}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+                  <YAxis tick={{ fontSize: 11 }} />
+                  <Tooltip /><Legend />
+                  <Bar dataKey="oot" name="OOT" fill="#d97706" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="oos" name="OOS" fill="#dc2626" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : <EmptyChart />}
+          </CardContent>
+        </Card>
 
-            <Card>
-              <CardHeader className="pb-2"><CardTitle className="text-sm font-medium flex items-center gap-2"><Activity className="h-4 w-4 text-emerald-600" />CPP Compliance Trend</CardTitle></CardHeader>
-              <CardContent className="h-[280px]">
-                {charts.cppCompliance.length ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={charts.cppCompliance}>
-                      <CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="month" tick={{ fontSize: 11 }} /><YAxis domain={[0, 100]} unit="%" /><Tooltip formatter={(v) => [`${v}%`, 'Compliance Rate']} />
-                      <Line type="monotone" dataKey="rate" name="Compliance %" stroke="#059669" strokeWidth={2} dot={{ r: 4 }} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                ) : <DataState loading={false} empty emptyText="No CPP data for selected filters." />}
-              </CardContent>
-            </Card>
+        <Card className="shadow-sm">
+          <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Risk Level Distribution</CardTitle></CardHeader>
+          <CardContent className="h-[280px]">
+            {charts.riskDist.length ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={charts.riskDist} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90} label>
+                    {charts.riskDist.map((_, i) => (
+                      <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip /><Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : <EmptyChart />}
+          </CardContent>
+        </Card>
 
-            <Card>
-              <CardHeader className="pb-2"><CardTitle className="text-sm font-medium flex items-center gap-2"><TestTube className="h-4 w-4 text-violet-600" />CQA Compliance Trend</CardTitle></CardHeader>
-              <CardContent className="h-[280px]">
-                {charts.cqaCompliance.length ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={charts.cqaCompliance}>
-                      <CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="month" tick={{ fontSize: 11 }} /><YAxis domain={[0, 100]} unit="%" /><Tooltip formatter={(v) => [`${v}%`, 'Compliance Rate']} />
-                      <Line type="monotone" dataKey="rate" name="Compliance %" stroke="#7c3aed" strokeWidth={2} dot={{ r: 4 }} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                ) : <DataState loading={false} empty emptyText="No CQA data for selected filters." />}
-              </CardContent>
-            </Card>
+        <Card className="shadow-sm lg:col-span-2">
+          <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Product-wise CPV Compliance</CardTitle></CardHeader>
+          <CardContent className="h-[300px]">
+            {charts.product.length ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={charts.product} layout="vertical" margin={{ left: 8 }}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis type="number" domain={[0, 100]} unit="%" tick={{ fontSize: 11 }} />
+                  <YAxis type="category" dataKey="name" width={110} tick={{ fontSize: 10 }} />
+                  <Tooltip formatter={(v) => [`${v}%`, 'Compliance']} />
+                  <Bar dataKey="rate" name="Compliance %" radius={[0, 4, 4, 0]}>
+                    {charts.product.map((entry) => (
+                      <Cell key={entry.name} fill={entry.rate >= 95 ? '#059669' : entry.rate >= 80 ? '#d97706' : '#dc2626'} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            ) : <EmptyChart />}
+          </CardContent>
+        </Card>
 
-            <Card>
-              <CardHeader className="pb-2"><CardTitle className="text-sm font-medium flex items-center gap-2"><ShieldAlert className="h-4 w-4 text-red-600" />Risk Trend</CardTitle></CardHeader>
-              <CardContent className="h-[280px]">
-                {charts.risk.length ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <ComposedChart data={charts.risk}>
-                      <CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="month" tick={{ fontSize: 11 }} /><YAxis yAxisId="left" /><YAxis yAxisId="right" orientation="right" /><Tooltip /><Legend />
-                      <Bar yAxisId="left" dataKey="count" name="Risk Count" fill="#dc2626" radius={[4, 4, 0, 0]} />
-                      <Line yAxisId="right" type="monotone" dataKey="avgRpn" name="Avg RPN" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3 }} />
-                    </ComposedChart>
-                  </ResponsiveContainer>
-                ) : <DataState loading={false} empty emptyText="No risk assessments for selected filters." />}
-              </CardContent>
-            </Card>
+        <Card className="shadow-sm">
+          <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Average Cpk Trend</CardTitle></CardHeader>
+          <CardContent className="h-[280px]">
+            {charts.cpkTrend.length ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={charts.cpkTrend}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+                  <YAxis tick={{ fontSize: 11 }} />
+                  <Tooltip />
+                  <Line type="monotone" dataKey="cpk" name="Cpk" stroke="#2563eb" strokeWidth={2} dot={{ r: 3 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : <EmptyChart />}
+          </CardContent>
+        </Card>
 
-            <Card className="lg:col-span-2">
-              <CardHeader className="pb-2"><CardTitle className="text-sm font-medium flex items-center gap-2"><BarChart3 className="h-4 w-4 text-blue-600" />Product Wise Compliance</CardTitle></CardHeader>
-              <CardContent className="h-[300px]">
-                {charts.product.length ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={charts.product} layout="vertical" margin={{ left: 20 }}>
-                      <CartesianGrid strokeDasharray="3 3" /><XAxis type="number" domain={[0, 100]} unit="%" /><YAxis type="category" dataKey="name" width={120} tick={{ fontSize: 11 }} /><Tooltip formatter={(v) => [`${v}%`, 'Compliance']} />
-                      <Bar dataKey="rate" name="Compliance %" radius={[0, 4, 4, 0]}>
-                        {charts.product.map((entry) => (
-                          <Cell key={entry.name} fill={entry.rate >= 95 ? '#059669' : entry.rate >= 80 ? '#d97706' : '#dc2626'} />
-                        ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                ) : <DataState loading={false} empty emptyText="No product compliance data." />}
-              </CardContent>
-            </Card>
-          </div>
+        <Card className="shadow-sm">
+          <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Batch Review Trend</CardTitle></CardHeader>
+          <CardContent className="h-[280px]">
+            {charts.batchTrend.length ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={charts.batchTrend}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+                  <YAxis tick={{ fontSize: 11 }} />
+                  <Tooltip />
+                  <Bar dataKey="batches" name="Batches" fill="#2563eb" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : <EmptyChart />}
+          </CardContent>
+        </Card>
+      </div>
 
-          {/* Tables */}
-          <div className="grid gap-4 xl:grid-cols-2">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Recent Activities</CardTitle>
-                <CardDescription>CPV audit trail — latest system actions</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="rounded-lg border overflow-x-auto max-h-[360px] overflow-y-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="bg-muted/50">
-                        <TableHead>Date/Time</TableHead>
-                        <TableHead>Module</TableHead>
-                        <TableHead>Action</TableHead>
-                        <TableHead>User</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {activities.length ? activities.map((a) => (
-                        <TableRow key={a.id || a.timestamp}>
-                          <TableCell className="text-xs whitespace-nowrap">{a.timestamp ? new Date(a.timestamp).toLocaleString('en-IN') : '—'}</TableCell>
-                          <TableCell className="text-sm">{a.module}</TableCell>
-                          <TableCell className="text-sm font-medium">{a.action}</TableCell>
-                          <TableCell className="text-sm text-muted-foreground">{a.actorName}</TableCell>
-                        </TableRow>
-                      )) : (
-                        <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground">No recent activities</TableCell></TableRow>
-                      )}
-                    </TableBody>
-                  </Table>
-                </div>
-              </CardContent>
-            </Card>
+      {/* Tables */}
+      <div className="grid gap-4 xl:grid-cols-2">
+        <Card className="shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-base">Recent CPP Alerts</CardTitle>
+            <CardDescription>OOT/OOS critical process parameters</CardDescription>
+          </CardHeader>
+          <CardContent className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-slate-50">
+                  <TableHead>Alert Date</TableHead>
+                  <TableHead>Product</TableHead>
+                  <TableHead>Batch</TableHead>
+                  <TableHead>Parameter</TableHead>
+                  <TableHead>Value</TableHead>
+                  <TableHead>Limit</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Risk</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {cppAlerts.length ? cppAlerts.map((a) => (
+                  <TableRow key={a.id || `${a.batchNo}-${a.parameter}`}>
+                    <TableCell className="text-xs whitespace-nowrap">{a.alertDate ? new Date(a.alertDate).toLocaleDateString() : '—'}</TableCell>
+                    <TableCell className="text-sm">{a.productName}</TableCell>
+                    <TableCell className="font-mono text-xs">{a.batchNo}</TableCell>
+                    <TableCell className="text-sm">{a.parameter}</TableCell>
+                    <TableCell className="font-mono text-sm">{a.observedValue}</TableCell>
+                    <TableCell className="text-xs">{a.limit}</TableCell>
+                    <TableCell><StatusBadge status={a.status} /></TableCell>
+                    <TableCell><StatusBadge status={a.riskLevel} /></TableCell>
+                  </TableRow>
+                )) : (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No CPP alerts</TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base flex items-center gap-2">
-                  <AlertTriangle className="h-4 w-4 text-amber-600" />Recent OOT/OOS Alerts
-                </CardTitle>
-                <CardDescription>Out-of-trend and out-of-specification parameter alerts</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="rounded-lg border overflow-x-auto max-h-[360px] overflow-y-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="bg-muted/50">
-                        <TableHead>Type</TableHead>
-                        <TableHead>Product</TableHead>
-                        <TableHead>Batch</TableHead>
-                        <TableHead>Parameter</TableHead>
-                        <TableHead>Result</TableHead>
-                        <TableHead>Status</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {alerts.length ? alerts.map((a, i) => (
-                        <TableRow key={a.id || i} className={a.status === 'OOS' ? 'bg-red-50/50 dark:bg-red-950/10' : 'bg-amber-50/50 dark:bg-amber-950/10'}>
-                          <TableCell><span className="text-xs font-medium">{a.type}</span></TableCell>
-                          <TableCell className="text-sm">{a.productName}</TableCell>
-                          <TableCell className="text-sm font-mono">{a.batchNo}</TableCell>
-                          <TableCell className="text-sm">{a.parameter}</TableCell>
-                          <TableCell className="text-sm font-mono">{a.observedValue} {a.unit}</TableCell>
-                          <TableCell><StatusBadge status={a.status} /></TableCell>
-                        </TableRow>
-                      )) : (
-                        <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                          <CheckCircle2 className="h-5 w-5 mx-auto mb-2 text-emerald-600" />No OOT/OOS alerts — all parameters compliant
-                        </TableCell></TableRow>
-                      )}
-                    </TableBody>
-                  </Table>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+        <Card className="shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-base">Recent CQA Alerts</CardTitle>
+            <CardDescription>Out-of-trend / out-of-specification quality attributes</CardDescription>
+          </CardHeader>
+          <CardContent className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-slate-50">
+                  <TableHead>Alert Date</TableHead>
+                  <TableHead>Product</TableHead>
+                  <TableHead>Batch</TableHead>
+                  <TableHead>Parameter</TableHead>
+                  <TableHead>Value</TableHead>
+                  <TableHead>Specification</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Risk</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {cqaAlerts.length ? cqaAlerts.map((a) => (
+                  <TableRow key={a.id || `${a.batchNo}-${a.parameter}`}>
+                    <TableCell className="text-xs whitespace-nowrap">{a.alertDate ? new Date(a.alertDate).toLocaleDateString() : '—'}</TableCell>
+                    <TableCell className="text-sm">{a.productName}</TableCell>
+                    <TableCell className="font-mono text-xs">{a.batchNo}</TableCell>
+                    <TableCell className="text-sm">{a.parameter}</TableCell>
+                    <TableCell className="font-mono text-sm">{a.observedValue}</TableCell>
+                    <TableCell className="text-xs">{a.limit}</TableCell>
+                    <TableCell><StatusBadge status={a.status} /></TableCell>
+                    <TableCell><StatusBadge status={a.riskLevel} /></TableCell>
+                  </TableRow>
+                )) : (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No CQA alerts</TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      </div>
 
-          {/* Connected modules summary */}
-          <Card className="no-print">
-            <CardHeader><CardTitle className="text-base">Connected Quality Modules</CardTitle></CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-                {[
-                  { label: 'Batches', count: integrations?.batches.length || 0, icon: Package },
-                  { label: 'Deviations', count: integrations?.deviations.length || 0, icon: AlertTriangle },
-                  { label: 'OOS Records', count: integrations?.oos.length || 0, icon: TestTube },
-                  { label: 'CAPA', count: integrations?.capa.length || 0, icon: ShieldAlert },
-                  { label: 'PQR', count: integrations?.pqr.length || 0, icon: FlaskConical },
-                  { label: 'Stability', count: integrations?.stability.length || 0, icon: Activity },
-                ].map(({ label, count, icon: Icon }) => (
-                  <div key={label} className="rounded-lg border p-3 text-center">
-                    <Icon className="h-5 w-5 mx-auto mb-1 text-blue-600" />
-                    <p className="text-xs text-muted-foreground">{label}</p>
-                    <p className="text-xl font-bold">{count}</p>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </>
+      <Card className="shadow-sm">
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 text-amber-600" />
+            Pending CPV Reviews
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-slate-50">
+                <TableHead>Review No</TableHead>
+                <TableHead>Product</TableHead>
+                <TableHead>Review Period</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Pending With</TableHead>
+                <TableHead>Due Date</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {pendingReviews.length ? pendingReviews.map((r) => (
+                <TableRow key={r.id || r.reviewNo}>
+                  <TableCell className="font-mono text-xs">{r.reviewNo}</TableCell>
+                  <TableCell>{r.productName}</TableCell>
+                  <TableCell>{r.reviewPeriod}</TableCell>
+                  <TableCell><StatusBadge status={r.status} /></TableCell>
+                  <TableCell>{r.pendingWith || '—'}</TableCell>
+                  <TableCell>{r.dueDate ? new Date(r.dueDate).toLocaleDateString() : '—'}</TableCell>
+                </TableRow>
+              )) : (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No pending CPV reviews</TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      {activities.length > 0 && (
+        <Card className="no-print shadow-sm">
+          <CardHeader><CardTitle className="text-sm">Recent Audit Activity</CardTitle></CardHeader>
+          <CardContent className="max-h-48 overflow-y-auto text-xs text-muted-foreground space-y-1">
+            {activities.slice(0, 8).map((a) => (
+              <p key={a.id || a.timestamp}>{new Date(a.timestamp).toLocaleString()} — {a.action} ({a.module})</p>
+            ))}
+          </CardContent>
+        </Card>
       )}
     </div>
   );

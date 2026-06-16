@@ -3,19 +3,22 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-  LayoutDashboard, Plus, Search, ClipboardCheck, AlertTriangle,
-  Link2, CheckCircle, FileDown,
+  LayoutDashboard, Plus, Search, ClipboardCheck,
+  Link2, CheckCircle, FileDown, Lock, TrendingUp, History,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const items = [
-  { label: 'Deviation Dashboard', href: '/qms/deviation', icon: LayoutDashboard, exact: true },
-  { label: 'Create Deviation', href: '/qms/deviation/create', icon: Plus },
-  { label: 'Investigation', href: '/qms/deviation?status=under_investigation', icon: Search },
-  { label: 'Impact Assessment', href: '/qms/deviation?status=qa_review', icon: ClipboardCheck },
-  { label: 'CAPA Link', href: '/qms/deviation?capa_required=true', icon: Link2 },
-  { label: 'Approval Workflow', href: '/qms/deviation?status=submitted', icon: CheckCircle },
-  { label: 'Deviation Reports', href: '/qms/deviation/reports', icon: FileDown },
+  { label: 'Deviation Dashboard', href: '/qms/deviation', icon: LayoutDashboard, exact: true, alsoMatch: '/qms/deviation/dashboard' },
+  { label: 'Create Deviation', href: '/qms/deviation/create', icon: Plus, alsoMatch: '/qms/deviation/new' },
+  { label: 'Investigation', href: '/qms/deviation/investigation', icon: Search },
+  { label: 'Impact Assessment', href: '/qms/deviation/impact-assessment', icon: ClipboardCheck },
+  { label: 'CAPA Link', href: '/qms/deviation/capa-link', icon: Link2 },
+  { label: 'Approval Workflow', href: '/qms/deviation/approval', icon: CheckCircle },
+  { label: 'Closure', href: '/qms/deviation/closure', icon: Lock },
+  { label: 'Trend Analysis', href: '/qms/deviation/trend-analysis', icon: TrendingUp, alsoMatch: '/qms/deviation/trends' },
+  { label: 'Reports & Analytics', href: '/qms/deviation/reports', icon: FileDown, alsoMatch: '/qms/deviation/analytics' },
+  { label: 'Audit Trail', href: '/qms/deviation/audit-trail', icon: History },
 ];
 
 export function DeviationSubNav() {
@@ -31,6 +34,7 @@ export function DeviationSubNav() {
           const Icon = item.icon;
           const active = item.exact
             ? pathname === item.href.split('?')[0]
+              || ('alsoMatch' in item && pathname === (item as { alsoMatch?: string }).alsoMatch)
             : pathname.startsWith(item.href.split('?')[0]) && item.href !== '/qms/deviation';
           return (
             <Link

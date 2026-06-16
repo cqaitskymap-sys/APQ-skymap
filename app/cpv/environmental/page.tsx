@@ -1,5 +1,5 @@
-import { EnvironmentalWorkspace } from '@/components/cpv/cpv-module-workspaces';
+import { redirect } from 'next/navigation';
 
-export default function Page() {
-  return <EnvironmentalWorkspace />;
+export default function EnvironmentalLegacyPage() {
+  redirect('/cpv/environmental-monitoring');
 }

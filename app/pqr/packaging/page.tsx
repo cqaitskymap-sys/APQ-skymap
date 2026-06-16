@@ -1,5 +1,5 @@
-import { PqrSectionPage } from '@/lib/pqr-section-pages';
+import { PackagingReviewPage } from '@/components/pqr/packaging-review-page';
 
 export default function Page() {
-  return <PqrSectionPage section="packaging" />;
+  return <PackagingReviewPage />;
 }

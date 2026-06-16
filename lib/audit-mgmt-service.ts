@@ -3,7 +3,7 @@ import {
   type QueryConstraint,
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { firestore, storage } from '@/lib/firebase';
+import { getFirebaseFirestore, getFirebaseStorage } from '@/lib/firebase';
 import { logAuditEvent } from '@/lib/admin/admin-service';
 import { createCapa } from '@/lib/capa-service';
 import { downloadCsv } from '@/lib/export-utils';
@@ -32,7 +32,7 @@ async function audit(actor: AuditActor, action: string, recordId: string, oldVal
 async function notify(title: string, message: string, recordId: string, roles: string[]) {
   try {
     for (const role of roles) {
-      await addDoc(collection(firestore, AUDIT_COLLECTIONS.notifications), {
+      await addDoc(collection(getFirebaseFirestore(), AUDIT_COLLECTIONS.notifications), {
         title, message, module: 'Audit', record_id: recordId, target_role: role,
         read: false, created_at: now(),
       });
@@ -45,7 +45,7 @@ export async function generateAuditNumber(): Promise<string> {
   const prefix = `AUD-${year}-`;
   try {
     const snap = await getDocs(query(
-      collection(firestore, AUDIT_COLLECTIONS.audits),
+      collection(getFirebaseFirestore(), AUDIT_COLLECTIONS.audits),
       where('audit_number', '>=', prefix),
       where('audit_number', '<=', `${prefix}\uf8ff`),
       orderBy('audit_number', 'desc'),
@@ -56,7 +56,7 @@ export async function generateAuditNumber(): Promise<string> {
       return `${prefix}${String(parseInt(last.split('-').pop() || '0', 10) + 1).padStart(4, '0')}`;
     }
   } catch {
-    const all = await getDocs(collection(firestore, AUDIT_COLLECTIONS.audits));
+    const all = await getDocs(collection(getFirebaseFirestore(), AUDIT_COLLECTIONS.audits));
     return `${prefix}${String(all.size + 1).padStart(4, '0')}`;
   }
   return `${prefix}0001`;
@@ -65,7 +65,7 @@ export async function generateAuditNumber(): Promise<string> {
 async function generateFindingNumber(auditNumber: string): Promise<string> {
   const prefix = `${auditNumber}-F`;
   const snap = await getDocs(query(
-    collection(firestore, AUDIT_COLLECTIONS.findings),
+    collection(getFirebaseFirestore(), AUDIT_COLLECTIONS.findings),
     where('audit_number', '==', auditNumber),
   ));
   return `${prefix}${String(snap.size + 1).padStart(3, '0')}`;
@@ -73,7 +73,7 @@ async function generateFindingNumber(auditNumber: string): Promise<string> {
 
 async function generateChecklistNumber(auditId: string, auditNumber: string): Promise<string> {
   const snap = await getDocs(query(
-    collection(firestore, AUDIT_COLLECTIONS.checklists),
+    collection(getFirebaseFirestore(), AUDIT_COLLECTIONS.checklists),
     where('audit_id', '==', auditId),
   ));
   return `${auditNumber}-CL${String(snap.size + 1).padStart(3, '0')}`;
@@ -111,13 +111,13 @@ export async function createAudit(input: AuditCreateInput, actor: AuditActor): P
     created_at: timestamp,
     updated_at: timestamp,
   };
-  const refDoc = await addDoc(collection(firestore, AUDIT_COLLECTIONS.audits), record);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), AUDIT_COLLECTIONS.audits), record);
   await audit(actor, 'CREATE', refDoc.id, null, record);
   return { id: refDoc.id, ...record };
 }
 
 export async function getAuditById(id: string): Promise<AuditRecord | null> {
-  const snap = await getDoc(doc(firestore, AUDIT_COLLECTIONS.audits, id));
+  const snap = await getDoc(doc(getFirebaseFirestore(), AUDIT_COLLECTIONS.audits, id));
   if (!snap.exists()) return null;
   return { id: snap.id, ...snap.data() } as AuditRecord;
 }
@@ -130,10 +130,10 @@ export async function listAudits(filters?: AuditFilters): Promise<AuditRecord[]>
 
   let records: AuditRecord[];
   try {
-    const snap = await getDocs(query(collection(firestore, AUDIT_COLLECTIONS.audits), ...constraints));
+    const snap = await getDocs(query(collection(getFirebaseFirestore(), AUDIT_COLLECTIONS.audits), ...constraints));
     records = snap.docs.map((d) => ({ id: d.id, ...d.data() } as AuditRecord));
   } catch {
-    const snap = await getDocs(collection(firestore, AUDIT_COLLECTIONS.audits));
+    const snap = await getDocs(collection(getFirebaseFirestore(), AUDIT_COLLECTIONS.audits));
     records = snap.docs.map((d) => ({ id: d.id, ...d.data() } as AuditRecord));
   }
 
@@ -150,7 +150,7 @@ export async function updateAudit(id: string, input: Partial<AuditCreateInput & 
   const existing = await getAuditById(id);
   if (!existing) throw new Error('Audit not found');
   const updates = { ...input, updated_by: actor.id, updated_by_name: actor.name, updated_at: now() };
-  await updateDoc(doc(firestore, AUDIT_COLLECTIONS.audits, id), updates);
+  await updateDoc(doc(getFirebaseFirestore(), AUDIT_COLLECTIONS.audits, id), updates);
   await audit(actor, 'EDIT', id, existing, updates);
   return { ...existing, ...updates } as AuditRecord;
 }
@@ -159,7 +159,7 @@ export async function scheduleAudit(id: string, actor: AuditActor): Promise<Audi
   const existing = await getAuditById(id);
   if (!existing) throw new Error('Audit not found');
   const updates = { status: 'scheduled', updated_by: actor.id, updated_by_name: actor.name, updated_at: now() };
-  await updateDoc(doc(firestore, AUDIT_COLLECTIONS.audits, id), updates);
+  await updateDoc(doc(getFirebaseFirestore(), AUDIT_COLLECTIONS.audits, id), updates);
   await audit(actor, 'SCHEDULE', id, existing, updates);
   await notify('Audit Scheduled', `${existing.audit_number} scheduled for ${existing.audit_date}`, id, ['qa_manager', 'head_qa']);
   return { ...existing, ...updates };
@@ -173,7 +173,7 @@ export async function closeAudit(id: string, actor: AuditActor, comments = ''): 
   const existing = await getAuditById(id);
   if (!existing) throw new Error('Audit not found');
   const updates = { status: 'closed', updated_by: actor.id, updated_by_name: actor.name, updated_at: now() };
-  await updateDoc(doc(firestore, AUDIT_COLLECTIONS.audits, id), updates);
+  await updateDoc(doc(getFirebaseFirestore(), AUDIT_COLLECTIONS.audits, id), updates);
   await audit(actor, 'CLOSURE', id, existing, updates, comments);
   return { ...existing, ...updates };
 }
@@ -192,17 +192,17 @@ export async function createScheduleEntry(input: ScheduleInput, actor: AuditActo
     status: 'planned',
     created_at: now(),
   };
-  const refDoc = await addDoc(collection(firestore, AUDIT_COLLECTIONS.schedule), entry);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), AUDIT_COLLECTIONS.schedule), entry);
   await audit(actor, 'PLAN', refDoc.id, null, entry);
   return { id: refDoc.id, ...entry };
 }
 
 export async function listSchedule(): Promise<AuditScheduleEntry[]> {
   try {
-    const snap = await getDocs(query(collection(firestore, AUDIT_COLLECTIONS.schedule), orderBy('planned_date', 'asc')));
+    const snap = await getDocs(query(collection(getFirebaseFirestore(), AUDIT_COLLECTIONS.schedule), orderBy('planned_date', 'asc')));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as AuditScheduleEntry));
   } catch {
-    const snap = await getDocs(collection(firestore, AUDIT_COLLECTIONS.schedule));
+    const snap = await getDocs(collection(getFirebaseFirestore(), AUDIT_COLLECTIONS.schedule));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as AuditScheduleEntry));
   }
 }
@@ -231,7 +231,7 @@ export async function addChecklistItem(auditId: string, input: ChecklistItemInpu
     updated_at: timestamp,
   };
 
-  const refDoc = await addDoc(collection(firestore, AUDIT_COLLECTIONS.checklists), item);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), AUDIT_COLLECTIONS.checklists), item);
   await audit(actor, 'CHECKLIST_UPDATE', auditId, null, item);
 
   if (input.compliance_status === 'Non-Compliant') {
@@ -261,14 +261,14 @@ async function createFindingFromChecklist(
 export async function getChecklistItems(auditId: string): Promise<AuditChecklistItem[]> {
   try {
     const snap = await getDocs(query(
-      collection(firestore, AUDIT_COLLECTIONS.checklists),
+      collection(getFirebaseFirestore(), AUDIT_COLLECTIONS.checklists),
       where('audit_id', '==', auditId),
       orderBy('created_at', 'asc'),
     ));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as AuditChecklistItem));
   } catch {
     const snap = await getDocs(query(
-      collection(firestore, AUDIT_COLLECTIONS.checklists),
+      collection(getFirebaseFirestore(), AUDIT_COLLECTIONS.checklists),
       where('audit_id', '==', auditId),
     ));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as AuditChecklistItem));
@@ -276,7 +276,7 @@ export async function getChecklistItems(auditId: string): Promise<AuditChecklist
 }
 
 export async function updateChecklistItem(id: string, input: Partial<ChecklistItemInput>, actor: AuditActor): Promise<AuditChecklistItem> {
-  const snap = await getDoc(doc(firestore, AUDIT_COLLECTIONS.checklists, id));
+  const snap = await getDoc(doc(getFirebaseFirestore(), AUDIT_COLLECTIONS.checklists, id));
   if (!snap.exists()) throw new Error('Checklist item not found');
   const existing = { id: snap.id, ...snap.data() } as AuditChecklistItem;
   const updates = { ...input, updated_at: now() };
@@ -327,12 +327,12 @@ export async function createFinding(auditId: string, input: FindingInput, actor:
     updated_at: timestamp,
   };
 
-  const refDoc = await addDoc(collection(firestore, AUDIT_COLLECTIONS.findings), finding);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), AUDIT_COLLECTIONS.findings), finding);
   await audit(actor, 'FINDING_CREATE', refDoc.id, null, finding);
 
   const criticalCount = input.finding_type === 'Critical' ? auditRecord.critical_findings + 1 : auditRecord.critical_findings;
   const capaCount = input.capa_required ? auditRecord.capa_required_count + 1 : auditRecord.capa_required_count;
-  await updateDoc(doc(firestore, AUDIT_COLLECTIONS.audits, auditId), {
+  await updateDoc(doc(getFirebaseFirestore(), AUDIT_COLLECTIONS.audits, auditId), {
     total_findings: auditRecord.total_findings + 1,
     critical_findings: criticalCount,
     capa_required_count: capaCount,
@@ -356,18 +356,18 @@ export async function listFindings(auditId?: string): Promise<AuditFinding[]> {
   if (auditId) constraints.unshift(where('audit_id', '==', auditId));
 
   try {
-    const snap = await getDocs(query(collection(firestore, AUDIT_COLLECTIONS.findings), ...constraints));
+    const snap = await getDocs(query(collection(getFirebaseFirestore(), AUDIT_COLLECTIONS.findings), ...constraints));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as AuditFinding));
   } catch {
     const snap = auditId
-      ? await getDocs(query(collection(firestore, AUDIT_COLLECTIONS.findings), where('audit_id', '==', auditId)))
-      : await getDocs(collection(firestore, AUDIT_COLLECTIONS.findings));
+      ? await getDocs(query(collection(getFirebaseFirestore(), AUDIT_COLLECTIONS.findings), where('audit_id', '==', auditId)))
+      : await getDocs(collection(getFirebaseFirestore(), AUDIT_COLLECTIONS.findings));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as AuditFinding));
   }
 }
 
 export async function getFindingById(id: string): Promise<AuditFinding | null> {
-  const snap = await getDoc(doc(firestore, AUDIT_COLLECTIONS.findings, id));
+  const snap = await getDoc(doc(getFirebaseFirestore(), AUDIT_COLLECTIONS.findings, id));
   if (!snap.exists()) return null;
   return { id: snap.id, ...snap.data() } as AuditFinding;
 }
@@ -382,14 +382,14 @@ export async function updateFinding(id: string, input: Partial<FindingInput & { 
     updates = { ...updates, rpn, risk_level: rpnToLevel(rpn) };
   }
 
-  await updateDoc(doc(firestore, AUDIT_COLLECTIONS.findings, id), updates);
+  await updateDoc(doc(getFirebaseFirestore(), AUDIT_COLLECTIONS.findings, id), updates);
   await audit(actor, 'RISK_UPDATE', id, existing, updates);
   return { ...existing, ...updates } as AuditFinding;
 }
 
 export async function syncOverdueFindings(): Promise<number> {
   const snap = await getDocs(query(
-    collection(firestore, AUDIT_COLLECTIONS.findings),
+    collection(getFirebaseFirestore(), AUDIT_COLLECTIONS.findings),
     where('finding_status', '==', 'open'),
   ));
   let count = 0;
@@ -435,7 +435,7 @@ export async function createCapaFromFinding(findingId: string, actor: AuditActor
     qa_remarks: '',
   }, actor, { status: 'draft' });
 
-  await updateDoc(doc(firestore, AUDIT_COLLECTIONS.findings, findingId), {
+  await updateDoc(doc(getFirebaseFirestore(), AUDIT_COLLECTIONS.findings, findingId), {
     linked_capa_id: capa.id,
     linked_capa_number: capa.capa_number,
     capa_required: true,
@@ -443,7 +443,7 @@ export async function createCapaFromFinding(findingId: string, actor: AuditActor
     updated_at: now(),
   });
 
-  await addDoc(collection(firestore, AUDIT_COLLECTIONS.capaLinks), {
+  await addDoc(collection(getFirebaseFirestore(), AUDIT_COLLECTIONS.capaLinks), {
     audit_id: finding.audit_id,
     finding_id: findingId,
     capa_id: capa.id,
@@ -453,7 +453,7 @@ export async function createCapaFromFinding(findingId: string, actor: AuditActor
     linked_by_name: actor.name,
   });
 
-  await updateDoc(doc(firestore, AUDIT_COLLECTIONS.capa, capa.id), { audit_id: finding.audit_id });
+  await updateDoc(doc(getFirebaseFirestore(), AUDIT_COLLECTIONS.capa, capa.id), { audit_id: finding.audit_id });
   await audit(actor, 'CAPA_LINK', findingId, finding, { capa_id: capa.id, capa_number: capa.capa_number });
 
   return { ...finding, linked_capa_id: capa.id, linked_capa_number: capa.capa_number, capa_required: true, finding_status: 'capa_in_progress' };
@@ -463,12 +463,12 @@ export async function listCapaLinks(auditId?: string): Promise<AuditCapaLink[]> 
   try {
     const constraints: QueryConstraint[] = [orderBy('linked_at', 'desc')];
     if (auditId) constraints.unshift(where('audit_id', '==', auditId));
-    const snap = await getDocs(query(collection(firestore, AUDIT_COLLECTIONS.capaLinks), ...constraints));
+    const snap = await getDocs(query(collection(getFirebaseFirestore(), AUDIT_COLLECTIONS.capaLinks), ...constraints));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as AuditCapaLink));
   } catch {
     const snap = auditId
-      ? await getDocs(query(collection(firestore, AUDIT_COLLECTIONS.capaLinks), where('audit_id', '==', auditId)))
-      : await getDocs(collection(firestore, AUDIT_COLLECTIONS.capaLinks));
+      ? await getDocs(query(collection(getFirebaseFirestore(), AUDIT_COLLECTIONS.capaLinks), where('audit_id', '==', auditId)))
+      : await getDocs(collection(getFirebaseFirestore(), AUDIT_COLLECTIONS.capaLinks));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as AuditCapaLink));
   }
 }
@@ -485,11 +485,11 @@ export async function submitApproval(auditId: string, input: ApprovalInput, acto
     signed_at: now(),
     created_at: now(),
   };
-  const refDoc = await addDoc(collection(firestore, AUDIT_COLLECTIONS.approvals), entry);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), AUDIT_COLLECTIONS.approvals), entry);
   await audit(actor, input.decision === 'approved' ? 'APPROVAL' : 'REJECTION', auditId, null, entry, input.comments);
 
   if (input.decision === 'approved') {
-    await updateDoc(doc(firestore, AUDIT_COLLECTIONS.audits, auditId), {
+    await updateDoc(doc(getFirebaseFirestore(), AUDIT_COLLECTIONS.audits, auditId), {
       status: 'closed', updated_by: actor.id, updated_by_name: actor.name, updated_at: now(),
     });
   }
@@ -499,14 +499,14 @@ export async function submitApproval(auditId: string, input: ApprovalInput, acto
 export async function getApprovals(auditId: string): Promise<AuditApproval[]> {
   try {
     const snap = await getDocs(query(
-      collection(firestore, AUDIT_COLLECTIONS.approvals),
+      collection(getFirebaseFirestore(), AUDIT_COLLECTIONS.approvals),
       where('audit_id', '==', auditId),
       orderBy('created_at', 'asc'),
     ));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as AuditApproval));
   } catch {
     const snap = await getDocs(query(
-      collection(firestore, AUDIT_COLLECTIONS.approvals),
+      collection(getFirebaseFirestore(), AUDIT_COLLECTIONS.approvals),
       where('audit_id', '==', auditId),
     ));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as AuditApproval));
@@ -519,7 +519,7 @@ export async function uploadAttachment(
   auditId: string, file: File, actor: AuditActor, findingId?: string,
 ): Promise<AuditAttachment> {
   const path = `audits/${auditId}/${Date.now()}_${file.name}`;
-  const storageRef = ref(storage, path);
+  const storageRef = ref(getFirebaseStorage(), path);
   await uploadBytes(storageRef, file);
   const downloadUrl = await getDownloadURL(storageRef);
 
@@ -536,7 +536,7 @@ export async function uploadAttachment(
     uploaded_at: now(),
   };
 
-  const refDoc = await addDoc(collection(firestore, AUDIT_COLLECTIONS.attachments), attachment);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), AUDIT_COLLECTIONS.attachments), attachment);
   await audit(actor, 'ATTACHMENT_UPLOAD', auditId, null, { file_name: file.name });
   return { id: refDoc.id, ...attachment };
 }
@@ -544,14 +544,14 @@ export async function uploadAttachment(
 export async function getAttachments(auditId: string): Promise<AuditAttachment[]> {
   try {
     const snap = await getDocs(query(
-      collection(firestore, AUDIT_COLLECTIONS.attachments),
+      collection(getFirebaseFirestore(), AUDIT_COLLECTIONS.attachments),
       where('audit_id', '==', auditId),
       orderBy('uploaded_at', 'desc'),
     ));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as AuditAttachment));
   } catch {
     const snap = await getDocs(query(
-      collection(firestore, AUDIT_COLLECTIONS.attachments),
+      collection(getFirebaseFirestore(), AUDIT_COLLECTIONS.attachments),
       where('audit_id', '==', auditId),
     ));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as AuditAttachment));
@@ -561,7 +561,7 @@ export async function getAttachments(auditId: string): Promise<AuditAttachment[]
 export async function getAuditLogsForRecord(recordId: string): Promise<Record<string, unknown>[]> {
   try {
     const snap = await getDocs(query(
-      collection(firestore, AUDIT_COLLECTIONS.auditLogs),
+      collection(getFirebaseFirestore(), AUDIT_COLLECTIONS.auditLogs),
       where('recordId', '==', recordId),
       where('module', '==', 'Audit'),
       orderBy('dateTime', 'desc'),
@@ -570,7 +570,7 @@ export async function getAuditLogsForRecord(recordId: string): Promise<Record<st
     return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
   } catch {
     const snap = await getDocs(query(
-      collection(firestore, AUDIT_COLLECTIONS.auditLogs),
+      collection(getFirebaseFirestore(), AUDIT_COLLECTIONS.auditLogs),
       where('recordId', '==', recordId),
       limit(100),
     ));
@@ -661,7 +661,7 @@ export async function syncOverdueAudits(): Promise<number> {
   const today = now().split('T')[0];
   let count = 0;
   try {
-    const snap = await getDocs(collection(firestore, AUDIT_COLLECTIONS.audits));
+    const snap = await getDocs(collection(getFirebaseFirestore(), AUDIT_COLLECTIONS.audits));
     for (const d of snap.docs) {
       const data = d.data() as AuditRecord;
       if (['planned', 'scheduled'].includes(data.status) && data.audit_date < today) {

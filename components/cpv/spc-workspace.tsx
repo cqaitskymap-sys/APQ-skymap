@@ -8,7 +8,7 @@ import {
 import { addDoc, collection } from 'firebase/firestore';
 import { AlertTriangle, Link2, Printer, Save } from 'lucide-react';
 import { toast } from 'sonner';
-import { firestore } from '@/lib/firebase';
+import { getFirebaseFirestore } from '@/lib/firebase';
 import { useAuth } from '@/contexts/auth-context';
 import { CPV_COLLECTIONS, CppRecord, CqaRecord } from '@/lib/cpv';
 import {
@@ -183,7 +183,7 @@ export function SpcWorkspace() {
     if (analysis.processStatus === 'Insufficient Data') {
       return toast.error('Insufficient data to save SPC report');
     }
-    await addDoc(collection(firestore, CPV_COLLECTIONS.controlCharts), {
+    await addDoc(collection(getFirebaseFirestore(), CPV_COLLECTIONS.controlCharts), {
       recordType: 'spc_report',
       source,
       product,

@@ -1,7 +1,12 @@
+import { CppAccessGuard } from '@/components/cpv/cpp-monitoring/cpp-access-guard';
+import { CppMonitoringPage } from '@/components/cpv/cpp-monitoring/cpp-monitoring-page';
+
 export const dynamic = 'force-dynamic';
 
-import { LazyCppWorkspace } from '@/lib/lazy-cpv';
-
-export default function Page() {
-  return <LazyCppWorkspace />;
+export default function CpvCppRoutePage() {
+  return (
+    <CppAccessGuard>
+      <CppMonitoringPage />
+    </CppAccessGuard>
+  );
 }

@@ -3,7 +3,7 @@ import {
   type QueryConstraint,
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { firestore, storage } from '@/lib/firebase';
+import { getFirebaseFirestore, getFirebaseStorage } from '@/lib/firebase';
 import { logAuditEvent } from '@/lib/admin/admin-service';
 import { createDeviation } from '@/lib/deviation-service';
 import { createCapa } from '@/lib/capa-service';
@@ -35,7 +35,7 @@ async function auditLog(actor: ValidationActor, action: string, recordId: string
 async function notify(title: string, message: string, recordId: string, roles: string[]) {
   try {
     for (const role of roles) {
-      await addDoc(collection(firestore, VALIDATION_COLLECTIONS.notifications), {
+      await addDoc(collection(getFirebaseFirestore(), VALIDATION_COLLECTIONS.notifications), {
         title, message, module: 'Validation', record_id: recordId, target_role: role,
         read: false, created_at: now(),
       });
@@ -48,7 +48,7 @@ async function genNumber(prefix: string, collName: string, field: string): Promi
   const p = `${prefix}-${year}-`;
   try {
     const snap = await getDocs(query(
-      collection(firestore, collName),
+      collection(getFirebaseFirestore(), collName),
       where(field, '>=', p), where(field, '<=', `${p}\uf8ff`),
       orderBy(field, 'desc'), limit(1),
     ));
@@ -57,7 +57,7 @@ async function genNumber(prefix: string, collName: string, field: string): Promi
       return `${p}${String(parseInt(last.split('-').pop() || '0', 10) + 1).padStart(4, '0')}`;
     }
   } catch {
-    const all = await getDocs(collection(firestore, collName));
+    const all = await getDocs(collection(getFirebaseFirestore(), collName));
     return `${p}${String(all.size + 1).padStart(4, '0')}`;
   }
   return `${p}0001`;
@@ -110,13 +110,13 @@ export async function createValidation(input: ValidationCreateInput, actor: Vali
     created_at: timestamp,
     updated_at: timestamp,
   };
-  const refDoc = await addDoc(collection(firestore, VALIDATION_COLLECTIONS.records), record);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), VALIDATION_COLLECTIONS.records), record);
   await auditLog(actor, 'CREATE', refDoc.id, null, record);
   return { id: refDoc.id, ...record };
 }
 
 export async function getValidationById(id: string): Promise<ValidationRecord | null> {
-  const snap = await getDoc(doc(firestore, VALIDATION_COLLECTIONS.records, id));
+  const snap = await getDoc(doc(getFirebaseFirestore(), VALIDATION_COLLECTIONS.records, id));
   if (!snap.exists()) return null;
   return { id: snap.id, ...snap.data() } as ValidationRecord;
 }
@@ -130,10 +130,10 @@ export async function listValidations(filters?: ValidationFilters): Promise<Vali
 
   let records: ValidationRecord[];
   try {
-    const snap = await getDocs(query(collection(firestore, VALIDATION_COLLECTIONS.records), ...constraints));
+    const snap = await getDocs(query(collection(getFirebaseFirestore(), VALIDATION_COLLECTIONS.records), ...constraints));
     records = snap.docs.map((d) => ({ id: d.id, ...d.data() } as ValidationRecord));
   } catch {
-    const snap = await getDocs(collection(firestore, VALIDATION_COLLECTIONS.records));
+    const snap = await getDocs(collection(getFirebaseFirestore(), VALIDATION_COLLECTIONS.records));
     records = snap.docs.map((d) => ({ id: d.id, ...d.data() } as ValidationRecord));
     if (filters?.validation_type) records = records.filter((r) => r.validation_type === filters.validation_type);
     if (filters?.validation_status) records = records.filter((r) => r.validation_status === filters.validation_status);
@@ -155,7 +155,7 @@ export async function updateValidation(id: string, input: Partial<ValidationCrea
   const existing = await getValidationById(id);
   if (!existing) throw new Error('Validation not found');
   const updates = { ...input, updated_by: actor.id, updated_by_name: actor.name, updated_at: now() };
-  await updateDoc(doc(firestore, VALIDATION_COLLECTIONS.records, id), updates);
+  await updateDoc(doc(getFirebaseFirestore(), VALIDATION_COLLECTIONS.records, id), updates);
   await auditLog(actor, 'EDIT', id, existing, updates);
   return { ...existing, ...updates } as ValidationRecord;
 }
@@ -173,7 +173,7 @@ export async function submitValidationApproval(input: ApprovalInput, actor: Vali
     comments: input.comments,
     approved_at: now(),
   };
-  await addDoc(collection(firestore, VALIDATION_COLLECTIONS.approvals), approval);
+  await addDoc(collection(getFirebaseFirestore(), VALIDATION_COLLECTIONS.approvals), approval);
 
   const statusMap: Record<string, string> = {
     approved: input.approval_level === 'Protocol' ? 'Protocol Approved' : 'Approved',
@@ -195,7 +195,7 @@ export async function submitValidationApproval(input: ApprovalInput, actor: Vali
       updates.approved_by_name = actor.name;
     }
   }
-  await updateDoc(doc(firestore, VALIDATION_COLLECTIONS.records, input.validation_id), updates);
+  await updateDoc(doc(getFirebaseFirestore(), VALIDATION_COLLECTIONS.records, input.validation_id), updates);
   await auditLog(actor, input.decision === 'approved' ? 'APPROVAL' : 'REJECTION', input.validation_id, existing, updates);
 
   if (input.decision === 'approved' && newStatus === 'Approved') {
@@ -210,13 +210,13 @@ export async function saveProtocol(input: ProtocolInput, actor: ValidationActor)
   const existing = await getProtocol(input.validation_id);
   const data = { ...input, updated_at: now() };
   if (existing) {
-    await updateDoc(doc(firestore, VALIDATION_COLLECTIONS.protocols, existing.id), data);
+    await updateDoc(doc(getFirebaseFirestore(), VALIDATION_COLLECTIONS.protocols, existing.id), data);
     await updateValidation(input.validation_id, { validation_status: 'Protocol Under Review' }, actor);
     await auditLog(actor, 'PROTOCOL_UPDATE', input.validation_id, existing, data);
     return { ...existing, ...data };
   }
   const record: Omit<ValidationProtocol, 'id'> = { ...input, created_at: now(), updated_at: now() };
-  const refDoc = await addDoc(collection(firestore, VALIDATION_COLLECTIONS.protocols), record);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), VALIDATION_COLLECTIONS.protocols), record);
   await updateValidation(input.validation_id, { validation_status: 'Protocol Under Review' }, actor);
   await auditLog(actor, 'PROTOCOL_UPDATE', input.validation_id, null, record);
   return { id: refDoc.id, ...record };
@@ -225,7 +225,7 @@ export async function saveProtocol(input: ProtocolInput, actor: ValidationActor)
 export async function getProtocol(validationId: string): Promise<ValidationProtocol | null> {
   try {
     const snap = await getDocs(query(
-      collection(firestore, VALIDATION_COLLECTIONS.protocols),
+      collection(getFirebaseFirestore(), VALIDATION_COLLECTIONS.protocols),
       where('validation_id', '==', validationId), limit(1),
     ));
     if (snap.empty) return null;
@@ -259,7 +259,7 @@ async function createDeviationFromValidation(record: ValidationRecord, actor: Va
       source: 'manual',
       source_reference: record.validation_number,
     });
-    await updateDoc(doc(firestore, VALIDATION_COLLECTIONS.records, record.id), {
+    await updateDoc(doc(getFirebaseFirestore(), VALIDATION_COLLECTIONS.records, record.id), {
       linked_deviation_id: dev.id,
       linked_deviation_number: dev.deviation_number,
       deviation_observed: true,
@@ -293,7 +293,7 @@ export async function addExecutionStep(input: ExecutionStepInput, actor: Validat
     created_at: now(),
     updated_at: now(),
   };
-  const refDoc = await addDoc(collection(firestore, VALIDATION_COLLECTIONS.execution), step);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), VALIDATION_COLLECTIONS.execution), step);
   await auditLog(actor, 'EXECUTION_UPDATE', input.validation_id, null, step);
 
   const updates: Partial<ValidationRecord> = { validation_status: 'Execution In Progress', updated_at: now() };
@@ -303,7 +303,7 @@ export async function addExecutionStep(input: ExecutionStepInput, actor: Validat
     updates.validation_status = 'Deviation Observed';
     await createDeviationFromValidation(record, actor, input.test_description);
   }
-  await updateDoc(doc(firestore, VALIDATION_COLLECTIONS.records, input.validation_id), updates);
+  await updateDoc(doc(getFirebaseFirestore(), VALIDATION_COLLECTIONS.records, input.validation_id), updates);
 
   return { id: refDoc.id, ...step };
 }
@@ -311,14 +311,14 @@ export async function addExecutionStep(input: ExecutionStepInput, actor: Validat
 export async function listExecutionSteps(validationId: string): Promise<ValidationExecutionStep[]> {
   try {
     const snap = await getDocs(query(
-      collection(firestore, VALIDATION_COLLECTIONS.execution),
+      collection(getFirebaseFirestore(), VALIDATION_COLLECTIONS.execution),
       where('validation_id', '==', validationId),
       orderBy('test_step_no', 'asc'),
     ));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as ValidationExecutionStep));
   } catch {
     const snap = await getDocs(query(
-      collection(firestore, VALIDATION_COLLECTIONS.execution),
+      collection(getFirebaseFirestore(), VALIDATION_COLLECTIONS.execution),
       where('validation_id', '==', validationId),
     ));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as ValidationExecutionStep))
@@ -330,10 +330,10 @@ export async function uploadExecutionEvidence(
   validationId: string, stepId: string, file: File, actor: ValidationActor,
 ): Promise<string> {
   const path = `validation/${validationId}/execution/${stepId}_${Date.now()}_${file.name}`;
-  const storageRef = ref(storage, path);
+  const storageRef = ref(getFirebaseStorage(), path);
   await uploadBytes(storageRef, file);
   const url = await getDownloadURL(storageRef);
-  await updateDoc(doc(firestore, VALIDATION_COLLECTIONS.execution, stepId), {
+  await updateDoc(doc(getFirebaseFirestore(), VALIDATION_COLLECTIONS.execution, stepId), {
     evidence_url: url, updated_at: now(),
   });
   await auditLog(actor, 'ATTACHMENT_UPLOAD', validationId, null, { stepId, file: file.name });
@@ -369,7 +369,7 @@ export async function linkCapaFromValidation(validationId: string, actor: Valida
     priority: 'high',
   }, { id: actor.id, name: actor.name, role: actor.role });
 
-  await updateDoc(doc(firestore, VALIDATION_COLLECTIONS.records, validationId), {
+  await updateDoc(doc(getFirebaseFirestore(), VALIDATION_COLLECTIONS.records, validationId), {
     linked_capa_id: capa.id,
     linked_capa_number: capa.capa_number,
     capa_required: true,
@@ -386,17 +386,17 @@ export async function saveProcessValidation(input: ProcessValidationInput, actor
   const existing = await getProcessValidation(input.validation_id);
   const data = { ...input, created_at: existing?.created_at || now() };
   if (existing) {
-    await updateDoc(doc(firestore, VALIDATION_COLLECTIONS.processValidation, existing.id), data);
+    await updateDoc(doc(getFirebaseFirestore(), VALIDATION_COLLECTIONS.processValidation, existing.id), data);
     return { id: existing.id, ...data };
   }
-  const refDoc = await addDoc(collection(firestore, VALIDATION_COLLECTIONS.processValidation), data);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), VALIDATION_COLLECTIONS.processValidation), data);
   await auditLog(actor, 'RESULTS_UPDATE', input.validation_id, null, data);
   return { id: refDoc.id, ...data };
 }
 
 export async function getProcessValidation(validationId: string): Promise<ProcessValidationData | null> {
   const snap = await getDocs(query(
-    collection(firestore, VALIDATION_COLLECTIONS.processValidation),
+    collection(getFirebaseFirestore(), VALIDATION_COLLECTIONS.processValidation),
     where('validation_id', '==', validationId), limit(1),
   ));
   if (snap.empty) return null;
@@ -407,17 +407,17 @@ export async function saveCleaningValidation(input: CleaningValidationInput, act
   const existing = await getCleaningValidation(input.validation_id);
   const data = { ...input, created_at: existing?.created_at || now() };
   if (existing) {
-    await updateDoc(doc(firestore, VALIDATION_COLLECTIONS.cleaningValidation, existing.id), data);
+    await updateDoc(doc(getFirebaseFirestore(), VALIDATION_COLLECTIONS.cleaningValidation, existing.id), data);
     return { id: existing.id, ...data };
   }
-  const refDoc = await addDoc(collection(firestore, VALIDATION_COLLECTIONS.cleaningValidation), data);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), VALIDATION_COLLECTIONS.cleaningValidation), data);
   await auditLog(actor, 'RESULTS_UPDATE', input.validation_id, null, data);
   return { id: refDoc.id, ...data };
 }
 
 export async function getCleaningValidation(validationId: string): Promise<CleaningValidationData | null> {
   const snap = await getDocs(query(
-    collection(firestore, VALIDATION_COLLECTIONS.cleaningValidation),
+    collection(getFirebaseFirestore(), VALIDATION_COLLECTIONS.cleaningValidation),
     where('validation_id', '==', validationId), limit(1),
   ));
   if (snap.empty) return null;
@@ -428,17 +428,17 @@ export async function saveCsvValidation(input: CsvValidationInput, actor: Valida
   const existing = await getCsvValidation(input.validation_id);
   const data = { ...input, created_at: existing?.created_at || now() };
   if (existing) {
-    await updateDoc(doc(firestore, VALIDATION_COLLECTIONS.csvValidation, existing.id), data);
+    await updateDoc(doc(getFirebaseFirestore(), VALIDATION_COLLECTIONS.csvValidation, existing.id), data);
     return { id: existing.id, ...data };
   }
-  const refDoc = await addDoc(collection(firestore, VALIDATION_COLLECTIONS.csvValidation), data);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), VALIDATION_COLLECTIONS.csvValidation), data);
   await auditLog(actor, 'RESULTS_UPDATE', input.validation_id, null, data);
   return { id: refDoc.id, ...data };
 }
 
 export async function getCsvValidation(validationId: string): Promise<CsvValidationData | null> {
   const snap = await getDocs(query(
-    collection(firestore, VALIDATION_COLLECTIONS.csvValidation),
+    collection(getFirebaseFirestore(), VALIDATION_COLLECTIONS.csvValidation),
     where('validation_id', '==', validationId), limit(1),
   ));
   if (snap.empty) return null;
@@ -451,7 +451,7 @@ export async function uploadValidationAttachment(
   validationId: string, file: File, category: string, actor: ValidationActor,
 ): Promise<ValidationAttachment> {
   const path = `validation/${validationId}/${Date.now()}_${file.name}`;
-  const storageRef = ref(storage, path);
+  const storageRef = ref(getFirebaseStorage(), path);
   await uploadBytes(storageRef, file);
   const downloadUrl = await getDownloadURL(storageRef);
   const attachment: Omit<ValidationAttachment, 'id'> = {
@@ -459,7 +459,7 @@ export async function uploadValidationAttachment(
     category, storage_path: path, download_url: downloadUrl,
     uploaded_by: actor.id, uploaded_by_name: actor.name, uploaded_at: now(),
   };
-  const refDoc = await addDoc(collection(firestore, VALIDATION_COLLECTIONS.attachments), attachment);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), VALIDATION_COLLECTIONS.attachments), attachment);
   await auditLog(actor, 'ATTACHMENT_UPLOAD', validationId, null, { file_name: file.name, category });
   return { id: refDoc.id, ...attachment };
 }
@@ -467,13 +467,13 @@ export async function uploadValidationAttachment(
 export async function getValidationAttachments(validationId: string): Promise<ValidationAttachment[]> {
   try {
     const snap = await getDocs(query(
-      collection(firestore, VALIDATION_COLLECTIONS.attachments),
+      collection(getFirebaseFirestore(), VALIDATION_COLLECTIONS.attachments),
       where('validation_id', '==', validationId), orderBy('uploaded_at', 'desc'),
     ));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as ValidationAttachment));
   } catch {
     const snap = await getDocs(query(
-      collection(firestore, VALIDATION_COLLECTIONS.attachments),
+      collection(getFirebaseFirestore(), VALIDATION_COLLECTIONS.attachments),
       where('validation_id', '==', validationId),
     ));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as ValidationAttachment));
@@ -482,7 +482,7 @@ export async function getValidationAttachments(validationId: string): Promise<Va
 
 export async function getValidationApprovals(validationId: string): Promise<ValidationApproval[]> {
   const snap = await getDocs(query(
-    collection(firestore, VALIDATION_COLLECTIONS.approvals),
+    collection(getFirebaseFirestore(), VALIDATION_COLLECTIONS.approvals),
     where('validation_id', '==', validationId),
   ));
   return snap.docs.map((d) => ({ id: d.id, ...d.data() } as ValidationApproval));
@@ -491,7 +491,7 @@ export async function getValidationApprovals(validationId: string): Promise<Vali
 export async function getAuditLogsForValidation(validationId: string): Promise<Record<string, unknown>[]> {
   try {
     const snap = await getDocs(query(
-      collection(firestore, VALIDATION_COLLECTIONS.auditLogs),
+      collection(getFirebaseFirestore(), VALIDATION_COLLECTIONS.auditLogs),
       where('recordId', '==', validationId), where('module', '==', 'Validation'),
       orderBy('dateTime', 'desc'), limit(100),
     ));
@@ -505,7 +505,7 @@ export async function getAuditLogsForValidation(validationId: string): Promise<R
 
 export async function syncRevalidationDue(): Promise<number> {
   const today = now().split('T')[0];
-  const snap = await getDocs(collection(firestore, VALIDATION_COLLECTIONS.records));
+  const snap = await getDocs(collection(getFirebaseFirestore(), VALIDATION_COLLECTIONS.records));
   let count = 0;
   for (const d of snap.docs) {
     const data = d.data() as ValidationRecord;

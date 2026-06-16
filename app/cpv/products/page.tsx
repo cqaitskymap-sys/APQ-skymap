@@ -1,5 +1,5 @@
-import { ProductMasterWorkspace } from '@/components/cpv/cpv-module-workspaces';
+import { redirect } from 'next/navigation';
 
-export default function Page() {
-  return <ProductMasterWorkspace />;
+export default function CpvProductsLegacyPage() {
+  redirect('/cpv/product-master');
 }

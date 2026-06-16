@@ -2,7 +2,7 @@ import {
   addDoc, collection, doc, getDoc, getDocs, limit, orderBy, query, updateDoc, where,
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { firestore, storage } from '@/lib/firebase';
+import { getFirebaseFirestore, getFirebaseStorage } from '@/lib/firebase';
 import { logAuditEvent } from '@/lib/admin/admin-service';
 import { downloadCsv } from '@/lib/export-utils';
 import { classifySpecification } from '@/lib/cpv';
@@ -31,7 +31,7 @@ async function audit(actor: StabilityActor, action: string, recordId: string, ol
 async function notify(title: string, message: string, studyId: string, roles: string[]) {
   try {
     for (const role of roles) {
-      await addDoc(collection(firestore, STABILITY_COLLECTIONS.notifications), {
+      await addDoc(collection(getFirebaseFirestore(), STABILITY_COLLECTIONS.notifications), {
         title, message, module: 'Stability', record_id: studyId, target_role: role,
         read: false, created_at: now(),
       });
@@ -44,7 +44,7 @@ export async function generateStudyNumber(): Promise<string> {
   const prefix = `STAB-${year}-`;
   try {
     const snap = await getDocs(query(
-      collection(firestore, STABILITY_COLLECTIONS.studies),
+      collection(getFirebaseFirestore(), STABILITY_COLLECTIONS.studies),
       where('stability_study_number', '>=', prefix),
       where('stability_study_number', '<=', `${prefix}\uf8ff`),
       orderBy('stability_study_number', 'desc'),
@@ -56,7 +56,7 @@ export async function generateStudyNumber(): Promise<string> {
       return `${prefix}${String(seq).padStart(4, '0')}`;
     }
   } catch {
-    const all = await getDocs(collection(firestore, STABILITY_COLLECTIONS.studies));
+    const all = await getDocs(collection(getFirebaseFirestore(), STABILITY_COLLECTIONS.studies));
     return `${prefix}${String(all.size + 1).padStart(4, '0')}`;
   }
   return `${prefix}0001`;
@@ -66,7 +66,7 @@ async function linkBatch(batchNumber: string) {
   if (!batchNumber) return { batch_id: null, pqr_id: null, product_id: null };
   try {
     const snap = await getDocs(query(
-      collection(firestore, STABILITY_COLLECTIONS.batches),
+      collection(getFirebaseFirestore(), STABILITY_COLLECTIONS.batches),
       where('batch_number', '==', batchNumber),
       limit(1),
     ));
@@ -120,13 +120,13 @@ export async function createStabilityStudy(
     updated_at: timestamp,
   };
 
-  const refDoc = await addDoc(collection(firestore, STABILITY_COLLECTIONS.studies), record);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), STABILITY_COLLECTIONS.studies), record);
   await audit(actor, 'CREATE', refDoc.id, null, record);
   return { id: refDoc.id, ...record };
 }
 
 export async function getStudyById(id: string): Promise<StabilityStudy | null> {
-  const snap = await getDoc(doc(firestore, STABILITY_COLLECTIONS.studies, id));
+  const snap = await getDoc(doc(getFirebaseFirestore(), STABILITY_COLLECTIONS.studies, id));
   if (!snap.exists()) return null;
   return { id: snap.id, ...snap.data() } as StabilityStudy;
 }
@@ -134,13 +134,13 @@ export async function getStudyById(id: string): Promise<StabilityStudy | null> {
 export async function listStudies(filters?: StabilityFilters): Promise<StabilityStudy[]> {
   try {
     const snap = await getDocs(query(
-      collection(firestore, STABILITY_COLLECTIONS.studies),
+      collection(getFirebaseFirestore(), STABILITY_COLLECTIONS.studies),
       orderBy('updated_at', 'desc'),
       limit(1000),
     ));
     return applyStudyFilters(snap.docs.map((d) => ({ id: d.id, ...d.data() } as StabilityStudy)), filters);
   } catch {
-    const snap = await getDocs(collection(firestore, STABILITY_COLLECTIONS.studies));
+    const snap = await getDocs(collection(getFirebaseFirestore(), STABILITY_COLLECTIONS.studies));
     return applyStudyFilters(snap.docs.map((d) => ({ id: d.id, ...d.data() } as StabilityStudy)), filters);
   }
 }
@@ -177,7 +177,7 @@ export async function updateStudy(
   if (!existing) throw new Error('Study not found');
   if (!workflow && existing.status !== 'draft') throw new Error('Only draft studies can be edited');
   const payload = { ...patch, updated_by: actor.id, updated_by_name: actor.name, updated_at: now() };
-  await updateDoc(doc(firestore, STABILITY_COLLECTIONS.studies, id), payload);
+  await updateDoc(doc(getFirebaseFirestore(), STABILITY_COLLECTIONS.studies, id), payload);
   await audit(actor, 'UPDATE', id, existing, { ...existing, ...payload });
   return { ...existing, ...payload } as StabilityStudy;
 }
@@ -196,7 +196,7 @@ export async function generateSchedule(studyId: string, actor: StabilityActor): 
   for (const interval of intervals) {
     const months = intervalToMonths(interval);
     const scheduledDate = addMonths(study.study_initiation_date, months);
-    const ref = await addDoc(collection(firestore, STABILITY_COLLECTIONS.schedules), {
+    const ref = await addDoc(collection(getFirebaseFirestore(), STABILITY_COLLECTIONS.schedules), {
       study_id: studyId,
       study_number: study.stability_study_number,
       batch_number: study.batch_number,
@@ -214,7 +214,7 @@ export async function generateSchedule(studyId: string, actor: StabilityActor): 
   }
 
   for (const sched of created) {
-    await addDoc(collection(firestore, STABILITY_COLLECTIONS.samplePulling), {
+    await addDoc(collection(getFirebaseFirestore(), STABILITY_COLLECTIONS.samplePulling), {
       study_id: studyId,
       study_number: study.stability_study_number,
       batch_number: study.batch_number,
@@ -240,7 +240,7 @@ export async function generateSchedule(studyId: string, actor: StabilityActor): 
 
 export async function getSchedules(studyId: string): Promise<StabilitySchedule[]> {
   const snap = await getDocs(query(
-    collection(firestore, STABILITY_COLLECTIONS.schedules),
+    collection(getFirebaseFirestore(), STABILITY_COLLECTIONS.schedules),
     where('study_id', '==', studyId),
   ));
   return snap.docs.map((d) => ({ id: d.id, ...d.data() } as StabilitySchedule))
@@ -249,7 +249,7 @@ export async function getSchedules(studyId: string): Promise<StabilitySchedule[]
 
 export async function getSamplePulls(studyId: string): Promise<StabilitySamplePull[]> {
   const snap = await getDocs(query(
-    collection(firestore, STABILITY_COLLECTIONS.samplePulling),
+    collection(getFirebaseFirestore(), STABILITY_COLLECTIONS.samplePulling),
     where('study_id', '==', studyId),
   ));
   return snap.docs.map((d) => ({ id: d.id, ...d.data() } as StabilitySamplePull))
@@ -257,7 +257,7 @@ export async function getSamplePulls(studyId: string): Promise<StabilitySamplePu
 }
 
 export async function listAllSamplePulls(): Promise<StabilitySamplePull[]> {
-  const snap = await getDocs(collection(firestore, STABILITY_COLLECTIONS.samplePulling));
+  const snap = await getDocs(collection(getFirebaseFirestore(), STABILITY_COLLECTIONS.samplePulling));
   return snap.docs.map((d) => ({ id: d.id, ...d.data() } as StabilitySamplePull));
 }
 
@@ -265,15 +265,15 @@ export async function updateSamplePull(
   pullId: string, studyId: string,
   data: Partial<StabilitySamplePull>, actor: StabilityActor,
 ): Promise<void> {
-  await updateDoc(doc(firestore, STABILITY_COLLECTIONS.samplePulling, pullId), {
+  await updateDoc(doc(getFirebaseFirestore(), STABILITY_COLLECTIONS.samplePulling, pullId), {
     ...data, updated_at: now(),
   });
   if (data.status === 'Pulled') {
-    await updateDoc(doc(firestore, STABILITY_COLLECTIONS.studies, studyId), {
+    await updateDoc(doc(getFirebaseFirestore(), STABILITY_COLLECTIONS.studies, studyId), {
       status: 'sample_pulled', updated_at: now(),
     });
     const schedSnap = await getDocs(query(
-      collection(firestore, STABILITY_COLLECTIONS.schedules),
+      collection(getFirebaseFirestore(), STABILITY_COLLECTIONS.schedules),
       where('study_id', '==', studyId),
       where('interval', '==', data.interval || ''),
       limit(1),
@@ -297,10 +297,10 @@ export async function syncSampleDueNotifications(): Promise<number> {
   for (const pull of pulls) {
     if (pull.status !== 'Pending') continue;
     if (pull.pulling_due_date < todayStr) {
-      await updateDoc(doc(firestore, STABILITY_COLLECTIONS.samplePulling, pull.id), {
+      await updateDoc(doc(getFirebaseFirestore(), STABILITY_COLLECTIONS.samplePulling, pull.id), {
         status: 'Missed', updated_at: now(),
       });
-      await updateDoc(doc(firestore, STABILITY_COLLECTIONS.studies, pull.study_id), {
+      await updateDoc(doc(getFirebaseFirestore(), STABILITY_COLLECTIONS.studies, pull.study_id), {
         status: 'sample_due', updated_at: now(),
       });
       await notify(
@@ -323,7 +323,7 @@ export async function syncSampleDueNotifications(): Promise<number> {
 
 export async function getResults(studyId: string): Promise<StabilityResult[]> {
   const snap = await getDocs(query(
-    collection(firestore, STABILITY_COLLECTIONS.results),
+    collection(getFirebaseFirestore(), STABILITY_COLLECTIONS.results),
     where('study_id', '==', studyId),
   ));
   return snap.docs.map((d) => ({ id: d.id, ...d.data() } as StabilityResult))
@@ -331,7 +331,7 @@ export async function getResults(studyId: string): Promise<StabilityResult[]> {
 }
 
 export async function listAllResults(): Promise<StabilityResult[]> {
-  const snap = await getDocs(collection(firestore, STABILITY_COLLECTIONS.results));
+  const snap = await getDocs(collection(getFirebaseFirestore(), STABILITY_COLLECTIONS.results));
   return snap.docs.map((d) => ({ id: d.id, ...d.data() } as StabilityResult));
 }
 
@@ -341,7 +341,7 @@ async function createCpvTrendFromResult(study: StabilityStudy, result: Stability
   if (!Number.isFinite(numeric)) return null;
   if (!['Assay', 'pH', 'Dissolution', 'Water Content'].includes(result.parameter_name)) return null;
 
-  const ref = await addDoc(collection(firestore, STABILITY_COLLECTIONS.cpvTrends), {
+  const ref = await addDoc(collection(getFirebaseFirestore(), STABILITY_COLLECTIONS.cpvTrends), {
     source: 'stability',
     study_id: study.id,
     study_number: study.stability_study_number,
@@ -362,7 +362,7 @@ async function createCpvTrendFromResult(study: StabilityStudy, result: Stability
 }
 
 async function createCpvRiskAlert(study: StabilityStudy, result: StabilityResult, actor: StabilityActor): Promise<string | null> {
-  const ref = await addDoc(collection(firestore, STABILITY_COLLECTIONS.cpvRisk), {
+  const ref = await addDoc(collection(getFirebaseFirestore(), STABILITY_COLLECTIONS.cpvRisk), {
     riskId: `STAB-RISK-${Date.now()}`,
     productName: study.product_name,
     batchNo: study.batch_number,
@@ -472,7 +472,7 @@ export async function addStabilityResult(
     updated_at: timestamp,
   };
 
-  const ref = await addDoc(collection(firestore, STABILITY_COLLECTIONS.results), payload);
+  const ref = await addDoc(collection(getFirebaseFirestore(), STABILITY_COLLECTIONS.results), payload);
   const result: StabilityResult = { id: ref.id, ...payload };
 
   const cpvTrendId = await createCpvTrendFromResult(study, result);
@@ -528,7 +528,7 @@ export async function submitApproval(
     signed_at: timestamp,
     created_at: timestamp,
   };
-  const ref = await addDoc(collection(firestore, STABILITY_COLLECTIONS.approvals), approval);
+  const ref = await addDoc(collection(getFirebaseFirestore(), STABILITY_COLLECTIONS.approvals), approval);
 
   let newStatus = data.decision === 'rejected' ? 'cancelled' : 'approved_protocol';
   if (data.decision === 'approved' && approvalLevel === 'protocol') {
@@ -555,7 +555,7 @@ export async function closeStudy(studyId: string, actor: StabilityActor): Promis
 
 export async function getApprovals(studyId: string): Promise<StabilityApproval[]> {
   const snap = await getDocs(query(
-    collection(firestore, STABILITY_COLLECTIONS.approvals),
+    collection(getFirebaseFirestore(), STABILITY_COLLECTIONS.approvals),
     where('study_id', '==', studyId),
   ));
   return snap.docs.map((d) => ({ id: d.id, ...d.data() } as StabilityApproval));
@@ -563,7 +563,7 @@ export async function getApprovals(studyId: string): Promise<StabilityApproval[]
 
 export async function getAttachments(studyId: string): Promise<StabilityAttachment[]> {
   const snap = await getDocs(query(
-    collection(firestore, STABILITY_COLLECTIONS.attachments),
+    collection(getFirebaseFirestore(), STABILITY_COLLECTIONS.attachments),
     where('study_id', '==', studyId),
   ));
   return snap.docs.map((d) => ({ id: d.id, ...d.data() } as StabilityAttachment));
@@ -571,7 +571,7 @@ export async function getAttachments(studyId: string): Promise<StabilityAttachme
 
 export async function uploadAttachment(studyId: string, file: File, actor: StabilityActor): Promise<StabilityAttachment> {
   const path = `stability/${studyId}/${Date.now()}_${file.name}`;
-  const storageRef = ref(storage, path);
+  const storageRef = ref(getFirebaseStorage(), path);
   await uploadBytes(storageRef, file);
   const url = await getDownloadURL(storageRef);
   const timestamp = now();
@@ -579,14 +579,14 @@ export async function uploadAttachment(studyId: string, file: File, actor: Stabi
     study_id: studyId, file_name: file.name, file_url: url, file_type: file.type,
     uploaded_by: actor.id, uploaded_by_name: actor.name, uploaded_at: timestamp,
   };
-  const refDoc = await addDoc(collection(firestore, STABILITY_COLLECTIONS.attachments), attachment);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), STABILITY_COLLECTIONS.attachments), attachment);
   await audit(actor, 'ATTACHMENT_UPLOAD', studyId, null, { file_name: file.name });
   return { id: refDoc.id, ...attachment };
 }
 
 export async function getAuditLogsForStudy(studyId: string) {
   const snap = await getDocs(query(
-    collection(firestore, STABILITY_COLLECTIONS.auditLogs),
+    collection(getFirebaseFirestore(), STABILITY_COLLECTIONS.auditLogs),
     where('recordId', '==', studyId),
     limit(100),
   ));

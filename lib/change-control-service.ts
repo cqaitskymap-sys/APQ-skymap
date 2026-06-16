@@ -2,7 +2,7 @@ import {
   addDoc, collection, doc, getDoc, getDocs, limit, orderBy, query, updateDoc, where,
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { firestore, storage } from '@/lib/firebase';
+import { getFirebaseFirestore, getFirebaseStorage } from '@/lib/firebase';
 import { logAuditEvent } from '@/lib/admin/admin-service';
 import { downloadCsv } from '@/lib/export-utils';
 import {
@@ -27,7 +27,7 @@ async function audit(actor: CcActor, action: string, recordId: string, oldValue:
 
 async function notify(title: string, message: string, changeId: string, userId: string) {
   try {
-    await addDoc(collection(firestore, CC_COLLECTIONS.notifications), {
+    await addDoc(collection(getFirebaseFirestore(), CC_COLLECTIONS.notifications), {
       title, message, module: 'Change Control', record_id: changeId, user_id: userId,
       read: false, created_at: now(),
     });
@@ -39,7 +39,7 @@ export async function generateChangeNumber(): Promise<string> {
   const prefix = `CC-${year}-`;
   try {
     const snap = await getDocs(query(
-      collection(firestore, CC_COLLECTIONS.records),
+      collection(getFirebaseFirestore(), CC_COLLECTIONS.records),
       where('change_control_number', '>=', prefix),
       where('change_control_number', '<=', `${prefix}\uf8ff`),
       orderBy('change_control_number', 'desc'),
@@ -51,7 +51,7 @@ export async function generateChangeNumber(): Promise<string> {
       return `${prefix}${String(seq).padStart(4, '0')}`;
     }
   } catch {
-    const all = await getDocs(collection(firestore, CC_COLLECTIONS.records));
+    const all = await getDocs(collection(getFirebaseFirestore(), CC_COLLECTIONS.records));
     return `${prefix}${String(all.size + 1).padStart(4, '0')}`;
   }
   return `${prefix}0001`;
@@ -61,7 +61,7 @@ async function linkBatch(batchNumber: string) {
   if (!batchNumber) return { batch_id: null, pqr_id: null };
   try {
     const snap = await getDocs(query(
-      collection(firestore, CC_COLLECTIONS.batches),
+      collection(getFirebaseFirestore(), CC_COLLECTIONS.batches),
       where('batch_number', '==', batchNumber),
       limit(1),
     ));
@@ -131,13 +131,13 @@ export async function createChangeControl(
     updated_at: timestamp,
   };
 
-  const refDoc = await addDoc(collection(firestore, CC_COLLECTIONS.records), record);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), CC_COLLECTIONS.records), record);
   await audit(actor, 'CREATE', refDoc.id, null, record);
   return { id: refDoc.id, ...record };
 }
 
 export async function getChangeById(id: string): Promise<ChangeControlRecord | null> {
-  const snap = await getDoc(doc(firestore, CC_COLLECTIONS.records, id));
+  const snap = await getDoc(doc(getFirebaseFirestore(), CC_COLLECTIONS.records, id));
   if (!snap.exists()) return null;
   return { id: snap.id, ...snap.data() } as ChangeControlRecord;
 }
@@ -145,7 +145,7 @@ export async function getChangeById(id: string): Promise<ChangeControlRecord | n
 export async function listChanges(filters?: CcFilters): Promise<ChangeControlRecord[]> {
   try {
     const snap = await getDocs(query(
-      collection(firestore, CC_COLLECTIONS.records),
+      collection(getFirebaseFirestore(), CC_COLLECTIONS.records),
       orderBy('updated_at', 'desc'),
       limit(1000),
     ));
@@ -164,7 +164,7 @@ export async function listChanges(filters?: CcFilters): Promise<ChangeControlRec
     }
     return records;
   } catch {
-    const snap = await getDocs(collection(firestore, CC_COLLECTIONS.records));
+    const snap = await getDocs(collection(getFirebaseFirestore(), CC_COLLECTIONS.records));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as ChangeControlRecord));
   }
 }
@@ -176,7 +176,7 @@ export async function updateChange(
   if (!existing) throw new Error('Change control not found');
   if (!workflow && existing.status !== 'draft') throw new Error('Only draft records can be edited');
   const payload = { ...patch, updated_by: actor.id, updated_by_name: actor.name, updated_at: now() };
-  await updateDoc(doc(firestore, CC_COLLECTIONS.records, id), payload);
+  await updateDoc(doc(getFirebaseFirestore(), CC_COLLECTIONS.records, id), payload);
   await audit(actor, 'UPDATE', id, existing, { ...existing, ...payload });
   return { ...existing, ...payload } as ChangeControlRecord;
 }
@@ -189,7 +189,7 @@ export async function syncOverdueChanges(): Promise<number> {
     if (isCcClosed(r.status) || r.status === 'overdue') continue;
     if (r.planned_implementation_date && r.planned_implementation_date < today
       && !['implemented', 'effectiveness_completed', 'approved', 'closed'].includes(r.status)) {
-      await updateDoc(doc(firestore, CC_COLLECTIONS.records, r.id), { status: 'overdue', updated_at: now() });
+      await updateDoc(doc(getFirebaseFirestore(), CC_COLLECTIONS.records, r.id), { status: 'overdue', updated_at: now() });
       count++;
     }
   }
@@ -217,7 +217,7 @@ async function createAutoImplementationTasks(change: ChangeControlRecord, actor:
   }
   const timestamp = now();
   for (const t of tasks) {
-    await addDoc(collection(firestore, CC_COLLECTIONS.implementation), {
+    await addDoc(collection(getFirebaseFirestore(), CC_COLLECTIONS.implementation), {
       change_id: change.id,
       action_item: t.action_item,
       responsible_person: actor.id,
@@ -252,10 +252,10 @@ export async function saveImpactAssessment(
 
   let refId: string;
   if (existing) {
-    await updateDoc(doc(firestore, CC_COLLECTIONS.impact, existing.id), payload);
+    await updateDoc(doc(getFirebaseFirestore(), CC_COLLECTIONS.impact, existing.id), payload);
     refId = existing.id;
   } else {
-    const ref = await addDoc(collection(firestore, CC_COLLECTIONS.impact), { ...payload, created_at: timestamp });
+    const ref = await addDoc(collection(getFirebaseFirestore(), CC_COLLECTIONS.impact), { ...payload, created_at: timestamp });
     refId = ref.id;
   }
 
@@ -266,7 +266,7 @@ export async function saveImpactAssessment(
 }
 
 export async function getImpactAssessment(changeId: string): Promise<ChangeImpactAssessment | null> {
-  const snap = await getDocs(query(collection(firestore, CC_COLLECTIONS.impact), where('change_id', '==', changeId), limit(1)));
+  const snap = await getDocs(query(collection(getFirebaseFirestore(), CC_COLLECTIONS.impact), where('change_id', '==', changeId), limit(1)));
   if (snap.empty) return null;
   return { id: snap.docs[0].id, ...snap.docs[0].data() } as ChangeImpactAssessment;
 }
@@ -293,10 +293,10 @@ export async function saveRiskAssessment(
 
   let refId: string;
   if (existing) {
-    await updateDoc(doc(firestore, CC_COLLECTIONS.risk, existing.id), payload);
+    await updateDoc(doc(getFirebaseFirestore(), CC_COLLECTIONS.risk, existing.id), payload);
     refId = existing.id;
   } else {
-    const ref = await addDoc(collection(firestore, CC_COLLECTIONS.risk), { ...payload, created_at: timestamp });
+    const ref = await addDoc(collection(getFirebaseFirestore(), CC_COLLECTIONS.risk), { ...payload, created_at: timestamp });
     refId = ref.id;
   }
 
@@ -306,7 +306,7 @@ export async function saveRiskAssessment(
 }
 
 export async function getRiskAssessment(changeId: string): Promise<ChangeRiskAssessment | null> {
-  const snap = await getDocs(query(collection(firestore, CC_COLLECTIONS.risk), where('change_id', '==', changeId), limit(1)));
+  const snap = await getDocs(query(collection(getFirebaseFirestore(), CC_COLLECTIONS.risk), where('change_id', '==', changeId), limit(1)));
   if (snap.empty) return null;
   return { id: snap.docs[0].id, ...snap.docs[0].data() } as ChangeRiskAssessment;
 }
@@ -317,7 +317,7 @@ export async function addImplementationAction(
   actor: CcActor,
 ): Promise<ChangeImplementationAction> {
   const timestamp = now();
-  const ref = await addDoc(collection(firestore, CC_COLLECTIONS.implementation), {
+  const ref = await addDoc(collection(getFirebaseFirestore(), CC_COLLECTIONS.implementation), {
     change_id: changeId, ...input, created_at: timestamp, updated_at: timestamp,
   });
   await updateChange(changeId, { status: 'implementation_in_progress' }, actor, true);
@@ -326,7 +326,7 @@ export async function addImplementationAction(
 }
 
 export async function getImplementationActions(changeId: string): Promise<ChangeImplementationAction[]> {
-  const snap = await getDocs(query(collection(firestore, CC_COLLECTIONS.implementation), where('change_id', '==', changeId)));
+  const snap = await getDocs(query(collection(getFirebaseFirestore(), CC_COLLECTIONS.implementation), where('change_id', '==', changeId)));
   return snap.docs.map((d) => ({ id: d.id, ...d.data() } as ChangeImplementationAction));
 }
 
@@ -335,7 +335,7 @@ export async function completeImplementationAction(
   data: { completion_date: string; evidence: string; status: string },
   actor: CcActor,
 ): Promise<void> {
-  await updateDoc(doc(firestore, CC_COLLECTIONS.implementation, actionId), { ...data, updated_at: now() });
+  await updateDoc(doc(getFirebaseFirestore(), CC_COLLECTIONS.implementation, actionId), { ...data, updated_at: now() });
   const actions = await getImplementationActions(changeId);
   const allDone = actions.every((a) => a.id === actionId ? data.status === 'completed' : a.status === 'completed');
   if (allDone) {
@@ -364,10 +364,10 @@ export async function saveEffectivenessReview(
   const existing = await getEffectivenessReview(changeId);
   let refId: string;
   if (existing) {
-    await updateDoc(doc(firestore, CC_COLLECTIONS.effectiveness, existing.id), payload);
+    await updateDoc(doc(getFirebaseFirestore(), CC_COLLECTIONS.effectiveness, existing.id), payload);
     refId = existing.id;
   } else {
-    const ref = await addDoc(collection(firestore, CC_COLLECTIONS.effectiveness), payload);
+    const ref = await addDoc(collection(getFirebaseFirestore(), CC_COLLECTIONS.effectiveness), payload);
     refId = ref.id;
   }
   await updateChange(changeId, { status: 'effectiveness_completed' }, actor, true);
@@ -376,7 +376,7 @@ export async function saveEffectivenessReview(
 }
 
 export async function getEffectivenessReview(changeId: string): Promise<ChangeEffectivenessReview | null> {
-  const snap = await getDocs(query(collection(firestore, CC_COLLECTIONS.effectiveness), where('change_id', '==', changeId), limit(1)));
+  const snap = await getDocs(query(collection(getFirebaseFirestore(), CC_COLLECTIONS.effectiveness), where('change_id', '==', changeId), limit(1)));
   if (snap.empty) return null;
   return { id: snap.docs[0].id, ...snap.docs[0].data() } as ChangeEffectivenessReview;
 }
@@ -419,7 +419,7 @@ export async function submitApproval(
     signed_at: timestamp,
     created_at: timestamp,
   };
-  const ref = await addDoc(collection(firestore, CC_COLLECTIONS.approvals), approval);
+  const ref = await addDoc(collection(getFirebaseFirestore(), CC_COLLECTIONS.approvals), approval);
 
   let newStatus = data.decision === 'rejected' ? 'rejected' : 'approved';
   if (data.decision === 'approved' && approvalLevel !== 'final') {
@@ -455,18 +455,18 @@ export async function closeChange(changeId: string, actor: CcActor, qaRemarks?: 
 }
 
 export async function getApprovals(changeId: string): Promise<ChangeApproval[]> {
-  const snap = await getDocs(query(collection(firestore, CC_COLLECTIONS.approvals), where('change_id', '==', changeId)));
+  const snap = await getDocs(query(collection(getFirebaseFirestore(), CC_COLLECTIONS.approvals), where('change_id', '==', changeId)));
   return snap.docs.map((d) => ({ id: d.id, ...d.data() } as ChangeApproval));
 }
 
 export async function getAttachments(changeId: string): Promise<ChangeAttachment[]> {
-  const snap = await getDocs(query(collection(firestore, CC_COLLECTIONS.attachments), where('change_id', '==', changeId)));
+  const snap = await getDocs(query(collection(getFirebaseFirestore(), CC_COLLECTIONS.attachments), where('change_id', '==', changeId)));
   return snap.docs.map((d) => ({ id: d.id, ...d.data() } as ChangeAttachment));
 }
 
 export async function uploadAttachment(changeId: string, file: File, actor: CcActor): Promise<ChangeAttachment> {
   const path = `change-control/${changeId}/${Date.now()}_${file.name}`;
-  const storageRef = ref(storage, path);
+  const storageRef = ref(getFirebaseStorage(), path);
   await uploadBytes(storageRef, file);
   const url = await getDownloadURL(storageRef);
   const timestamp = now();
@@ -474,13 +474,13 @@ export async function uploadAttachment(changeId: string, file: File, actor: CcAc
     change_id: changeId, file_name: file.name, file_url: url, file_type: file.type,
     uploaded_by: actor.id, uploaded_by_name: actor.name, uploaded_at: timestamp,
   };
-  const refDoc = await addDoc(collection(firestore, CC_COLLECTIONS.attachments), attachment);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), CC_COLLECTIONS.attachments), attachment);
   await audit(actor, 'ATTACHMENT_UPLOAD', changeId, null, { file_name: file.name });
   return { id: refDoc.id, ...attachment };
 }
 
 export async function getAuditLogsForChange(changeId: string) {
-  const snap = await getDocs(query(collection(firestore, CC_COLLECTIONS.auditLogs), where('recordId', '==', changeId), limit(100)));
+  const snap = await getDocs(query(collection(getFirebaseFirestore(), CC_COLLECTIONS.auditLogs), where('recordId', '==', changeId), limit(100)));
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 }
 
@@ -534,7 +534,7 @@ export function ccChartData(
 }
 
 export async function listAllRiskAssessments(): Promise<ChangeRiskAssessment[]> {
-  const snap = await getDocs(collection(firestore, CC_COLLECTIONS.risk));
+  const snap = await getDocs(collection(getFirebaseFirestore(), CC_COLLECTIONS.risk));
   return snap.docs.map((d) => ({ id: d.id, ...d.data() } as ChangeRiskAssessment));
 }
 

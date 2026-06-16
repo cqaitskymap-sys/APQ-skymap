@@ -1,5 +1,5 @@
-import { BatchRegistrationWorkspace } from '@/components/cpv/cpv-module-workspaces';
+import { redirect } from 'next/navigation';
 
-export default function Page() {
-  return <BatchRegistrationWorkspace />;
+export default function CpvBatchesLegacyPage() {
+  redirect('/cpv/batch-registration');
 }

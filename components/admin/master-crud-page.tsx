@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useForm, FieldValues, DefaultValues } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Plus, Pencil, Trash2 } from 'lucide-react';
+import { Plus, Pencil, Trash2, Eye, Ban } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -51,6 +51,7 @@ interface MasterCrudPageProps<T extends FieldValues & { id?: string }> {
   fields: FormFieldConfig[];
   columns: ColumnDef<T>[];
   uniqueFields?: { field: keyof T & string; label: string }[];
+  statusOptions?: string[];
 }
 
 export function MasterCrudPage<T extends FieldValues & { id?: string; status?: string }>({
@@ -63,14 +64,17 @@ export function MasterCrudPage<T extends FieldValues & { id?: string; status?: s
   fields,
   columns,
   uniqueFields = [],
+  statusOptions = ['Active', 'Inactive'],
 }: MasterCrudPageProps<T>) {
   const { user, profile } = useAuth();
   const { canDelete, isReadOnly } = useAdminPermissions();
   const [records, setRecords] = useState<T[]>([]);
   const [loading, setLoading] = useState(true);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [viewOpen, setViewOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [editing, setEditing] = useState<T | null>(null);
+  const [viewing, setViewing] = useState<T | null>(null);
 
   const form = useForm<T>({
     resolver: zodResolver(schema),
@@ -107,6 +111,25 @@ export function MasterCrudPage<T extends FieldValues & { id?: string; status?: s
     setEditing(record);
     form.reset(record);
     setDrawerOpen(true);
+  };
+
+  const openView = (record: T) => {
+    setViewing(record);
+    setViewOpen(true);
+  };
+
+  const deactivateRecord = async (record: T) => {
+    if (!record.id) return;
+    try {
+      await updateAdminRecord(collection, record.id, { status: 'Inactive' } as Partial<T>, {
+        ...auditMeta,
+        oldValue: JSON.stringify(record),
+      });
+      toast.success('Record deactivated');
+      loadRecords();
+    } catch {
+      toast.error('Deactivation failed');
+    }
   };
 
   const onSubmit = async (data: T) => {
@@ -232,13 +255,25 @@ export function MasterCrudPage<T extends FieldValues & { id?: string; status?: s
         data={records}
         loading={loading}
         searchKeys={fields.filter((f) => f.type !== 'switch').map((f) => f.name as keyof T)}
+        statusOptions={statusOptions}
+        onRowClick={openView}
         actions={(row) => (
           <div className="flex justify-end gap-1">
+            <Button variant="ghost" size="icon" onClick={() => openView(row)}>
+              <Eye className="h-4 w-4" />
+            </Button>
             <PermissionGate module={module} action="edit">
               <Button variant="ghost" size="icon" onClick={() => openEdit(row)} disabled={isReadOnly}>
                 <Pencil className="h-4 w-4" />
               </Button>
             </PermissionGate>
+            {row.status === 'Active' && !isReadOnly && (
+              <PermissionGate module={module} action="edit">
+                <Button variant="ghost" size="icon" onClick={() => deactivateRecord(row)} className="text-amber-600">
+                  <Ban className="h-4 w-4" />
+                </Button>
+              </PermissionGate>
+            )}
             {canDelete && (
               <PermissionGate module={module} action="delete">
                 <Button variant="ghost" size="icon" onClick={() => setDeleteId(row.id!)} className="text-red-500">
@@ -267,6 +302,41 @@ export function MasterCrudPage<T extends FieldValues & { id?: string; status?: s
               </Button>
             </SheetFooter>
           </form>
+        </SheetContent>
+      </Sheet>
+
+      <Sheet open={viewOpen} onOpenChange={setViewOpen}>
+        <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>Record Details</SheetTitle>
+            <SheetDescription>View-only record information</SheetDescription>
+          </SheetHeader>
+          {viewing && (
+            <div className="mt-6 space-y-3">
+              {fields.map((field) => (
+                <div key={field.name} className="border-b pb-2">
+                  <p className="text-xs text-muted-foreground">{field.label}</p>
+                  <p className="text-sm font-medium mt-0.5">
+                    {field.type === 'switch'
+                      ? String(!!(viewing as Record<string, unknown>)[field.name])
+                      : String((viewing as Record<string, unknown>)[field.name] ?? '-')}
+                  </p>
+                </div>
+              ))}
+              {viewing.createdAt && (
+                <div className="border-b pb-2">
+                  <p className="text-xs text-muted-foreground">Created At</p>
+                  <p className="text-sm">{new Date(viewing.createdAt).toLocaleString()}</p>
+                </div>
+              )}
+              {viewing.updatedAt && (
+                <div className="border-b pb-2">
+                  <p className="text-xs text-muted-foreground">Updated At</p>
+                  <p className="text-sm">{new Date(viewing.updatedAt).toLocaleString()}</p>
+                </div>
+              )}
+            </div>
+          )}
         </SheetContent>
       </Sheet>
 

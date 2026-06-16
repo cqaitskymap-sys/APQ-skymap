@@ -3,7 +3,7 @@ import {
   type QueryConstraint,
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { firestore, storage } from '@/lib/firebase';
+import { getFirebaseFirestore, getFirebaseStorage } from '@/lib/firebase';
 import { logAuditEvent } from '@/lib/admin/admin-service';
 import { createDeviation } from '@/lib/deviation-service';
 import { downloadCsv } from '@/lib/export-utils';
@@ -31,7 +31,7 @@ async function auditLog(actor: MonitoringActor, action: string, recordId: string
 async function notify(title: string, message: string, recordId: string, roles: string[]) {
   try {
     for (const role of roles) {
-      await addDoc(collection(firestore, MONITORING_COLLECTIONS.notifications), {
+      await addDoc(collection(getFirebaseFirestore(), MONITORING_COLLECTIONS.notifications), {
         title, message, module: 'Monitoring', record_id: recordId, target_role: role,
         read: false, created_at: now(),
       });
@@ -44,7 +44,7 @@ async function genNumber(prefix: string, collName: string, field: string): Promi
   const p = `${prefix}-${year}-`;
   try {
     const snap = await getDocs(query(
-      collection(firestore, collName),
+      collection(getFirebaseFirestore(), collName),
       where(field, '>=', p), where(field, '<=', `${p}\uf8ff`),
       orderBy(field, 'desc'), limit(1),
     ));
@@ -53,7 +53,7 @@ async function genNumber(prefix: string, collName: string, field: string): Promi
       return `${p}${String(parseInt(last.split('-').pop() || '0', 10) + 1).padStart(4, '0')}`;
     }
   } catch {
-    const all = await getDocs(collection(firestore, collName));
+    const all = await getDocs(collection(getFirebaseFirestore(), collName));
     return `${p}${String(all.size + 1).padStart(4, '0')}`;
   }
   return `${p}0001`;
@@ -91,7 +91,7 @@ async function checkRepeatedExcursion(areaName: string, parameterName: string): 
   const cutoffStr = cutoff.toISOString().split('T')[0];
   try {
     const snap = await getDocs(query(
-      collection(firestore, MONITORING_COLLECTIONS.excursions),
+      collection(getFirebaseFirestore(), MONITORING_COLLECTIONS.excursions),
       where('area_name', '==', areaName),
       where('parameter_name', '==', parameterName),
       where('excursion_date', '>=', cutoffStr),
@@ -155,7 +155,7 @@ async function createExcursionRecord(
     updated_at: now(),
   };
 
-  const refDoc = await addDoc(collection(firestore, MONITORING_COLLECTIONS.excursions), record);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), MONITORING_COLLECTIONS.excursions), record);
   await auditLog(actor, 'EXCURSION', refDoc.id, null, record);
 
   if (isCritical) {
@@ -198,13 +198,13 @@ export async function createArea(input: AreaCreateInput, actor: MonitoringActor)
     created_at: timestamp,
     updated_at: timestamp,
   };
-  const refDoc = await addDoc(collection(firestore, MONITORING_COLLECTIONS.areaMaster), record);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), MONITORING_COLLECTIONS.areaMaster), record);
   await auditLog(actor, 'CREATE', refDoc.id, null, record);
   return { id: refDoc.id, ...record };
 }
 
 export async function getAreaById(id: string): Promise<AreaRecord | null> {
-  const snap = await getDoc(doc(firestore, MONITORING_COLLECTIONS.areaMaster, id));
+  const snap = await getDoc(doc(getFirebaseFirestore(), MONITORING_COLLECTIONS.areaMaster, id));
   if (!snap.exists()) return null;
   return { id: snap.id, ...snap.data() } as AreaRecord;
 }
@@ -214,7 +214,7 @@ export async function listAreas(filters?: AreaFilters): Promise<AreaRecord[]> {
   if (filters?.cleanroom_grade) constraints.unshift(where('cleanroom_grade', '==', filters.cleanroom_grade));
   if (filters?.area_status) constraints.unshift(where('area_status', '==', filters.area_status));
   if (filters?.department) constraints.unshift(where('department', '==', filters.department));
-  const snap = await getDocs(query(collection(firestore, MONITORING_COLLECTIONS.areaMaster), ...constraints));
+  const snap = await getDocs(query(collection(getFirebaseFirestore(), MONITORING_COLLECTIONS.areaMaster), ...constraints));
   let rows = snap.docs.map((d) => ({ id: d.id, ...d.data() } as AreaRecord));
   if (filters?.search) {
     const s = filters.search.toLowerCase();
@@ -229,7 +229,7 @@ export async function updateArea(id: string, input: Partial<AreaCreateInput>, ac
   const existing = await getAreaById(id);
   if (!existing) throw new Error('Area not found');
   const updates = { ...input, updated_by: actor.id, updated_by_name: actor.name, updated_at: now() };
-  await updateDoc(doc(firestore, MONITORING_COLLECTIONS.areaMaster, id), updates);
+  await updateDoc(doc(getFirebaseFirestore(), MONITORING_COLLECTIONS.areaMaster, id), updates);
   await auditLog(actor, 'UPDATE', id, existing, updates);
   return { ...(await getAreaById(id))! };
 }
@@ -268,14 +268,14 @@ export async function createEnvironmental(input: EnvironmentalInput, actor: Moni
     created_at: timestamp,
     updated_at: timestamp,
   };
-  const refDoc = await addDoc(collection(firestore, MONITORING_COLLECTIONS.environmental), record);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), MONITORING_COLLECTIONS.environmental), record);
   const full = { id: refDoc.id, ...record };
   await auditLog(actor, 'ENV_MONITORING', refDoc.id, null, record);
 
   if (status === 'Excursion') {
     const exc = await createExcursionRecord('environmental', full, actor, input.cleanroom_grade, input.area_name);
     if (exc) {
-      await updateDoc(doc(firestore, MONITORING_COLLECTIONS.environmental, refDoc.id), {
+      await updateDoc(doc(getFirebaseFirestore(), MONITORING_COLLECTIONS.environmental, refDoc.id), {
         linked_excursion_id: exc.id,
         linked_deviation_id: exc.linked_deviation_id,
         linked_deviation_number: exc.linked_deviation_number,
@@ -295,7 +295,7 @@ export async function listEnvironmental(filters?: MonitoringFilters, areaDocId?:
   if (areaDocId) constraints.unshift(where('area_doc_id', '==', areaDocId));
   if (filters?.status) constraints.unshift(where('status', '==', filters.status));
   if (filters?.monitoring_type) constraints.unshift(where('monitoring_type', '==', filters.monitoring_type));
-  const snap = await getDocs(query(collection(firestore, MONITORING_COLLECTIONS.environmental), ...constraints));
+  const snap = await getDocs(query(collection(getFirebaseFirestore(), MONITORING_COLLECTIONS.environmental), ...constraints));
   let rows = snap.docs.map((d) => ({ id: d.id, ...d.data() } as EnvironmentalRecord));
   if (filters?.search) {
     const s = filters.search.toLowerCase();
@@ -336,7 +336,7 @@ export async function createUtility(input: UtilityInput, actor: MonitoringActor)
     created_at: timestamp,
     updated_at: timestamp,
   };
-  const refDoc = await addDoc(collection(firestore, MONITORING_COLLECTIONS.utility), record);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), MONITORING_COLLECTIONS.utility), record);
   const full = { id: refDoc.id, ...record };
   await auditLog(actor, 'UTILITY_MONITORING', refDoc.id, null, record);
 
@@ -351,7 +351,7 @@ export async function createUtility(input: UtilityInput, actor: MonitoringActor)
         capa_recommended: isRepeated,
         status: 'Under Review',
       };
-      await updateDoc(doc(firestore, MONITORING_COLLECTIONS.utility, refDoc.id), updates);
+      await updateDoc(doc(getFirebaseFirestore(), MONITORING_COLLECTIONS.utility, refDoc.id), updates);
       Object.assign(full, updates);
     }
   }
@@ -362,7 +362,7 @@ export async function listUtility(filters?: MonitoringFilters): Promise<UtilityR
   const constraints: QueryConstraint[] = [orderBy('monitoring_date', 'desc')];
   if (filters?.status) constraints.unshift(where('status', '==', filters.status));
   if (filters?.utility_type) constraints.unshift(where('utility_type', '==', filters.utility_type));
-  const snap = await getDocs(query(collection(firestore, MONITORING_COLLECTIONS.utility), ...constraints));
+  const snap = await getDocs(query(collection(getFirebaseFirestore(), MONITORING_COLLECTIONS.utility), ...constraints));
   let rows = snap.docs.map((d) => ({ id: d.id, ...d.data() } as UtilityRecord));
   if (filters?.search) {
     const s = filters.search.toLowerCase();
@@ -376,18 +376,18 @@ export async function listUtility(filters?: MonitoringFilters): Promise<UtilityR
 export async function listExcursions(filters?: { status?: string }): Promise<ExcursionRecord[]> {
   const constraints: QueryConstraint[] = [orderBy('excursion_date', 'desc')];
   if (filters?.status) constraints.unshift(where('status', '==', filters.status));
-  const snap = await getDocs(query(collection(firestore, MONITORING_COLLECTIONS.excursions), ...constraints));
+  const snap = await getDocs(query(collection(getFirebaseFirestore(), MONITORING_COLLECTIONS.excursions), ...constraints));
   return snap.docs.map((d) => ({ id: d.id, ...d.data() } as ExcursionRecord));
 }
 
 export async function closeExcursion(id: string, remarks: string, actor: MonitoringActor): Promise<ExcursionRecord> {
-  const existing = await getDoc(doc(firestore, MONITORING_COLLECTIONS.excursions, id));
+  const existing = await getDoc(doc(getFirebaseFirestore(), MONITORING_COLLECTIONS.excursions, id));
   if (!existing.exists()) throw new Error('Excursion not found');
   const updates = {
     status: 'Closed', remarks, closed_by: actor.id, closed_by_name: actor.name,
     closed_at: now(), updated_at: now(),
   };
-  await updateDoc(doc(firestore, MONITORING_COLLECTIONS.excursions, id), updates);
+  await updateDoc(doc(getFirebaseFirestore(), MONITORING_COLLECTIONS.excursions, id), updates);
   await auditLog(actor, 'CLOSE_EXCURSION', id, existing.data(), updates);
   return { id, ...existing.data(), ...updates } as ExcursionRecord;
 }
@@ -398,7 +398,7 @@ export async function uploadMonitoringAttachment(
   areaDocId: string, file: File, category: string, actor: MonitoringActor,
 ): Promise<MonitoringAttachment> {
   const path = `monitoring/${areaDocId}/${Date.now()}_${file.name}`;
-  const storageRef = ref(storage, path);
+  const storageRef = ref(getFirebaseStorage(), path);
   await uploadBytes(storageRef, file);
   const downloadUrl = await getDownloadURL(storageRef);
   const att: Omit<MonitoringAttachment, 'id'> = {
@@ -406,13 +406,13 @@ export async function uploadMonitoringAttachment(
     category, storage_path: path, download_url: downloadUrl,
     uploaded_by: actor.id, uploaded_by_name: actor.name, uploaded_at: now(),
   };
-  const refDoc = await addDoc(collection(firestore, MONITORING_COLLECTIONS.attachments), att);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), MONITORING_COLLECTIONS.attachments), att);
   return { id: refDoc.id, ...att };
 }
 
 export async function getMonitoringAttachments(areaDocId: string): Promise<MonitoringAttachment[]> {
   const snap = await getDocs(query(
-    collection(firestore, MONITORING_COLLECTIONS.attachments),
+    collection(getFirebaseFirestore(), MONITORING_COLLECTIONS.attachments),
     where('area_doc_id', '==', areaDocId), orderBy('uploaded_at', 'desc'),
   ));
   return snap.docs.map((d) => ({ id: d.id, ...d.data() } as MonitoringAttachment));
@@ -421,12 +421,12 @@ export async function getMonitoringAttachments(areaDocId: string): Promise<Monit
 export async function getAuditLogsForArea(areaDocId: string): Promise<Record<string, unknown>[]> {
   try {
     const snap = await getDocs(query(
-      collection(firestore, MONITORING_COLLECTIONS.auditLogs),
+      collection(getFirebaseFirestore(), MONITORING_COLLECTIONS.auditLogs),
       where('recordId', '==', areaDocId), orderBy('timestamp', 'desc'), limit(50),
     ));
     return snap.docs.map((d) => d.data());
   } catch {
-    const snap = await getDocs(query(collection(firestore, 'audit_logs'), where('recordId', '==', areaDocId), limit(50)));
+    const snap = await getDocs(query(collection(getFirebaseFirestore(), 'audit_logs'), where('recordId', '==', areaDocId), limit(50)));
     return snap.docs.map((d) => d.data());
   }
 }

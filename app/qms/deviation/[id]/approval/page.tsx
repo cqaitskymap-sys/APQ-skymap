@@ -1,9 +1,9 @@
 'use client';
 
 import { useParams } from 'next/navigation';
-import { DeviationDetailView } from '@/components/deviations/deviation-detail-view';
+import { DeviationApprovalPageShell } from '@/components/deviations/approval/deviation-approval-page';
 
-export default function DeviationApprovalPage() {
+export default function Page() {
   const id = useParams().id as string;
-  return <DeviationDetailView id={id} defaultTab="approval" />;
+  return <DeviationApprovalPageShell deviationId={id} />;
 }

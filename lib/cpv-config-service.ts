@@ -1,7 +1,6 @@
 import {
   addDoc,
   collection,
-  deleteDoc,
   doc,
   getDocs,
   limit,
@@ -10,7 +9,7 @@ import {
   serverTimestamp,
   updateDoc,
 } from 'firebase/firestore';
-import { firestore } from '@/lib/firebase';
+import { getFirebaseFirestore } from '@/lib/firebase';
 import {
   CPV_CONFIG_COLLECTIONS,
   type CpvConfigBundle,
@@ -26,18 +25,18 @@ import {
 
 type Actor = { id?: string; name?: string; role?: string };
 
-export async function listConfigRecords<T>(collectionName: string, max = 500): Promise<T[]> {
+export async function listConfigRecords<T extends { isDeleted?: boolean }>(collectionName: string, max = 500): Promise<T[]> {
   try {
     const snap = await getDocs(query(
-      collection(firestore, collectionName),
+      collection(getFirebaseFirestore(), collectionName),
       orderBy('updatedAt', 'desc'),
       limit(max),
     ));
-    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as T));
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as unknown as T));
   } catch {
     try {
-      const snap = await getDocs(query(collection(firestore, collectionName), limit(max)));
-      return snap.docs.map((d) => ({ id: d.id, ...d.data() } as T));
+      const snap = await getDocs(query(collection(getFirebaseFirestore(), collectionName), limit(max)));
+      return snap.docs.map((d) => ({ id: d.id, ...d.data() } as unknown as T)).filter((r) => r.isDeleted !== true);
     } catch {
       return [];
     }
@@ -45,7 +44,7 @@ export async function listConfigRecords<T>(collectionName: string, max = 500): P
 }
 
 async function writeConfigAudit(action: string, collectionName: string, recordId: string, actor: Actor) {
-  await addDoc(collection(firestore, CPV_COLLECTIONS.audit), {
+  await addDoc(collection(getFirebaseFirestore(), CPV_COLLECTIONS.audit), {
     action,
     module: 'CPV Configuration',
     collection: collectionName,
@@ -63,8 +62,8 @@ export async function createConfigRecord<T extends Record<string, unknown>>(
   actor: Actor,
 ) {
   const now = new Date().toISOString();
-  const payload = { ...data, createdAt: now, updatedAt: now, createdBy: actor.name || 'System' };
-  const ref = await addDoc(collection(firestore, collectionName), payload);
+  const payload = { ...data, createdAt: now, updatedAt: now, createdBy: actor.name || 'System', updatedBy: actor.id || actor.name || 'System', isDeleted: false };
+  const ref = await addDoc(collection(getFirebaseFirestore(), collectionName), payload);
   await writeConfigAudit('CREATE', collectionName, ref.id, actor);
   return { id: ref.id, ...payload };
 }
@@ -76,12 +75,13 @@ export async function updateConfigRecord<T extends Record<string, unknown>>(
   actor: Actor,
 ) {
   const payload = { ...data, updatedAt: new Date().toISOString() };
-  await updateDoc(doc(firestore, collectionName, id), payload);
+  await updateDoc(doc(getFirebaseFirestore(), collectionName, id), payload);
   await writeConfigAudit('UPDATE', collectionName, id, actor);
 }
 
 export async function removeConfigRecord(collectionName: string, id: string, actor: Actor) {
-  await deleteDoc(doc(firestore, collectionName, id));
+  const payload = { isDeleted: true, updatedAt: new Date().toISOString(), updatedBy: actor.id || actor.name || 'System' };
+  await updateDoc(doc(getFirebaseFirestore(), collectionName, id), payload);
   await writeConfigAudit('DELETE', collectionName, id, actor);
 }
 

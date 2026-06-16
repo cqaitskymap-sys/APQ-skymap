@@ -1,5 +1,5 @@
-import { RawMaterialWorkspace } from '@/components/cpv/cpv-module-workspaces';
+import { redirect } from 'next/navigation';
 
 export default function Page() {
-  return <RawMaterialWorkspace />;
+  redirect('/cpv/raw-material-monitoring');
 }

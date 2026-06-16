@@ -1,5 +1,5 @@
-import { YieldMonitoringWorkspace } from '@/components/cpv/cpv-module-workspaces';
+import { redirect } from 'next/navigation';
 
-export default function Page() {
-  return <YieldMonitoringWorkspace />;
+export default function YieldLegacyPage() {
+  redirect('/cpv/yield-monitoring');
 }

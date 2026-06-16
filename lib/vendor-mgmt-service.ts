@@ -3,7 +3,7 @@ import {
   type QueryConstraint,
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { firestore, storage } from '@/lib/firebase';
+import { getFirebaseFirestore, getFirebaseStorage } from '@/lib/firebase';
 import { logAuditEvent } from '@/lib/admin/admin-service';
 import { downloadCsv } from '@/lib/export-utils';
 import {
@@ -32,7 +32,7 @@ async function audit(actor: VendorActor, action: string, recordId: string, oldVa
 async function notify(title: string, message: string, recordId: string, roles: string[]) {
   try {
     for (const role of roles) {
-      await addDoc(collection(firestore, VENDOR_COLLECTIONS.notifications), {
+      await addDoc(collection(getFirebaseFirestore(), VENDOR_COLLECTIONS.notifications), {
         title, message, module: 'Vendor', record_id: recordId, target_role: role,
         read: false, created_at: now(),
       });
@@ -45,7 +45,7 @@ async function genNumber(prefix: string, collName: string, field: string): Promi
   const p = `${prefix}-${year}-`;
   try {
     const snap = await getDocs(query(
-      collection(firestore, collName),
+      collection(getFirebaseFirestore(), collName),
       where(field, '>=', p), where(field, '<=', `${p}\uf8ff`),
       orderBy(field, 'desc'), limit(1),
     ));
@@ -54,7 +54,7 @@ async function genNumber(prefix: string, collName: string, field: string): Promi
       return `${p}${String(parseInt(last.split('-').pop() || '0', 10) + 1).padStart(4, '0')}`;
     }
   } catch {
-    const all = await getDocs(collection(firestore, collName));
+    const all = await getDocs(collection(getFirebaseFirestore(), collName));
     return `${p}${String(all.size + 1).padStart(4, '0')}`;
   }
   return `${p}0001`;
@@ -93,13 +93,13 @@ export async function createVendor(input: VendorCreateInput, actor: VendorActor)
     created_at: timestamp,
     updated_at: timestamp,
   };
-  const refDoc = await addDoc(collection(firestore, VENDOR_COLLECTIONS.vendors), record);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), VENDOR_COLLECTIONS.vendors), record);
   await audit(actor, 'CREATE', refDoc.id, null, record);
   return { id: refDoc.id, ...record };
 }
 
 export async function getVendorById(id: string): Promise<VendorRecord | null> {
-  const snap = await getDoc(doc(firestore, VENDOR_COLLECTIONS.vendors, id));
+  const snap = await getDoc(doc(getFirebaseFirestore(), VENDOR_COLLECTIONS.vendors, id));
   if (!snap.exists()) return null;
   return { id: snap.id, ...snap.data() } as VendorRecord;
 }
@@ -113,10 +113,10 @@ export async function listVendors(filters?: VendorFilters): Promise<VendorRecord
 
   let records: VendorRecord[];
   try {
-    const snap = await getDocs(query(collection(firestore, VENDOR_COLLECTIONS.vendors), ...constraints));
+    const snap = await getDocs(query(collection(getFirebaseFirestore(), VENDOR_COLLECTIONS.vendors), ...constraints));
     records = snap.docs.map((d) => ({ id: d.id, ...d.data() } as VendorRecord));
   } catch {
-    const snap = await getDocs(collection(firestore, VENDOR_COLLECTIONS.vendors));
+    const snap = await getDocs(collection(getFirebaseFirestore(), VENDOR_COLLECTIONS.vendors));
     records = snap.docs.map((d) => ({ id: d.id, ...d.data() } as VendorRecord));
   }
 
@@ -134,14 +134,14 @@ export async function updateVendor(id: string, input: Partial<VendorCreateInput>
   const existing = await getVendorById(id);
   if (!existing) throw new Error('Vendor not found');
   const updates = { ...input, updated_by: actor.id, updated_by_name: actor.name, updated_at: now() };
-  await updateDoc(doc(firestore, VENDOR_COLLECTIONS.vendors, id), updates);
+  await updateDoc(doc(getFirebaseFirestore(), VENDOR_COLLECTIONS.vendors, id), updates);
   await audit(actor, 'EDIT', id, existing, updates);
   return { ...existing, ...updates } as VendorRecord;
 }
 
 export async function blockVendor(id: string, actor: VendorActor, reason: string): Promise<VendorRecord> {
   const updates = { approval_status: 'Blocked', vendor_status: 'Blocked', updated_at: now() };
-  await updateDoc(doc(firestore, VENDOR_COLLECTIONS.vendors, id), updates);
+  await updateDoc(doc(getFirebaseFirestore(), VENDOR_COLLECTIONS.vendors, id), updates);
   await audit(actor, 'BLOCKING', id, null, updates, reason);
   await notify('Vendor Blocked', `Vendor blocked: ${reason}`, id, ['qa_manager', 'head_qa', 'purchase']);
   const v = await getVendorById(id);
@@ -150,7 +150,7 @@ export async function blockVendor(id: string, actor: VendorActor, reason: string
 
 export async function approveVendor(id: string, actor: VendorActor): Promise<VendorRecord> {
   const updates = { approval_status: 'Approved', updated_by: actor.id, updated_by_name: actor.name, updated_at: now() };
-  await updateDoc(doc(firestore, VENDOR_COLLECTIONS.vendors, id), updates);
+  await updateDoc(doc(getFirebaseFirestore(), VENDOR_COLLECTIONS.vendors, id), updates);
   await audit(actor, 'APPROVAL', id, null, updates);
   const v = await getVendorById(id);
   return v!;
@@ -192,7 +192,7 @@ export async function createAvl(input: AvlInput, actor: VendorActor): Promise<Av
     created_at: now(),
     updated_at: now(),
   };
-  const refDoc = await addDoc(collection(firestore, VENDOR_COLLECTIONS.avl), record);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), VENDOR_COLLECTIONS.avl), record);
   await audit(actor, 'AVL_UPDATE', refDoc.id, null, record);
   await updateVendor(input.vendor_id, { approval_status: 'Approved' }, actor);
   return { id: refDoc.id, ...record };
@@ -202,25 +202,25 @@ export async function listAvl(vendorId?: string): Promise<AvlRecord[]> {
   try {
     const constraints: QueryConstraint[] = [orderBy('approval_date', 'desc')];
     if (vendorId) constraints.unshift(where('vendor_id', '==', vendorId));
-    const snap = await getDocs(query(collection(firestore, VENDOR_COLLECTIONS.avl), ...constraints));
+    const snap = await getDocs(query(collection(getFirebaseFirestore(), VENDOR_COLLECTIONS.avl), ...constraints));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as AvlRecord));
   } catch {
     const snap = vendorId
-      ? await getDocs(query(collection(firestore, VENDOR_COLLECTIONS.avl), where('vendor_id', '==', vendorId)))
-      : await getDocs(collection(firestore, VENDOR_COLLECTIONS.avl));
+      ? await getDocs(query(collection(getFirebaseFirestore(), VENDOR_COLLECTIONS.avl), where('vendor_id', '==', vendorId)))
+      : await getDocs(collection(getFirebaseFirestore(), VENDOR_COLLECTIONS.avl));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as AvlRecord));
   }
 }
 
 export async function syncExpiredAvl(): Promise<number> {
   const today = now().split('T')[0];
-  const snap = await getDocs(collection(firestore, VENDOR_COLLECTIONS.avl));
+  const snap = await getDocs(collection(getFirebaseFirestore(), VENDOR_COLLECTIONS.avl));
   let count = 0;
   for (const d of snap.docs) {
     const data = d.data() as AvlRecord;
     if (data.status === 'Active' && data.approval_expiry_date < today) {
       await updateDoc(d.ref, { status: 'Expired', updated_at: now() });
-      await updateDoc(doc(firestore, VENDOR_COLLECTIONS.vendors, data.vendor_id), {
+      await updateDoc(doc(getFirebaseFirestore(), VENDOR_COLLECTIONS.vendors, data.vendor_id), {
         approval_status: 'Expired', updated_at: now(),
       });
       await notify('AVL Expired', `${data.avl_number} expired for ${data.vendor_name}`, d.id, ['qa_manager', 'head_qa']);
@@ -259,14 +259,14 @@ export async function createQualification(input: QualificationInput, actor: Vend
     created_at: now(),
     updated_at: now(),
   };
-  const refDoc = await addDoc(collection(firestore, VENDOR_COLLECTIONS.qualifications), record);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), VENDOR_COLLECTIONS.qualifications), record);
   await audit(actor, 'QUALIFICATION_UPDATE', refDoc.id, null, record);
   await updateVendor(input.vendor_id, { approval_status: 'Under Qualification' }, actor);
   return { id: refDoc.id, ...record };
 }
 
 export async function finalizeQualification(id: string, decision: string, actor: VendorActor): Promise<VendorQualification> {
-  const snap = await getDoc(doc(firestore, VENDOR_COLLECTIONS.qualifications, id));
+  const snap = await getDoc(doc(getFirebaseFirestore(), VENDOR_COLLECTIONS.qualifications, id));
   if (!snap.exists()) throw new Error('Qualification not found');
   const existing = { id: snap.id, ...snap.data() } as VendorQualification;
   const updates = {
@@ -290,12 +290,12 @@ export async function listQualifications(vendorId?: string): Promise<VendorQuali
   try {
     const constraints: QueryConstraint[] = [orderBy('created_at', 'desc')];
     if (vendorId) constraints.unshift(where('vendor_id', '==', vendorId));
-    const snap = await getDocs(query(collection(firestore, VENDOR_COLLECTIONS.qualifications), ...constraints));
+    const snap = await getDocs(query(collection(getFirebaseFirestore(), VENDOR_COLLECTIONS.qualifications), ...constraints));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as VendorQualification));
   } catch {
     const snap = vendorId
-      ? await getDocs(query(collection(firestore, VENDOR_COLLECTIONS.qualifications), where('vendor_id', '==', vendorId)))
-      : await getDocs(collection(firestore, VENDOR_COLLECTIONS.qualifications));
+      ? await getDocs(query(collection(getFirebaseFirestore(), VENDOR_COLLECTIONS.qualifications), where('vendor_id', '==', vendorId)))
+      : await getDocs(collection(getFirebaseFirestore(), VENDOR_COLLECTIONS.qualifications));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as VendorQualification));
   }
 }
@@ -324,7 +324,7 @@ export async function createSupplierAudit(input: SupplierAuditInput, actor: Vend
     created_at: now(),
     updated_at: now(),
   };
-  const refDoc = await addDoc(collection(firestore, VENDOR_COLLECTIONS.supplierAudits), record);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), VENDOR_COLLECTIONS.supplierAudits), record);
   await audit(actor, 'AUDIT_UPDATE', refDoc.id, null, record);
   return { id: refDoc.id, ...record };
 }
@@ -333,12 +333,12 @@ export async function listSupplierAudits(vendorId?: string): Promise<SupplierAud
   try {
     const constraints: QueryConstraint[] = [orderBy('audit_date', 'desc')];
     if (vendorId) constraints.unshift(where('vendor_id', '==', vendorId));
-    const snap = await getDocs(query(collection(firestore, VENDOR_COLLECTIONS.supplierAudits), ...constraints));
+    const snap = await getDocs(query(collection(getFirebaseFirestore(), VENDOR_COLLECTIONS.supplierAudits), ...constraints));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as SupplierAuditRecord));
   } catch {
     const snap = vendorId
-      ? await getDocs(query(collection(firestore, VENDOR_COLLECTIONS.supplierAudits), where('vendor_id', '==', vendorId)))
-      : await getDocs(collection(firestore, VENDOR_COLLECTIONS.supplierAudits));
+      ? await getDocs(query(collection(getFirebaseFirestore(), VENDOR_COLLECTIONS.supplierAudits), where('vendor_id', '==', vendorId)))
+      : await getDocs(collection(getFirebaseFirestore(), VENDOR_COLLECTIONS.supplierAudits));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as SupplierAuditRecord));
   }
 }
@@ -363,7 +363,7 @@ export async function createAgreement(input: AgreementInput, actor: VendorActor)
     created_at: now(),
     updated_at: now(),
   };
-  const refDoc = await addDoc(collection(firestore, VENDOR_COLLECTIONS.agreements), record);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), VENDOR_COLLECTIONS.agreements), record);
   await audit(actor, 'AGREEMENT_UPLOAD', refDoc.id, null, record);
   return { id: refDoc.id, ...record };
 }
@@ -372,19 +372,19 @@ export async function listAgreements(vendorId?: string): Promise<TechnicalAgreem
   try {
     const constraints: QueryConstraint[] = [orderBy('effective_date', 'desc')];
     if (vendorId) constraints.unshift(where('vendor_id', '==', vendorId));
-    const snap = await getDocs(query(collection(firestore, VENDOR_COLLECTIONS.agreements), ...constraints));
+    const snap = await getDocs(query(collection(getFirebaseFirestore(), VENDOR_COLLECTIONS.agreements), ...constraints));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as TechnicalAgreement));
   } catch {
     const snap = vendorId
-      ? await getDocs(query(collection(firestore, VENDOR_COLLECTIONS.agreements), where('vendor_id', '==', vendorId)))
-      : await getDocs(collection(firestore, VENDOR_COLLECTIONS.agreements));
+      ? await getDocs(query(collection(getFirebaseFirestore(), VENDOR_COLLECTIONS.agreements), where('vendor_id', '==', vendorId)))
+      : await getDocs(collection(getFirebaseFirestore(), VENDOR_COLLECTIONS.agreements));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as TechnicalAgreement));
   }
 }
 
 export async function syncExpiredAgreements(): Promise<number> {
   const today = now().split('T')[0];
-  const snap = await getDocs(collection(firestore, VENDOR_COLLECTIONS.agreements));
+  const snap = await getDocs(collection(getFirebaseFirestore(), VENDOR_COLLECTIONS.agreements));
   let count = 0;
   for (const d of snap.docs) {
     const data = d.data() as TechnicalAgreement;
@@ -407,7 +407,7 @@ export async function savePerformance(input: PerformanceInput, actor: VendorActo
     risk_level: calc.performance_score < 60 ? 'High' : calc.performance_score < 75 ? 'Medium' : 'Low',
     created_at: now(),
   };
-  const refDoc = await addDoc(collection(firestore, VENDOR_COLLECTIONS.performance), record);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), VENDOR_COLLECTIONS.performance), record);
   await audit(actor, 'PERFORMANCE_REVIEW', refDoc.id, null, record);
 
   if (calc.performance_score < 60) {
@@ -423,12 +423,12 @@ export async function listPerformance(vendorId?: string): Promise<VendorPerforma
   try {
     const constraints: QueryConstraint[] = [orderBy('created_at', 'desc')];
     if (vendorId) constraints.unshift(where('vendor_id', '==', vendorId));
-    const snap = await getDocs(query(collection(firestore, VENDOR_COLLECTIONS.performance), ...constraints));
+    const snap = await getDocs(query(collection(getFirebaseFirestore(), VENDOR_COLLECTIONS.performance), ...constraints));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as VendorPerformance));
   } catch {
     const snap = vendorId
-      ? await getDocs(query(collection(firestore, VENDOR_COLLECTIONS.performance), where('vendor_id', '==', vendorId)))
-      : await getDocs(collection(firestore, VENDOR_COLLECTIONS.performance));
+      ? await getDocs(query(collection(getFirebaseFirestore(), VENDOR_COLLECTIONS.performance), where('vendor_id', '==', vendorId)))
+      : await getDocs(collection(getFirebaseFirestore(), VENDOR_COLLECTIONS.performance));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as VendorPerformance));
   }
 }
@@ -439,7 +439,7 @@ export async function uploadVendorAttachment(
   vendorId: string, file: File, category: string, actor: VendorActor,
 ): Promise<VendorAttachment> {
   const path = `vendors/${vendorId}/${Date.now()}_${file.name}`;
-  const storageRef = ref(storage, path);
+  const storageRef = ref(getFirebaseStorage(), path);
   await uploadBytes(storageRef, file);
   const downloadUrl = await getDownloadURL(storageRef);
   const attachment: Omit<VendorAttachment, 'id'> = {
@@ -447,7 +447,7 @@ export async function uploadVendorAttachment(
     category, storage_path: path, download_url: downloadUrl,
     uploaded_by: actor.id, uploaded_by_name: actor.name, uploaded_at: now(),
   };
-  const refDoc = await addDoc(collection(firestore, VENDOR_COLLECTIONS.attachments), attachment);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), VENDOR_COLLECTIONS.attachments), attachment);
   await audit(actor, 'ATTACHMENT_UPLOAD', vendorId, null, { file_name: file.name, category });
   return { id: refDoc.id, ...attachment };
 }
@@ -455,13 +455,13 @@ export async function uploadVendorAttachment(
 export async function getVendorAttachments(vendorId: string): Promise<VendorAttachment[]> {
   try {
     const snap = await getDocs(query(
-      collection(firestore, VENDOR_COLLECTIONS.attachments),
+      collection(getFirebaseFirestore(), VENDOR_COLLECTIONS.attachments),
       where('vendor_id', '==', vendorId), orderBy('uploaded_at', 'desc'),
     ));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as VendorAttachment));
   } catch {
     const snap = await getDocs(query(
-      collection(firestore, VENDOR_COLLECTIONS.attachments), where('vendor_id', '==', vendorId),
+      collection(getFirebaseFirestore(), VENDOR_COLLECTIONS.attachments), where('vendor_id', '==', vendorId),
     ));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as VendorAttachment));
   }
@@ -470,7 +470,7 @@ export async function getVendorAttachments(vendorId: string): Promise<VendorAtta
 export async function getAuditLogsForVendor(vendorId: string): Promise<Record<string, unknown>[]> {
   try {
     const snap = await getDocs(query(
-      collection(firestore, VENDOR_COLLECTIONS.auditLogs),
+      collection(getFirebaseFirestore(), VENDOR_COLLECTIONS.auditLogs),
       where('recordId', '==', vendorId), where('module', '==', 'Vendor'),
       orderBy('dateTime', 'desc'), limit(100),
     ));

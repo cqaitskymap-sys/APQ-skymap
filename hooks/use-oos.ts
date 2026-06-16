@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/auth-context';
-import { listOosRecords, getOosById, computeOosDashboardMetrics, syncOverdueOos, getPhase1 } from '@/lib/oos-service';
-import type { OosRecord, OosFilters, OosDashboardMetrics, OosPhase1 } from '@/lib/oos-types';
+import { fetchOosDashboardData } from '@/lib/oos-dashboard-service';
+import { getOosById } from '@/lib/oos-service';
+import type { OosRecord, OosFilters, OosDashboardMetrics } from '@/lib/oos-types';
 import { normalizeRole } from '@/lib/permissions';
 
 export function useOosRecords(filters?: OosFilters) {
@@ -16,15 +17,9 @@ export function useOosRecords(filters?: OosFilters) {
     setLoading(true);
     setError(null);
     try {
-      await syncOverdueOos();
-      const data = await listOosRecords(filters);
-      const phase1List: OosPhase1[] = [];
-      for (const r of data.slice(0, 100)) {
-        const p1 = await getPhase1(r.id);
-        if (p1) phase1List.push(p1);
-      }
-      setRecords(data);
-      setMetrics(computeOosDashboardMetrics(data, phase1List));
+      const data = await fetchOosDashboardData(filters);
+      setRecords(data.records);
+      setMetrics(data.metrics);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load OOS records');
     } finally {

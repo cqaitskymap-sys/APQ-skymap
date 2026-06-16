@@ -1,5 +1,5 @@
-import { HoldTimeWorkspace } from '@/components/cpv/cpv-module-workspaces';
+import { redirect } from 'next/navigation';
 
-export default function Page() {
-  return <HoldTimeWorkspace />;
+export default function HoldTimeLegacyPage() {
+  redirect('/cpv/hold-time-monitoring');
 }

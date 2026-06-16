@@ -6,7 +6,8 @@ import {
   LayoutDashboard, Users, Shield, Building2, BadgeCheck, Factory,
   FlaskConical, Package, SlidersHorizontal, GitBranch, CheckSquare, Hash,
   FileSearch, PenLine, Bell, Database, Settings, PanelLeftClose,
-  PanelLeftOpen, ChevronRight, ShieldCheck,
+  PanelLeftOpen, ChevronRight, ShieldCheck, LogIn, UserCheck, KeyRound,
+  Mail, Blocks, FileUp, HardDrive, Cloud, Activity,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -17,7 +18,8 @@ import { useAdminPermissions } from '@/hooks/use-admin-permissions';
 const ICON_MAP: Record<string, React.ElementType> = {
   LayoutDashboard, Users, Shield, Building2, BadgeCheck, Factory,
   FlaskConical, Package, SlidersHorizontal, GitBranch, CheckSquare, Hash,
-  FileSearch, PenLine, Bell, Database, Settings,
+  FileSearch, PenLine, Bell, Database, Settings, LogIn, UserCheck, KeyRound,
+  Mail, Blocks, FileUp, HardDrive, Cloud, Activity,
 };
 
 interface AdminSidebarProps {
@@ -29,15 +31,49 @@ export function AdminSidebar({ collapsed, onToggle }: AdminSidebarProps) {
   const pathname = usePathname();
   const { role, canManageRoles, isReadOnly } = useAdminPermissions();
 
-  const isActive = (href: string) =>
-    href === '/dashboard/admin'
-      ? pathname === href
-      : pathname === href || pathname.startsWith(href + '/');
+  const isActive = (href: string) => {
+    if (href === '/admin') {
+      return pathname === '/admin' || pathname === '/dashboard/admin';
+    }
+    if (href === '/admin/users') {
+      return pathname.startsWith('/admin/users') || pathname.startsWith('/dashboard/admin/users');
+    }
+    if (href === '/admin/roles') {
+      return pathname.startsWith('/admin/roles') || pathname.startsWith('/dashboard/admin/roles');
+    }
+    if (href === '/admin/departments') {
+      return pathname.startsWith('/admin/departments') || pathname.startsWith('/dashboard/admin/departments');
+    }
+    if (href === '/admin/designations') {
+      return pathname.startsWith('/admin/designations') || pathname.startsWith('/dashboard/admin/designations');
+    }
+    if (href === '/admin/company-site') {
+      return pathname.startsWith('/admin/company-site') || pathname.startsWith('/dashboard/admin/company-sites');
+    }
+    if (href === '/admin/products') {
+      return pathname.startsWith('/admin/products') || pathname.startsWith('/dashboard/admin/products');
+    }
+    if (href === '/admin/batches') {
+      return pathname.startsWith('/admin/batches') || pathname.startsWith('/dashboard/admin/batches');
+    }
+    if (href === '/admin/parameters') {
+      return pathname.startsWith('/admin/parameters') || pathname.startsWith('/dashboard/admin/parameters');
+    }
+    if (href === '/admin/workflows') {
+      return pathname.startsWith('/admin/workflows') || pathname.startsWith('/dashboard/admin/workflows');
+    }
+    if (href === '/admin/approval-matrix') {
+      return pathname.startsWith('/admin/approval-matrix') || pathname.startsWith('/dashboard/admin/approval-matrix');
+    }
+    return pathname === href || pathname.startsWith(href + '/');
+  };
 
   const filteredNav = ADMIN_NAV_ITEMS.filter((item) => {
     if (item.href.includes('/roles') && !canManageRoles) return false;
     if (item.href.includes('/system-settings') && !canManageRoles) return false;
+    if (item.href.includes('/password-policy') && !canManageRoles) return false;
     if (item.href.includes('/backup') && isReadOnly) return false;
+    if (item.href.includes('/data-backup-log') && isReadOnly) return false;
     return true;
   });
 

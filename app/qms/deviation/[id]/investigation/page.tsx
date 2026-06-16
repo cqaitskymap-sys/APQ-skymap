@@ -1,9 +1,10 @@
 'use client';
 
 import { useParams } from 'next/navigation';
-import { DeviationDetailView } from '@/components/deviations/deviation-detail-view';
+import { DeviationInvestigationPageShell } from '@/components/deviations/investigation/deviation-investigation-page';
 
-export default function DeviationInvestigationPage() {
-  const id = useParams().id as string;
-  return <DeviationDetailView id={id} defaultTab="investigation" />;
+export default function Page() {
+  const params = useParams();
+  const id = params.id as string;
+  return <DeviationInvestigationPageShell deviationId={id} />;
 }

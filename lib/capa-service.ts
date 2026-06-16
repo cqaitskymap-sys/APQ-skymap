@@ -2,7 +2,7 @@ import {
   addDoc, collection, doc, getDoc, getDocs, limit, orderBy, query, updateDoc, where,
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { firestore, storage } from '@/lib/firebase';
+import { getFirebaseFirestore, getFirebaseStorage, isFirebaseConfigured } from '@/lib/firebase';
 import { logAuditEvent } from '@/lib/admin/admin-service';
 import { downloadCsv } from '@/lib/export-utils';
 import {
@@ -10,6 +10,9 @@ import {
   type CapaApproval, type CapaAttachment, type CapaSourceLink, type CapaFilters,
   type CapaDashboardMetrics, type CapaActor, isCapaClosed, requiresHeadQaApproval,
 } from './capa-types';
+import { generateDocumentNumber } from '@/lib/admin/document-numbering-service';
+import { buildCapaNumberFallback } from './capa-create-records';
+import { computeExtendedCapaDashboardMetrics } from './capa-dashboard-records';
 import type { CapaCreateInput } from './capa-schemas';
 
 function now() { return new Date().toISOString(); }
@@ -35,7 +38,7 @@ async function audit(
 
 async function notify(title: string, message: string, capaId: string, userId: string) {
   try {
-    await addDoc(collection(firestore, CAPA_COLLECTIONS.notifications), {
+    await addDoc(collection(getFirebaseFirestore(), CAPA_COLLECTIONS.notifications), {
       title, message, module: 'CAPA', record_id: capaId, user_id: userId,
       read: false, created_at: now(),
     });
@@ -46,26 +49,41 @@ async function notify(title: string, message: string, capaId: string, userId: st
 
 export async function generateCapaNumber(): Promise<string> {
   const year = new Date().getFullYear();
-  const prefix = `CAPA-${year}-`;
+  if (!isFirebaseConfigured()) {
+    return buildCapaNumberFallback(year, 1);
+  }
   try {
-    const q = query(
-      collection(firestore, CAPA_COLLECTIONS.records),
+    const result = await generateDocumentNumber('CAPA', 'Corrective Action', {
+      departmentCode: 'QA',
+      increment: true,
+    });
+    if (result.number) return result.number;
+  } catch (e) {
+    console.error('generateCapaNumber document numbering', e);
+  }
+  try {
+    const prefix = `CAPA/QA/${year}/`;
+    const snap = await getDocs(query(
+      collection(getFirebaseFirestore(), CAPA_COLLECTIONS.records),
       where('capa_number', '>=', prefix),
       where('capa_number', '<=', `${prefix}\uf8ff`),
       orderBy('capa_number', 'desc'),
       limit(1),
-    );
-    const snap = await getDocs(q);
+    ));
     if (!snap.empty) {
-      const last = snap.docs[0].data().capa_number as string;
-      const seq = parseInt(last.split('-').pop() || '0', 10) + 1;
-      return `${prefix}${String(seq).padStart(4, '0')}`;
+      const last = String(snap.docs[0].data().capa_number || '');
+      const seq = parseInt(last.split('/').pop() || '0', 10) + 1;
+      return buildCapaNumberFallback(year, seq);
     }
   } catch {
-    const all = await getDocs(collection(firestore, CAPA_COLLECTIONS.records));
-    return `${prefix}${String(all.size + 1).padStart(4, '0')}`;
+    try {
+      const all = await getDocs(collection(getFirebaseFirestore(), CAPA_COLLECTIONS.records));
+      return buildCapaNumberFallback(year, all.size + 1);
+    } catch {
+      return buildCapaNumberFallback(year, 1);
+    }
   }
-  return `${prefix}0001`;
+  return buildCapaNumberFallback(year, 1);
 }
 
 async function resolveSourceLinks(
@@ -75,11 +93,12 @@ async function resolveSourceLinks(
   const links: Partial<CapaRecord> = {
     deviation_id: null, oos_id: null, cpv_risk_id: null,
     change_control_id: null, pqr_id: null, batch_id: null,
+    complaint_id: null, audit_id: null,
   };
 
   const findByNumber = async (coll: string, field: string) => {
     const snap = await getDocs(query(
-      collection(firestore, coll),
+      collection(getFirebaseFirestore(), coll),
       where(field, '==', sourceRef),
       limit(1),
     ));
@@ -111,11 +130,36 @@ async function resolveSourceLinks(
     if (source === 'CPV Risk') {
       const r = await findByNumber(CAPA_COLLECTIONS.risks, 'riskId');
       if (!r) {
-        const alt = await getDocs(query(collection(firestore, CAPA_COLLECTIONS.risks), limit(50)));
+        const alt = await getDocs(query(collection(getFirebaseFirestore(), CAPA_COLLECTIONS.risks), limit(50)));
         const match = alt.docs.find((d) => d.data().riskId === sourceRef || d.data().risk_id === sourceRef);
         if (match) links.cpv_risk_id = match.id;
       } else {
         links.cpv_risk_id = r.id;
+      }
+    }
+    if (source === 'Market Complaint') {
+      const c = await findByNumber(CAPA_COLLECTIONS.complaints, 'complaint_number');
+      if (c) {
+        links.complaint_id = c.id;
+        const data = c.data();
+        links.product_name = links.product_name || (data.product_name as string) || '';
+        links.batch_number = links.batch_number || (data.batch_number as string) || '';
+      }
+    }
+    if (source === 'Change Control') {
+      const cc = await findByNumber(CAPA_COLLECTIONS.changeControls, 'change_control_number');
+      if (cc) {
+        links.change_control_id = cc.id;
+        const data = cc.data();
+        links.department = links.department || (data.department as string) || undefined;
+      }
+    }
+    if (source === 'Audit') {
+      const a = await findByNumber(CAPA_COLLECTIONS.audits, 'audit_number');
+      if (a) {
+        links.audit_id = a.id;
+        const data = a.data();
+        links.department = links.department || (data.department as string) || undefined;
       }
     }
     if (links.batch_number && !links.batch_id) {
@@ -132,7 +176,7 @@ async function resolveSourceLinks(
 }
 
 async function writeSourceLink(capaId: string, source: string, sourceId: string, sourceNumber: string, actor: CapaActor) {
-  await addDoc(collection(firestore, CAPA_COLLECTIONS.sourceLinks), {
+  await addDoc(collection(getFirebaseFirestore(), CAPA_COLLECTIONS.sourceLinks), {
     capa_id: capaId,
     source_type: source,
     source_id: sourceId,
@@ -152,6 +196,8 @@ export async function createCapa(
   const timestamp = now();
   const sourceLinks = await resolveSourceLinks(input.capa_source, input.source_reference_number);
 
+  const autoRules = requiresHeadQaApproval(input.priority || 'medium');
+
   const record: Omit<CapaRecord, 'id'> = {
     capa_number: capaNumber,
     capa_date: input.capa_date,
@@ -170,19 +216,24 @@ export async function createCapa(
     target_completion_date: input.target_completion_date,
     actual_completion_date: null,
     effectiveness_check_required: input.effectiveness_check_required,
-    effectiveness_check_date: null,
+    effectiveness_check_date: (input as CapaCreateInput & { effectiveness_check_date?: string }).effectiveness_check_date || null,
     effectiveness_criteria: input.effectiveness_criteria || '',
     effectiveness_result: input.effectiveness_check_required ? 'Pending' : 'N/A',
     capa_status: options?.status || 'draft',
     qa_remarks: input.qa_remarks || '',
     priority: input.priority || 'medium',
+    criticality: (input as CapaCreateInput & { criticality?: string }).criticality
+      || (input.priority === 'critical' ? 'Critical' : input.priority === 'high' ? 'High' : input.priority === 'medium' ? 'Medium' : 'Low'),
+    qa_reviewer: (input as CapaCreateInput & { qa_reviewer?: string }).qa_reviewer || '',
+    qa_reviewer_name: (input as CapaCreateInput & { qa_reviewer_name?: string }).qa_reviewer_name || '',
+    head_qa_approval_required: autoRules,
     deviation_id: options?.deviation_id || sourceLinks.deviation_id || null,
     oos_id: options?.oos_id || sourceLinks.oos_id || null,
     cpv_risk_id: options?.cpv_risk_id || sourceLinks.cpv_risk_id || null,
     change_control_id: sourceLinks.change_control_id || null,
     pqr_id: sourceLinks.pqr_id || null,
-    complaint_id: null,
-    audit_id: null,
+    complaint_id: sourceLinks.complaint_id || null,
+    audit_id: sourceLinks.audit_id || null,
     batch_id: sourceLinks.batch_id || null,
     extension_capa_id: null,
     parent_capa_id: null,
@@ -194,13 +245,13 @@ export async function createCapa(
     updated_at: timestamp,
   };
 
-  const ref = await addDoc(collection(firestore, CAPA_COLLECTIONS.records), record);
+  const ref = await addDoc(collection(getFirebaseFirestore(), CAPA_COLLECTIONS.records), record);
   await audit(actor, 'CREATE', ref.id, null, record);
 
   if (record.deviation_id) {
     await writeSourceLink(ref.id, 'Deviation', record.deviation_id, input.source_reference_number, actor);
     try {
-      await updateDoc(doc(firestore, CAPA_COLLECTIONS.deviations, record.deviation_id), {
+      await updateDoc(doc(getFirebaseFirestore(), CAPA_COLLECTIONS.deviations, record.deviation_id), {
         linked_capa_number: capaNumber,
         linked_capa_id: ref.id,
         capa_required: true,
@@ -215,18 +266,28 @@ export async function createCapa(
   if (record.cpv_risk_id) {
     await writeSourceLink(ref.id, 'CPV Risk', record.cpv_risk_id, input.source_reference_number, actor);
   }
+  if (record.complaint_id) {
+    await writeSourceLink(ref.id, 'Market Complaint', record.complaint_id, input.source_reference_number, actor);
+  }
+  if (record.audit_id) {
+    await writeSourceLink(ref.id, 'Audit', record.audit_id, input.source_reference_number, actor);
+  }
+  if (record.change_control_id) {
+    await writeSourceLink(ref.id, 'Change Control', record.change_control_id, input.source_reference_number, actor);
+  }
 
   return { id: ref.id, ...record };
 }
 
 export async function getCapaById(id: string): Promise<CapaRecord | null> {
-  const snap = await getDoc(doc(firestore, CAPA_COLLECTIONS.records, id));
+  const snap = await getDoc(doc(getFirebaseFirestore(), CAPA_COLLECTIONS.records, id));
   if (!snap.exists()) return null;
   return { id: snap.id, ...snap.data() } as CapaRecord;
 }
 
 export async function listCapas(filters?: CapaFilters): Promise<CapaRecord[]> {
-  let q = query(collection(firestore, CAPA_COLLECTIONS.records), orderBy('updated_at', 'desc'), limit(1000));
+  if (!isFirebaseConfigured()) return [];
+  let q = query(collection(getFirebaseFirestore(), CAPA_COLLECTIONS.records), orderBy('updated_at', 'desc'), limit(1000));
   try {
     const snap = await getDocs(q);
     let records = snap.docs.map((d) => ({ id: d.id, ...d.data() } as CapaRecord));
@@ -262,7 +323,7 @@ export async function listCapas(filters?: CapaFilters): Promise<CapaRecord[]> {
     }
     return records;
   } catch {
-    const snap = await getDocs(collection(firestore, CAPA_COLLECTIONS.records));
+    const snap = await getDocs(collection(getFirebaseFirestore(), CAPA_COLLECTIONS.records));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as CapaRecord));
   }
 }
@@ -285,7 +346,7 @@ export async function updateCapa(
     updated_by_name: actor.name,
     updated_at: timestamp,
   };
-  await updateDoc(doc(firestore, CAPA_COLLECTIONS.records, id), payload);
+  await updateDoc(doc(getFirebaseFirestore(), CAPA_COLLECTIONS.records, id), payload);
   await audit(actor, 'UPDATE', id, existing, { ...existing, ...payload });
   return { ...existing, ...payload } as CapaRecord;
 }
@@ -297,7 +358,7 @@ export async function syncOverdueCapas(): Promise<number> {
   for (const r of records) {
     if (isCapaClosed(r.capa_status) || r.capa_status === 'overdue') continue;
     if (r.target_completion_date && r.target_completion_date < today) {
-      await updateDoc(doc(firestore, CAPA_COLLECTIONS.records, r.id), {
+      await updateDoc(doc(getFirebaseFirestore(), CAPA_COLLECTIONS.records, r.id), {
         capa_status: 'overdue',
         updated_at: now(),
       });
@@ -334,6 +395,8 @@ export async function updateRootCause(
   data: { root_cause: string; corrective_action: string; preventive_action: string },
   actor: CapaActor,
 ): Promise<CapaRecord> {
+  const { assertInvestigationApprovedForCapaWorkflow } = await import('./capa-investigation-service');
+  await assertInvestigationApprovedForCapaWorkflow(id);
   return updateCapa(id, {
     ...data,
     capa_status: 'under_implementation',
@@ -348,13 +411,16 @@ export async function updateImplementation(
   const capa = await getCapaById(id);
   if (!capa) throw new Error('CAPA not found');
 
+  const { assertInvestigationApprovedForCapaWorkflow } = await import('./capa-investigation-service');
+  await assertInvestigationApprovedForCapaWorkflow(id);
+
   const newStatus = capa.effectiveness_check_required ? 'effectiveness_pending' : 'implemented';
   const updated = await updateCapa(id, {
     actual_completion_date: data.actual_completion_date,
     capa_status: newStatus,
   }, actor, { workflow: true });
 
-  await addDoc(collection(firestore, CAPA_COLLECTIONS.actions), {
+  await addDoc(collection(getFirebaseFirestore(), CAPA_COLLECTIONS.actions), {
     capa_id: id,
     action_type: 'implementation',
     description: data.implementation_evidence,
@@ -400,7 +466,7 @@ export async function submitEffectiveness(
     updated_at: timestamp,
   };
 
-  const ref = await addDoc(collection(firestore, CAPA_COLLECTIONS.effectiveness), eff);
+  const ref = await addDoc(collection(getFirebaseFirestore(), CAPA_COLLECTIONS.effectiveness), eff);
 
   let newStatus = 'effectiveness_completed';
   if (data.result === 'Not Effective') {
@@ -436,6 +502,9 @@ export async function submitApproval(
   const capa = await getCapaById(id);
   if (!capa) throw new Error('CAPA not found');
 
+  const { assertInvestigationApprovedForCapaWorkflow } = await import('./capa-investigation-service');
+  await assertInvestigationApprovedForCapaWorkflow(id);
+
   if (capa.effectiveness_check_required && capa.effectiveness_result === 'Pending') {
     throw new Error('Effectiveness check must be completed before approval');
   }
@@ -458,7 +527,7 @@ export async function submitApproval(
     created_at: timestamp,
   };
 
-  const ref = await addDoc(collection(firestore, CAPA_COLLECTIONS.approvals), approval);
+  const ref = await addDoc(collection(getFirebaseFirestore(), CAPA_COLLECTIONS.approvals), approval);
 
   let newStatus: string;
   if (data.decision === 'rejected') {
@@ -496,7 +565,7 @@ export async function closeCapa(id: string, actor: CapaActor, qaRemarks?: string
 }
 
 export async function createCapaFromDeviation(deviationId: string, actor: CapaActor) {
-  const dSnap = await getDoc(doc(firestore, CAPA_COLLECTIONS.deviations, deviationId));
+  const dSnap = await getDoc(doc(getFirebaseFirestore(), CAPA_COLLECTIONS.deviations, deviationId));
   if (!dSnap.exists()) throw new Error('Deviation not found');
   const d = dSnap.data();
   return createCapa({
@@ -522,7 +591,7 @@ export async function createCapaFromDeviation(deviationId: string, actor: CapaAc
 }
 
 export async function createCapaFromOos(oosId: string, actor: CapaActor) {
-  const oSnap = await getDoc(doc(firestore, CAPA_COLLECTIONS.oos, oosId));
+  const oSnap = await getDoc(doc(getFirebaseFirestore(), CAPA_COLLECTIONS.oos, oosId));
   if (!oSnap.exists()) throw new Error('OOS not found');
   const o = oSnap.data();
   return createCapa({
@@ -549,7 +618,7 @@ export async function createCapaFromOos(oosId: string, actor: CapaActor) {
 
 export async function getCapaActions(capaId: string): Promise<CapaAction[]> {
   const snap = await getDocs(query(
-    collection(firestore, CAPA_COLLECTIONS.actions),
+    collection(getFirebaseFirestore(), CAPA_COLLECTIONS.actions),
     where('capa_id', '==', capaId),
   ));
   return snap.docs.map((d) => ({ id: d.id, ...d.data() } as CapaAction));
@@ -557,7 +626,7 @@ export async function getCapaActions(capaId: string): Promise<CapaAction[]> {
 
 export async function addCapaAction(capaId: string, input: Omit<CapaAction, 'id' | 'capa_id' | 'created_at' | 'updated_at'>, actor: CapaActor) {
   const timestamp = now();
-  const ref = await addDoc(collection(firestore, CAPA_COLLECTIONS.actions), {
+  const ref = await addDoc(collection(getFirebaseFirestore(), CAPA_COLLECTIONS.actions), {
     ...input, capa_id: capaId, created_at: timestamp, updated_at: timestamp,
   });
   await audit(actor, 'ACTION_CREATE', capaId, null, input);
@@ -566,7 +635,7 @@ export async function addCapaAction(capaId: string, input: Omit<CapaAction, 'id'
 
 export async function getCapaEffectiveness(capaId: string): Promise<CapaEffectiveness | null> {
   const snap = await getDocs(query(
-    collection(firestore, CAPA_COLLECTIONS.effectiveness),
+    collection(getFirebaseFirestore(), CAPA_COLLECTIONS.effectiveness),
     where('capa_id', '==', capaId),
     limit(1),
   ));
@@ -576,7 +645,7 @@ export async function getCapaEffectiveness(capaId: string): Promise<CapaEffectiv
 
 export async function getCapaApprovals(capaId: string): Promise<CapaApproval[]> {
   const snap = await getDocs(query(
-    collection(firestore, CAPA_COLLECTIONS.approvals),
+    collection(getFirebaseFirestore(), CAPA_COLLECTIONS.approvals),
     where('capa_id', '==', capaId),
   ));
   return snap.docs.map((d) => ({ id: d.id, ...d.data() } as CapaApproval));
@@ -584,7 +653,7 @@ export async function getCapaApprovals(capaId: string): Promise<CapaApproval[]> 
 
 export async function getCapaAttachments(capaId: string): Promise<CapaAttachment[]> {
   const snap = await getDocs(query(
-    collection(firestore, CAPA_COLLECTIONS.attachments),
+    collection(getFirebaseFirestore(), CAPA_COLLECTIONS.attachments),
     where('capa_id', '==', capaId),
   ));
   return snap.docs.map((d) => ({ id: d.id, ...d.data() } as CapaAttachment));
@@ -594,7 +663,7 @@ export async function uploadCapaAttachment(
   capaId: string, file: File, actor: CapaActor,
 ): Promise<CapaAttachment> {
   const path = `capa/${capaId}/${Date.now()}_${file.name}`;
-  const storageRef = ref(storage, path);
+  const storageRef = ref(getFirebaseStorage(), path);
   await uploadBytes(storageRef, file);
   const url = await getDownloadURL(storageRef);
   const timestamp = now();
@@ -607,14 +676,14 @@ export async function uploadCapaAttachment(
     uploaded_by_name: actor.name,
     uploaded_at: timestamp,
   };
-  const refDoc = await addDoc(collection(firestore, CAPA_COLLECTIONS.attachments), attachment);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), CAPA_COLLECTIONS.attachments), attachment);
   await audit(actor, 'ATTACHMENT_UPLOAD', capaId, null, { file_name: file.name });
   return { id: refDoc.id, ...attachment };
 }
 
 export async function getCapaSourceLinks(capaId: string): Promise<CapaSourceLink[]> {
   const snap = await getDocs(query(
-    collection(firestore, CAPA_COLLECTIONS.sourceLinks),
+    collection(getFirebaseFirestore(), CAPA_COLLECTIONS.sourceLinks),
     where('capa_id', '==', capaId),
   ));
   return snap.docs.map((d) => ({ id: d.id, ...d.data() } as CapaSourceLink));
@@ -622,7 +691,7 @@ export async function getCapaSourceLinks(capaId: string): Promise<CapaSourceLink
 
 export async function getAuditLogsForCapa(capaId: string) {
   const snap = await getDocs(query(
-    collection(firestore, CAPA_COLLECTIONS.auditLogs),
+    collection(getFirebaseFirestore(), CAPA_COLLECTIONS.auditLogs),
     where('recordId', '==', capaId),
     limit(100),
   ));
@@ -630,24 +699,7 @@ export async function getAuditLogsForCapa(capaId: string) {
 }
 
 export function computeDashboardMetrics(records: CapaRecord[]): CapaDashboardMetrics {
-  const today = new Date();
-  const weekEnd = new Date();
-  weekEnd.setDate(weekEnd.getDate() + 7);
-
-  return {
-    total: records.length,
-    open: records.filter((r) => !isCapaClosed(r.capa_status) && r.capa_status !== 'rejected').length,
-    closed: records.filter((r) => r.capa_status === 'closed').length,
-    overdue: records.filter((r) => r.capa_status === 'overdue').length,
-    effective: records.filter((r) => r.effectiveness_result === 'Effective').length,
-    notEffective: records.filter((r) => r.effectiveness_result === 'Not Effective').length,
-    critical: records.filter((r) => r.priority === 'critical').length,
-    dueThisWeek: records.filter((r) => {
-      if (!r.target_completion_date || isCapaClosed(r.capa_status)) return false;
-      const due = new Date(r.target_completion_date);
-      return due >= today && due <= weekEnd;
-    }).length,
-  };
+  return computeExtendedCapaDashboardMetrics(records);
 }
 
 export function exportCapasCsv(records: CapaRecord[]) {

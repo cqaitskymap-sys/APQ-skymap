@@ -100,12 +100,15 @@ export function CapaForm({
         <FormField control={form.control} name="problem_description" render={({ field }) => (
           <FormItem><FormLabel>Problem Description *</FormLabel><FormControl><Textarea rows={4} {...field} disabled={disabled} /></FormControl><FormMessage /></FormItem>
         )} />
+        <FormField control={form.control} name="root_cause" render={({ field }) => (
+          <FormItem><FormLabel>Root Cause *</FormLabel><FormControl><Textarea rows={2} {...field} disabled={disabled} /></FormControl><FormMessage /></FormItem>
+        )} />
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <FormField control={form.control} name="corrective_action" render={({ field }) => (
-            <FormItem><FormLabel>Corrective Action</FormLabel><FormControl><Textarea rows={3} {...field} disabled={disabled} /></FormControl><FormMessage /></FormItem>
+            <FormItem><FormLabel>Corrective Action *</FormLabel><FormControl><Textarea rows={3} {...field} disabled={disabled} /></FormControl><FormMessage /></FormItem>
           )} />
           <FormField control={form.control} name="preventive_action" render={({ field }) => (
-            <FormItem><FormLabel>Preventive Action</FormLabel><FormControl><Textarea rows={3} {...field} disabled={disabled} /></FormControl><FormMessage /></FormItem>
+            <FormItem><FormLabel>Preventive Action *</FormLabel><FormControl><Textarea rows={3} {...field} disabled={disabled} /></FormControl><FormMessage /></FormItem>
           )} />
         </div>
         <FormField control={form.control} name="effectiveness_check_required" render={({ field }) => (
@@ -115,9 +118,14 @@ export function CapaForm({
           </FormItem>
         )} />
         {form.watch('effectiveness_check_required') && (
-          <FormField control={form.control} name="effectiveness_criteria" render={({ field }) => (
-            <FormItem><FormLabel>Effectiveness Criteria</FormLabel><FormControl><Textarea rows={2} {...field} disabled={disabled} /></FormControl><FormMessage /></FormItem>
-          )} />
+          <>
+            <FormField control={form.control} name="effectiveness_check_date" render={({ field }) => (
+              <FormItem><FormLabel>Effectiveness Check Date *</FormLabel><FormControl><Input type="date" {...field} value={field.value ?? ''} disabled={disabled} /></FormControl><FormMessage /></FormItem>
+            )} />
+            <FormField control={form.control} name="effectiveness_criteria" render={({ field }) => (
+              <FormItem><FormLabel>Effectiveness Criteria *</FormLabel><FormControl><Textarea rows={2} {...field} disabled={disabled} /></FormControl><FormMessage /></FormItem>
+            )} />
+          </>
         )}
         <FormField control={form.control} name="qa_remarks" render={({ field }) => (
           <FormItem><FormLabel>QA Remarks</FormLabel><FormControl><Textarea rows={2} {...field} disabled={disabled} /></FormControl><FormMessage /></FormItem>

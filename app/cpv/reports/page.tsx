@@ -1,5 +1,12 @@
-import { ReportsWorkspace } from '@/components/cpv/cpv-module-workspaces';
+import { ReportsAnalyticsAccessGuard } from '@/components/cpv/reports-analytics/reports-analytics-access-guard';
+import { ReportsAnalyticsPage } from '@/components/cpv/reports-analytics/reports-analytics-page';
 
-export default function Page() {
-  return <ReportsWorkspace />;
+export const dynamic = 'force-dynamic';
+
+export default function ReportsRoutePage() {
+  return (
+    <ReportsAnalyticsAccessGuard>
+      <ReportsAnalyticsPage />
+    </ReportsAnalyticsAccessGuard>
+  );
 }

@@ -236,6 +236,8 @@ export interface ParticulateRecord extends ParticulateInput, Partial<CpvRecordMe
 export interface RiskRecord extends RiskInput, Partial<CpvRecordMeta> {
   rpn: number;
   riskLevel: RiskLevel;
+  status?: string;
+  manufacturingDate?: string;
   /** @deprecated legacy field — use occurrence */
   likelihood?: number;
   /** @deprecated legacy field — use riskDescription */
@@ -552,10 +554,232 @@ export function calculateAiRiskScore(input: {
 }
 
 export const cpvPermissions = {
-  canEnterCpp: (role?: string) => ['super_admin', 'qa', 'production', 'engineering'].includes(role || ''),
-  canEnterCqa: (role?: string) => ['super_admin', 'qa', 'qc'].includes(role || ''),
-  canReview: (role?: string) => ['super_admin', 'qa'].includes(role || ''),
-  canConfigure: (role?: string) => ['super_admin', 'qa'].includes(role || ''),
+  canEnterCpp: (role?: string) => ['super_admin', 'admin', 'qa', 'head_qa', 'qa_manager', 'production', 'production_manager', 'engineering', 'engineering_manager'].includes(role || ''),
+  canEnterCqa: (role?: string) => ['super_admin', 'admin', 'qa', 'head_qa', 'qa_manager', 'qc', 'qc_manager'].includes(role || ''),
+  canReview: (role?: string) => ['super_admin', 'admin', 'qa', 'head_qa', 'qa_manager'].includes(role || ''),
+  canConfigure: (role?: string) => ['super_admin', 'admin', 'qa', 'head_qa', 'qa_manager'].includes(role || ''),
   canView: (role?: string) => Boolean(role),
   isReadOnly: (role?: string) => ['viewer', 'auditor'].includes(role || ''),
+  canManageCpvProducts: (role?: string) => ['super_admin', 'admin', 'qa', 'head_qa', 'qa_manager'].includes(role || ''),
+  canActivateCpvProducts: (role?: string) => ['super_admin', 'admin'].includes(role || ''),
+  canImportExportCpvProducts: (role?: string) => ['super_admin', 'admin'].includes(role || ''),
+  canManageCpvBatches: (role?: string) => ['super_admin', 'admin', 'qa', 'head_qa', 'qa_manager', 'production', 'production_manager'].includes(role || ''),
+  canReleaseHoldRejectBatch: (role?: string) => ['super_admin', 'admin', 'qa', 'head_qa', 'qa_manager'].includes(role || ''),
+  canUpdateBatchManufacturing: (role?: string) => ['super_admin', 'admin', 'production', 'production_manager'].includes(role || ''),
+  canUpdateBatchQc: (role?: string) => ['super_admin', 'admin', 'qa', 'head_qa', 'qa_manager', 'qc', 'qc_manager'].includes(role || ''),
+  canImportExportCpvBatches: (role?: string) => ['super_admin', 'admin'].includes(role || ''),
+  canReviewCpp: (role?: string) => ['super_admin', 'admin', 'qa', 'head_qa', 'qa_manager'].includes(role || ''),
+  canImportExportCpp: (role?: string) => ['super_admin', 'admin'].includes(role || ''),
+  canViewCpp: (role?: string) => [
+    'super_admin', 'admin', 'qa', 'head_qa', 'qa_manager',
+    'production', 'production_manager', 'engineering', 'engineering_manager',
+    'qc', 'qc_manager', 'viewer', 'auditor',
+  ].includes(role || ''),
+  isCppViewOnly: (role?: string) => ['qc', 'qc_manager', 'viewer', 'auditor'].includes(role || ''),
+  canReviewCqa: (role?: string) => ['super_admin', 'admin', 'qa', 'head_qa', 'qa_manager'].includes(role || ''),
+  canImportExportCqa: (role?: string) => ['super_admin', 'admin'].includes(role || ''),
+  canViewCqa: (role?: string) => [
+    'super_admin', 'admin', 'qa', 'head_qa', 'qa_manager',
+    'qc', 'qc_manager', 'microbiology', 'production', 'production_manager',
+    'viewer', 'auditor',
+  ].includes(role || ''),
+  isCqaViewOnly: (role?: string) => ['production', 'production_manager', 'viewer', 'auditor'].includes(role || ''),
+  canEnterMicrobiologyCqa: (role?: string) => ['super_admin', 'admin', 'microbiology'].includes(role || ''),
+  isCqaMicrobiologyOnly: (role?: string) => role === 'microbiology',
+  canReviewRawMaterial: (role?: string) => ['super_admin', 'admin', 'qa', 'head_qa', 'qa_manager'].includes(role || ''),
+  canImportExportRawMaterial: (role?: string) => ['super_admin', 'admin'].includes(role || ''),
+  canViewRawMaterial: (role?: string) => [
+    'super_admin', 'admin', 'qa', 'head_qa', 'qa_manager',
+    'qc', 'qc_manager', 'warehouse', 'warehouse_manager',
+    'production', 'production_manager', 'viewer', 'auditor',
+  ].includes(role || ''),
+  canCreateRawMaterial: (role?: string) => [
+    'super_admin', 'admin', 'warehouse', 'warehouse_manager', 'qc', 'qc_manager',
+  ].includes(role || ''),
+  canUpdateRawMaterialQc: (role?: string) => ['super_admin', 'admin', 'qa', 'head_qa', 'qa_manager', 'qc', 'qc_manager'].includes(role || ''),
+  isRawMaterialViewOnly: (role?: string) => ['production', 'production_manager', 'viewer', 'auditor'].includes(role || ''),
+  canReviewPackingMaterial: (role?: string) => ['super_admin', 'admin', 'qa', 'head_qa', 'qa_manager'].includes(role || ''),
+  canImportExportPackingMaterial: (role?: string) => ['super_admin', 'admin'].includes(role || ''),
+  canViewPackingMaterial: (role?: string) => [
+    'super_admin', 'admin', 'qa', 'head_qa', 'qa_manager',
+    'qc', 'qc_manager', 'warehouse', 'warehouse_manager',
+    'production', 'production_manager', 'viewer', 'auditor',
+  ].includes(role || ''),
+  canCreatePackingMaterial: (role?: string) => [
+    'super_admin', 'admin', 'warehouse', 'warehouse_manager', 'qc', 'qc_manager',
+  ].includes(role || ''),
+  canUpdatePackingMaterialQc: (role?: string) => ['super_admin', 'admin', 'qa', 'head_qa', 'qa_manager', 'qc', 'qc_manager'].includes(role || ''),
+  isPackingMaterialViewOnly: (role?: string) => ['production', 'production_manager', 'viewer', 'auditor'].includes(role || ''),
+  canReviewUtility: (role?: string) => ['super_admin', 'admin', 'qa', 'head_qa', 'qa_manager'].includes(role || ''),
+  canImportExportUtility: (role?: string) => ['super_admin', 'admin'].includes(role || ''),
+  canViewUtility: (role?: string) => [
+    'super_admin', 'admin', 'qa', 'head_qa', 'qa_manager',
+    'engineering', 'engineering_manager', 'qc', 'qc_manager', 'microbiology',
+    'production', 'production_manager', 'viewer', 'auditor',
+  ].includes(role || ''),
+  canCreateUtility: (role?: string) => [
+    'super_admin', 'admin', 'engineering', 'engineering_manager', 'qc', 'qc_manager', 'microbiology',
+  ].includes(role || ''),
+  isUtilityViewOnly: (role?: string) => ['production', 'production_manager', 'viewer', 'auditor'].includes(role || ''),
+  canReviewEnvironmental: (role?: string) => ['super_admin', 'admin', 'qa', 'head_qa', 'qa_manager'].includes(role || ''),
+  canImportExportEnvironmental: (role?: string) => ['super_admin', 'admin'].includes(role || ''),
+  canViewEnvironmental: (role?: string) => [
+    'super_admin', 'admin', 'qa', 'head_qa', 'qa_manager',
+    'qc', 'qc_manager', 'microbiology', 'engineering', 'engineering_manager',
+    'production', 'production_manager', 'viewer', 'auditor',
+  ].includes(role || ''),
+  canCreateEnvironmental: (role?: string) => [
+    'super_admin', 'admin', 'qc', 'qc_manager', 'microbiology',
+  ].includes(role || ''),
+  isEnvironmentalViewOnly: (role?: string) => ['production', 'production_manager', 'engineering', 'engineering_manager', 'viewer', 'auditor'].includes(role || ''),
+  canReviewYield: (role?: string) => ['super_admin', 'admin', 'qa', 'head_qa', 'qa_manager'].includes(role || ''),
+  canImportExportYield: (role?: string) => ['super_admin', 'admin'].includes(role || ''),
+  canViewYield: (role?: string) => [
+    'super_admin', 'admin', 'qa', 'head_qa', 'qa_manager',
+    'production', 'production_manager', 'warehouse', 'warehouse_manager',
+    'qc', 'qc_manager', 'viewer', 'auditor',
+  ].includes(role || ''),
+  canCreateYield: (role?: string) => [
+    'super_admin', 'admin', 'production', 'production_manager',
+  ].includes(role || ''),
+  isYieldViewOnly: (role?: string) => ['qc', 'qc_manager', 'warehouse', 'warehouse_manager', 'viewer', 'auditor'].includes(role || ''),
+  canViewStability: (role?: string) => [
+    'super_admin', 'admin', 'qa', 'head_qa', 'qa_manager',
+    'production', 'production_manager', 'warehouse', 'warehouse_manager',
+    'qc', 'qc_manager', 'viewer', 'auditor',
+  ].includes(role || ''),
+  canCreateStability: (role?: string) => ['super_admin', 'admin'].includes(role || ''),
+  canEnterStabilityResults: (role?: string) => [
+    'super_admin', 'admin', 'qc', 'qc_manager',
+  ].includes(role || ''),
+  canUpdateStabilityPull: (role?: string) => [
+    'super_admin', 'admin', 'warehouse', 'warehouse_manager',
+  ].includes(role || ''),
+  canReviewStability: (role?: string) => ['super_admin', 'admin', 'qa', 'head_qa', 'qa_manager'].includes(role || ''),
+  canImportExportStability: (role?: string) => ['super_admin', 'admin'].includes(role || ''),
+  isStabilityViewOnly: (role?: string) => [
+    'production', 'production_manager', 'viewer', 'auditor',
+  ].includes(role || ''),
+  canViewHoldTime: (role?: string) => [
+    'super_admin', 'admin', 'qa', 'head_qa', 'qa_manager',
+    'production', 'production_manager', 'qc', 'qc_manager',
+    'viewer', 'auditor',
+  ].includes(role || ''),
+  canCreateHoldTime: (role?: string) => [
+    'super_admin', 'admin', 'production', 'production_manager',
+  ].includes(role || ''),
+  canEditHoldTime: (role?: string) => ['super_admin', 'admin'].includes(role || ''),
+  canReviewHoldTime: (role?: string) => ['super_admin', 'admin', 'qa', 'head_qa', 'qa_manager'].includes(role || ''),
+  canImportExportHoldTime: (role?: string) => ['super_admin', 'admin'].includes(role || ''),
+  isHoldTimeViewOnly: (role?: string) => ['qc', 'qc_manager', 'viewer', 'auditor'].includes(role || ''),
+  canViewProcessCapability: (role?: string) => [
+    'super_admin', 'admin', 'qa', 'head_qa', 'qa_manager',
+    'production', 'production_manager', 'qc', 'qc_manager',
+    'engineering', 'engineering_manager', 'viewer', 'auditor',
+  ].includes(role || ''),
+  canCreateProcessCapability: (role?: string) => [
+    'super_admin', 'admin', 'qc', 'qc_manager',
+  ].includes(role || ''),
+  canEditProcessCapability: (role?: string) => ['super_admin', 'admin'].includes(role || ''),
+  canReviewProcessCapability: (role?: string) => ['super_admin', 'admin', 'qa', 'head_qa', 'qa_manager'].includes(role || ''),
+  canImportExportProcessCapability: (role?: string) => ['super_admin', 'admin'].includes(role || ''),
+  isProcessCapabilityViewOnly: (role?: string) => [
+    'production', 'production_manager', 'engineering', 'engineering_manager', 'viewer', 'auditor',
+  ].includes(role || ''),
+  canViewTrendAnalysis: (role?: string) => [
+    'super_admin', 'admin', 'qa', 'head_qa', 'qa_manager',
+    'production', 'production_manager', 'qc', 'qc_manager',
+    'engineering', 'engineering_manager', 'viewer', 'auditor',
+  ].includes(role || ''),
+  canCreateTrendAnalysis: (role?: string) => [
+    'super_admin', 'admin', 'qc', 'qc_manager', 'production', 'production_manager',
+    'engineering', 'engineering_manager',
+  ].includes(role || ''),
+  canEditTrendAnalysis: (role?: string) => ['super_admin', 'admin'].includes(role || ''),
+  canReviewTrendAnalysis: (role?: string) => ['super_admin', 'admin', 'qa', 'head_qa', 'qa_manager'].includes(role || ''),
+  canImportExportTrendAnalysis: (role?: string) => ['super_admin', 'admin'].includes(role || ''),
+  isTrendAnalysisViewOnly: (role?: string) => ['viewer', 'auditor'].includes(role || ''),
+  canViewSpc: (role?: string) => [
+    'super_admin', 'admin', 'qa', 'head_qa', 'qa_manager',
+    'production', 'production_manager', 'qc', 'qc_manager',
+    'engineering', 'engineering_manager', 'viewer', 'auditor',
+  ].includes(role || ''),
+  canCreateSpc: (role?: string) => [
+    'super_admin', 'admin', 'qc', 'qc_manager', 'production', 'production_manager',
+    'engineering', 'engineering_manager',
+  ].includes(role || ''),
+  canEditSpc: (role?: string) => ['super_admin', 'admin'].includes(role || ''),
+  canReviewSpc: (role?: string) => ['super_admin', 'admin', 'qa', 'head_qa', 'qa_manager'].includes(role || ''),
+  canImportExportSpc: (role?: string) => ['super_admin', 'admin'].includes(role || ''),
+  isSpcViewOnly: (role?: string) => ['viewer', 'auditor'].includes(role || ''),
+  canViewRiskAssessment: (role?: string) => [
+    'super_admin', 'admin', 'qa', 'head_qa', 'qa_manager',
+    'qc', 'qc_manager', 'production', 'production_manager',
+    'engineering', 'engineering_manager', 'viewer', 'auditor',
+  ].includes(role || ''),
+  canCreateRiskAssessment: (role?: string) => [
+    'super_admin', 'admin', 'qc', 'qc_manager', 'production', 'production_manager',
+    'engineering', 'engineering_manager',
+  ].includes(role || ''),
+  canEditRiskAssessment: (role?: string) => ['super_admin', 'admin'].includes(role || ''),
+  canReviewRiskAssessment: (role?: string) => ['super_admin', 'admin', 'qa', 'head_qa', 'qa_manager'].includes(role || ''),
+  canCloseRiskAssessment: (role?: string) => ['super_admin', 'admin', 'qa', 'head_qa', 'qa_manager'].includes(role || ''),
+  canImportExportRiskAssessment: (role?: string) => ['super_admin', 'admin'].includes(role || ''),
+  isRiskAssessmentViewOnly: (role?: string) => ['viewer', 'auditor'].includes(role || ''),
+  canViewAnnualReview: (role?: string) => [
+    'super_admin', 'admin', 'qa', 'head_qa', 'qa_manager',
+    'qc', 'qc_manager', 'production', 'production_manager',
+    'engineering', 'engineering_manager', 'viewer', 'auditor',
+  ].includes(role || ''),
+  canCreateAnnualReview: (role?: string) => [
+    'super_admin', 'admin', 'qa', 'head_qa', 'qa_manager',
+  ].includes(role || ''),
+  canEditAnnualReview: (role?: string) => ['super_admin', 'admin', 'qa', 'head_qa', 'qa_manager'].includes(role || ''),
+  canReviewAnnualReview: (role?: string) => [
+    'super_admin', 'admin', 'qa', 'head_qa', 'qa_manager', 'qc', 'qc_manager',
+    'production', 'production_manager', 'engineering', 'engineering_manager',
+  ].includes(role || ''),
+  canApproveAnnualReview: (role?: string) => ['super_admin', 'admin', 'head_qa', 'qa_manager'].includes(role || ''),
+  canExportAnnualReview: (role?: string) => ['super_admin', 'admin', 'qa', 'head_qa', 'qa_manager'].includes(role || ''),
+  isAnnualReviewViewOnly: (role?: string) => ['viewer', 'auditor'].includes(role || ''),
+  canViewReportsAnalytics: (role?: string) => [
+    'super_admin', 'admin', 'qa', 'head_qa', 'qa_manager',
+    'qc', 'qc_manager', 'production', 'production_manager',
+    'engineering', 'engineering_manager', 'viewer', 'auditor',
+  ].includes(role || ''),
+  canGenerateReports: (role?: string) => [
+    'super_admin', 'admin', 'qa', 'head_qa', 'qa_manager',
+    'qc', 'qc_manager', 'production', 'production_manager',
+    'engineering', 'engineering_manager',
+  ].includes(role || ''),
+  canExportReports: (role?: string) => [
+    'super_admin', 'admin', 'qa', 'head_qa', 'qa_manager', 'auditor',
+  ].includes(role || ''),
+  canArchiveReports: (role?: string) => ['super_admin', 'admin'].includes(role || ''),
+  canViewManagementAnalytics: (role?: string) => [
+    'super_admin', 'admin', 'head_qa', 'qa_manager', 'qa',
+  ].includes(role || ''),
+  isReportsViewOnly: (role?: string) => ['viewer'].includes(role || ''),
+  canViewAlerts: (role?: string) => [
+    'super_admin', 'admin', 'qa', 'head_qa', 'qa_manager',
+    'qc', 'qc_manager', 'production', 'production_manager',
+    'engineering', 'engineering_manager', 'viewer', 'auditor',
+  ].includes(role || ''),
+  canManageAlerts: (role?: string) => ['super_admin', 'admin', 'qa', 'head_qa', 'qa_manager'].includes(role || ''),
+  canConfigureAlertRules: (role?: string) => ['super_admin', 'admin'].includes(role || ''),
+  canExportAlerts: (role?: string) => ['super_admin', 'admin', 'qa', 'head_qa', 'qa_manager', 'auditor'].includes(role || ''),
+  isAlertsViewOnly: (role?: string) => ['viewer', 'auditor'].includes(role || ''),
+  canViewCpvConfiguration: (role?: string) => [
+    'super_admin', 'admin', 'qa', 'head_qa', 'qa_manager', 'auditor', 'viewer',
+  ].includes(role || ''),
+  canEditCpvConfiguration: (role?: string) => ['super_admin', 'admin'].includes(role || ''),
+  canImportExportCpvConfiguration: (role?: string) => ['super_admin', 'admin'].includes(role || ''),
+  canApproveCpvConfiguration: (role?: string) => ['super_admin', 'head_qa'].includes(role || ''),
+  isCpvConfigurationViewOnly: (role?: string) => ['auditor', 'viewer'].includes(role || ''),
+  canViewAiAnalytics: (role?: string) => [
+    'super_admin', 'admin', 'head_qa', 'qa_manager', 'qa', 'auditor', 'viewer',
+  ].includes(role || ''),
+  canManageAiRecommendations: (role?: string) => ['super_admin', 'admin', 'head_qa'].includes(role || ''),
+  canExportAiAnalytics: (role?: string) => ['super_admin', 'admin', 'head_qa', 'qa_manager', 'auditor'].includes(role || ''),
+  isAiAnalyticsViewOnly: (role?: string) => ['auditor', 'viewer'].includes(role || ''),
 };

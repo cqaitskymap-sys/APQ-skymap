@@ -3,7 +3,7 @@ import {
   type QueryConstraint,
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { firestore, storage } from '@/lib/firebase';
+import { getFirebaseFirestore, getFirebaseStorage } from '@/lib/firebase';
 import { logAuditEvent } from '@/lib/admin/admin-service';
 import { downloadCsv } from '@/lib/export-utils';
 import {
@@ -31,7 +31,7 @@ async function audit(actor: TmsActor, action: string, recordId: string, oldValue
 async function notify(title: string, message: string, recordId: string, roles: string[]) {
   try {
     for (const role of roles) {
-      await addDoc(collection(firestore, TMS_COLLECTIONS.notifications), {
+      await addDoc(collection(getFirebaseFirestore(), TMS_COLLECTIONS.notifications), {
         title, message, module: 'Training', record_id: recordId, target_role: role,
         read: false, created_at: now(),
       });
@@ -44,7 +44,7 @@ export async function generateTrainingCode(): Promise<string> {
   const prefix = `TRN-${year}-`;
   try {
     const snap = await getDocs(query(
-      collection(firestore, TMS_COLLECTIONS.master),
+      collection(getFirebaseFirestore(), TMS_COLLECTIONS.master),
       where('training_code', '>=', prefix),
       where('training_code', '<=', `${prefix}\uf8ff`),
       orderBy('training_code', 'desc'),
@@ -55,7 +55,7 @@ export async function generateTrainingCode(): Promise<string> {
       return `${prefix}${String(parseInt(last.split('-').pop() || '0', 10) + 1).padStart(4, '0')}`;
     }
   } catch {
-    const all = await getDocs(collection(firestore, TMS_COLLECTIONS.master));
+    const all = await getDocs(collection(getFirebaseFirestore(), TMS_COLLECTIONS.master));
     return `${prefix}${String(all.size + 1).padStart(4, '0')}`;
   }
   return `${prefix}0001`;
@@ -66,7 +66,7 @@ export async function generateAssignmentNumber(): Promise<string> {
   const prefix = `TAS-${year}-`;
   try {
     const snap = await getDocs(query(
-      collection(firestore, TMS_COLLECTIONS.assignments),
+      collection(getFirebaseFirestore(), TMS_COLLECTIONS.assignments),
       where('training_number', '>=', prefix),
       where('training_number', '<=', `${prefix}\uf8ff`),
       orderBy('training_number', 'desc'),
@@ -77,7 +77,7 @@ export async function generateAssignmentNumber(): Promise<string> {
       return `${prefix}${String(parseInt(last.split('-').pop() || '0', 10) + 1).padStart(4, '0')}`;
     }
   } catch {
-    const all = await getDocs(collection(firestore, TMS_COLLECTIONS.assignments));
+    const all = await getDocs(collection(getFirebaseFirestore(), TMS_COLLECTIONS.assignments));
     return `${prefix}${String(all.size + 1).padStart(4, '0')}`;
   }
   return `${prefix}0001`;
@@ -87,7 +87,7 @@ export async function generateAssignmentNumber(): Promise<string> {
 
 export async function listEmployees(): Promise<EmployeeProfile[]> {
   try {
-    const snap = await getDocs(collection(firestore, TMS_COLLECTIONS.users));
+    const snap = await getDocs(collection(getFirebaseFirestore(), TMS_COLLECTIONS.users));
     return snap.docs.map((d) => {
       const data = d.data();
       return {
@@ -100,7 +100,7 @@ export async function listEmployees(): Promise<EmployeeProfile[]> {
       };
     }).filter((e) => e.full_name);
   } catch {
-    const snap = await getDocs(collection(firestore, TMS_COLLECTIONS.profiles));
+    const snap = await getDocs(collection(getFirebaseFirestore(), TMS_COLLECTIONS.profiles));
     return snap.docs.map((d) => {
       const data = d.data();
       return {
@@ -143,13 +143,13 @@ export async function createTrainingMaster(input: TrainingMasterInput, actor: Tm
     created_at: timestamp,
     updated_at: timestamp,
   };
-  const refDoc = await addDoc(collection(firestore, TMS_COLLECTIONS.master), record);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), TMS_COLLECTIONS.master), record);
   await audit(actor, 'CREATE', refDoc.id, null, record);
   return { id: refDoc.id, ...record };
 }
 
 export async function getTrainingMasterById(id: string): Promise<TrainingMaster | null> {
-  const snap = await getDoc(doc(firestore, TMS_COLLECTIONS.master, id));
+  const snap = await getDoc(doc(getFirebaseFirestore(), TMS_COLLECTIONS.master, id));
   if (!snap.exists()) return null;
   return { id: snap.id, ...snap.data() } as TrainingMaster;
 }
@@ -162,10 +162,10 @@ export async function listTrainingMaster(filters?: TmsFilters): Promise<Training
 
   let records: TrainingMaster[];
   try {
-    const snap = await getDocs(query(collection(firestore, TMS_COLLECTIONS.master), ...constraints));
+    const snap = await getDocs(query(collection(getFirebaseFirestore(), TMS_COLLECTIONS.master), ...constraints));
     records = snap.docs.map((d) => ({ id: d.id, ...d.data() } as TrainingMaster));
   } catch {
-    const snap = await getDocs(collection(firestore, TMS_COLLECTIONS.master));
+    const snap = await getDocs(collection(getFirebaseFirestore(), TMS_COLLECTIONS.master));
     records = snap.docs.map((d) => ({ id: d.id, ...d.data() } as TrainingMaster));
   }
 
@@ -182,7 +182,7 @@ export async function updateTrainingMaster(id: string, input: Partial<TrainingMa
   const existing = await getTrainingMasterById(id);
   if (!existing) throw new Error('Training not found');
   const updates = { ...input, updated_by: actor.id, updated_by_name: actor.name, updated_at: now() };
-  await updateDoc(doc(firestore, TMS_COLLECTIONS.master, id), updates);
+  await updateDoc(doc(getFirebaseFirestore(), TMS_COLLECTIONS.master, id), updates);
   await audit(actor, 'EDIT', id, existing, updates);
   return { ...existing, ...updates } as TrainingMaster;
 }
@@ -221,7 +221,7 @@ export async function createAssignment(
     updated_at: now(),
   };
 
-  const refDoc = await addDoc(collection(firestore, TMS_COLLECTIONS.assignments), record);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), TMS_COLLECTIONS.assignments), record);
   await audit(actor, 'ASSIGN', refDoc.id, null, record);
   await notify('Training Assigned', `${master.training_title} assigned to ${input.employee_name}`, refDoc.id, ['qa_manager']);
   return { id: refDoc.id, ...record };
@@ -234,10 +234,10 @@ export async function listAssignments(filters?: TmsFilters): Promise<TrainingAss
 
   let records: TrainingAssignment[];
   try {
-    const snap = await getDocs(query(collection(firestore, TMS_COLLECTIONS.assignments), ...constraints));
+    const snap = await getDocs(query(collection(getFirebaseFirestore(), TMS_COLLECTIONS.assignments), ...constraints));
     records = snap.docs.map((d) => ({ id: d.id, ...d.data() } as TrainingAssignment));
   } catch {
-    const snap = await getDocs(collection(firestore, TMS_COLLECTIONS.assignments));
+    const snap = await getDocs(collection(getFirebaseFirestore(), TMS_COLLECTIONS.assignments));
     records = snap.docs.map((d) => ({ id: d.id, ...d.data() } as TrainingAssignment));
   }
 
@@ -253,7 +253,7 @@ export async function listAssignments(filters?: TmsFilters): Promise<TrainingAss
 }
 
 export async function getAssignmentById(id: string): Promise<TrainingAssignment | null> {
-  const snap = await getDoc(doc(firestore, TMS_COLLECTIONS.assignments, id));
+  const snap = await getDoc(doc(getFirebaseFirestore(), TMS_COLLECTIONS.assignments, id));
   if (!snap.exists()) return null;
   return { id: snap.id, ...snap.data() } as TrainingAssignment;
 }
@@ -276,7 +276,7 @@ export async function completeAssignment(
     status,
     updated_at: now(),
   };
-  await updateDoc(doc(firestore, TMS_COLLECTIONS.assignments, id), updates);
+  await updateDoc(doc(getFirebaseFirestore(), TMS_COLLECTIONS.assignments, id), updates);
   await audit(actor, 'COMPLETE', id, existing, updates);
 
   if (passFail === 'Fail') {
@@ -305,7 +305,7 @@ export async function syncOverdueAssignments(): Promise<number> {
   let count = 0;
   const today = now().split('T')[0];
   try {
-    const snap = await getDocs(collection(firestore, TMS_COLLECTIONS.assignments));
+    const snap = await getDocs(collection(getFirebaseFirestore(), TMS_COLLECTIONS.assignments));
     for (const d of snap.docs) {
       const data = d.data() as TrainingAssignment;
       if (['pending', 'in_progress'].includes(data.status) && data.due_date < today) {
@@ -324,7 +324,7 @@ export async function addQuestion(input: QuestionInput, actor: TmsActor): Promis
     ...input,
     created_at: now(),
   };
-  const refDoc = await addDoc(collection(firestore, TMS_COLLECTIONS.assessments), {
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), TMS_COLLECTIONS.assessments), {
     ...record, record_type: 'question',
   });
   await audit(actor, 'ADD_QUESTION', refDoc.id, null, record);
@@ -334,7 +334,7 @@ export async function addQuestion(input: QuestionInput, actor: TmsActor): Promis
 export async function getQuestions(trainingMasterId: string): Promise<AssessmentQuestion[]> {
   try {
     const snap = await getDocs(query(
-      collection(firestore, TMS_COLLECTIONS.assessments),
+      collection(getFirebaseFirestore(), TMS_COLLECTIONS.assessments),
       where('training_master_id', '==', trainingMasterId),
       where('record_type', '==', 'question'),
     ));
@@ -373,7 +373,7 @@ export async function submitAssessment(
     attempted_at: now(),
   };
 
-  const refDoc = await addDoc(collection(firestore, TMS_COLLECTIONS.assessments), {
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), TMS_COLLECTIONS.assessments), {
     ...attempt, record_type: 'attempt',
   });
 
@@ -402,7 +402,7 @@ export async function saveEffectiveness(input: EffectivenessInput, actor: TmsAct
     evaluated_at: now(),
   };
 
-  const refDoc = await addDoc(collection(firestore, TMS_COLLECTIONS.effectiveness), record);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), TMS_COLLECTIONS.effectiveness), record);
   await audit(actor, 'EFFECTIVENESS', refDoc.id, null, record);
   return { id: refDoc.id, ...record };
 }
@@ -410,12 +410,12 @@ export async function saveEffectiveness(input: EffectivenessInput, actor: TmsAct
 export async function listEffectiveness(): Promise<TrainingEffectiveness[]> {
   try {
     const snap = await getDocs(query(
-      collection(firestore, TMS_COLLECTIONS.effectiveness),
+      collection(getFirebaseFirestore(), TMS_COLLECTIONS.effectiveness),
       orderBy('evaluated_at', 'desc'),
     ));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as TrainingEffectiveness));
   } catch {
-    const snap = await getDocs(collection(firestore, TMS_COLLECTIONS.effectiveness));
+    const snap = await getDocs(collection(getFirebaseFirestore(), TMS_COLLECTIONS.effectiveness));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as TrainingEffectiveness));
   }
 }
@@ -443,7 +443,7 @@ export async function saveCompetency(input: CompetencyInput, actor: TmsActor): P
     updated_at: now(),
   };
 
-  const refDoc = await addDoc(collection(firestore, TMS_COLLECTIONS.competency), record);
+  const refDoc = await addDoc(collection(getFirebaseFirestore(), TMS_COLLECTIONS.competency), record);
   await audit(actor, 'COMPETENCY', refDoc.id, null, record);
   return { id: refDoc.id, ...record };
 }
@@ -451,12 +451,12 @@ export async function saveCompetency(input: CompetencyInput, actor: TmsActor): P
 export async function listCompetency(): Promise<CompetencyRecord[]> {
   try {
     const snap = await getDocs(query(
-      collection(firestore, TMS_COLLECTIONS.competency),
+      collection(getFirebaseFirestore(), TMS_COLLECTIONS.competency),
       orderBy('updated_at', 'desc'),
     ));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as CompetencyRecord));
   } catch {
-    const snap = await getDocs(collection(firestore, TMS_COLLECTIONS.competency));
+    const snap = await getDocs(collection(getFirebaseFirestore(), TMS_COLLECTIONS.competency));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as CompetencyRecord));
   }
 }
@@ -504,9 +504,9 @@ export async function buildTrainingMatrix(): Promise<TrainingMatrixRow[]> {
     matrix.push({ id: emp.id, ...row });
 
     try {
-      await updateDoc(doc(firestore, TMS_COLLECTIONS.matrix, emp.id), row).catch(async () => {
+      await updateDoc(doc(getFirebaseFirestore(), TMS_COLLECTIONS.matrix, emp.id), row).catch(async () => {
         const { setDoc } = await import('firebase/firestore');
-        await setDoc(doc(firestore, TMS_COLLECTIONS.matrix, emp.id), row);
+        await setDoc(doc(getFirebaseFirestore(), TMS_COLLECTIONS.matrix, emp.id), row);
       });
     } catch { /* optional persist */ }
   }
@@ -516,7 +516,7 @@ export async function buildTrainingMatrix(): Promise<TrainingMatrixRow[]> {
 
 export async function getTrainingMatrix(): Promise<TrainingMatrixRow[]> {
   try {
-    const snap = await getDocs(collection(firestore, TMS_COLLECTIONS.matrix));
+    const snap = await getDocs(collection(getFirebaseFirestore(), TMS_COLLECTIONS.matrix));
     if (snap.size > 0) {
       return snap.docs.map((d) => ({ id: d.id, ...d.data() } as TrainingMatrixRow));
     }
@@ -530,7 +530,7 @@ export async function syncDmsTrainingLinks(actor: TmsActor): Promise<number> {
   let count = 0;
   try {
     const snap = await getDocs(query(
-      collection(firestore, TMS_COLLECTIONS.dmsLinks),
+      collection(getFirebaseFirestore(), TMS_COLLECTIONS.dmsLinks),
       where('status', '==', 'pending'),
     ));
     const employees = await listEmployees();
@@ -586,7 +586,7 @@ export async function syncDmsTrainingLinks(actor: TmsActor): Promise<number> {
 export async function assignFromChangeControl(changeId: string, actor: TmsActor): Promise<number> {
   let count = 0;
   try {
-    const snap = await getDoc(doc(firestore, TMS_COLLECTIONS.changeControls, changeId));
+    const snap = await getDoc(doc(getFirebaseFirestore(), TMS_COLLECTIONS.changeControls, changeId));
     if (!snap.exists()) return 0;
     const cc = snap.data();
     if (!cc.training_impact) return 0;
@@ -629,7 +629,7 @@ export async function assignFromChangeControl(changeId: string, actor: TmsActor)
 export async function assignFromCapa(capaId: string, actor: TmsActor): Promise<number> {
   let count = 0;
   try {
-    const snap = await getDoc(doc(firestore, TMS_COLLECTIONS.capa, capaId));
+    const snap = await getDoc(doc(getFirebaseFirestore(), TMS_COLLECTIONS.capa, capaId));
     if (!snap.exists()) return 0;
     const capa = snap.data();
 
@@ -752,7 +752,7 @@ export async function exportAssignmentsCsv(assignments: TrainingAssignment[]) {
 
 export async function uploadTrainingMaterial(masterId: string, file: File, actor: TmsActor): Promise<string> {
   const path = `training/${masterId}/${Date.now()}_${file.name}`;
-  const storageRef = ref(storage, path);
+  const storageRef = ref(getFirebaseStorage(), path);
   await uploadBytes(storageRef, file);
   const url = await getDownloadURL(storageRef);
   await updateTrainingMaster(masterId, { training_material: url }, actor);

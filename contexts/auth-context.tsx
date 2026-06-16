@@ -130,7 +130,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [isDemoMode]);
 
   const signIn = async (email: string, password: string) => {
-    if (isDemoMode) {
+    if (isDemoMode || shouldUseDemoAuth()) {
       const { profile: demoProfile, error } = demoSignIn(email, password);
       if (error) return { error: new Error(error) };
       activateDemoSession(demoProfile!);
@@ -138,7 +138,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      const { signIn: firebaseSignIn } = await import('@/lib/auth');
+      const { signIn: firebaseSignIn, isFirebaseConfigured } = await import('@/lib/auth');
+      if (!isFirebaseConfigured()) {
+        const demoResult = demoSignIn(email, password);
+        if (demoResult.profile) {
+          activateDemoSession(demoResult.profile);
+          return { error: null };
+        }
+        return {
+          error: new Error(
+            'Firebase is not configured. Add env vars in Netlify, or use Demo Access buttons (admin@pharmaQMS.com / demo123456).',
+          ),
+        };
+      }
       await firebaseSignIn(email, password);
       return { error: null };
     } catch (error) {
@@ -166,7 +178,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signUp = async (email: string, password: string, fullName: string, role: string) => {
-    if (isDemoMode) {
+    if (isDemoMode || shouldUseDemoAuth()) {
       const { profile: demoProfile, error } = demoSignUp(email, password, fullName, role);
       if (error) return { error: new Error(error) };
       activateDemoSession(demoProfile!);
@@ -174,7 +186,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      const { signUp: firebaseSignUp } = await import('@/lib/auth');
+      const { signUp: firebaseSignUp, isFirebaseConfigured } = await import('@/lib/auth');
+      if (!isFirebaseConfigured()) {
+        const demoResult = demoSignUp(email, password, fullName, role);
+        if (demoResult.profile) {
+          activateDemoSession(demoResult.profile);
+          return { error: null };
+        }
+      }
       await firebaseSignUp(email, password, fullName, role as Profile['role']);
       return { error: null };
     } catch (error) {

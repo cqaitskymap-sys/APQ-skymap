@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
-import { oosCreateSchema, type OosCreateInput, DEPARTMENTS } from '@/lib/oos-schemas';
+import { oosCreateSchemaLegacy, type OosCreateInput, DEPARTMENTS } from '@/lib/oos-schemas';
 import { computeResultStatus } from '@/lib/oos-types';
 import { ResultStatusBadge } from './oos-sub-nav';
 
@@ -20,7 +20,7 @@ interface OosFormProps {
 
 export function OosForm({ defaultValues, onSubmit, submitLabel = 'Save OOS', disabled }: OosFormProps) {
   const form = useForm<OosCreateInput>({
-    resolver: zodResolver(oosCreateSchema),
+    resolver: zodResolver(oosCreateSchemaLegacy),
     defaultValues: {
       oos_date: new Date().toISOString().split('T')[0],
       department: 'QC', product_name: '', batch_number: '', test_name: '',
