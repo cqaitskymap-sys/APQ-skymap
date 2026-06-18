@@ -1,12 +1,5 @@
-'use client';
+import { ComplaintInvestigationPageShell } from '@/components/complaints/investigation/complaint-investigation-page';
 
-import { ComplaintDetailView } from '@/components/complaints/complaint-detail-view';
-import { LoadingSpinner } from '@/components/ui/loading-spinner';
-import { useComplaint } from '@/hooks/use-complaint';
-
-export default function ComplaintInvestigationPage({ params }: { params: { id: string } }) {
-  const { record, loading, refresh } = useComplaint(params.id);
-  if (loading) return <LoadingSpinner />;
-  if (!record) return <p className="text-muted-foreground">Not found.</p>;
-  return <ComplaintDetailView record={record} onRefresh={refresh} defaultTab="investigation" />;
+export default function ComplaintInvestigationRoute({ params }: { params: { id: string } }) {
+  return <ComplaintInvestigationPageShell complaintId={params.id} />;
 }

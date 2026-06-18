@@ -61,7 +61,7 @@ service cloud.firestore {
     function isRegisteredCollection(name) {
       return name.matches('cpv_.*')
         || name in [
-          'users', 'roles', 'permissions', 'products', 'batches',
+          'users', 'roles', 'permissions', 'user_permissions', 'products', 'batches',
           'cpv_reviews', 'cpp_parameters', 'cpp_results',
           'cqa_parameters', 'cqa_results', 'risk_assessment',
           'pqr_records', 'pqr_documents', 'pqr_batches',
@@ -115,6 +115,11 @@ service cloud.firestore {
     match /permissions/{docId} {
       allow read: if isAuthenticated();
       allow write: if isSuperAdmin();
+    }
+
+    match /user_permissions/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
     }
 
     // ── Immutable audit trail ──

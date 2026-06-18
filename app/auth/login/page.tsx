@@ -14,6 +14,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/contexts/auth-context';
+import { isFirebaseConfigured } from '@/lib/firebase';
 
 const schema = z.object({
   email: z.string().email('Invalid email address'),
@@ -27,6 +28,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const { signIn } = useAuth();
   const router = useRouter();
+  const firebaseReady = isFirebaseConfigured();
 
   const { register, handleSubmit, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
@@ -44,32 +46,11 @@ export default function LoginPage() {
     }
   };
 
-  const demoLogin = async (role: string) => {
-    setLoading(true);
-    const demoAccounts: Record<string, { email: string; password: string }> = {
-      'Super Admin': { email: 'admin@pharmaQMS.com', password: 'demo123456' },
-      'QA Manager': { email: 'qa@pharmaQMS.com', password: 'demo123456' },
-    };
-    const account = demoAccounts[role];
-    if (account) {
-      const { error } = await signIn(account.email, account.password);
-      if (!error) {
-        router.push('/dashboard');
-      } else {
-        // For demo, just navigate
-        router.push('/dashboard');
-      }
-    }
-    setLoading(false);
-  };
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 flex items-center justify-center p-4">
-      {/* Background grid */}
       <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4wMyI+PHBhdGggZD0iTTM2IDM0djJoLTJ2LTJoMnptMC00djJoLTJ2LTJoMnptLTQgOHYyaC0ydi0yaDJ6bTAtNHYyaC0ydi0yaDJ6bTAtNHYyaC0ydi0yaDJ6bTQtOHYyaC0ydi0yaDJ6bTAtNHYyaC0ydi0yaDJ6bTQgMTJ2MmgtMnYtMmgyek00MCA0MHYyaC0ydi0yaDJ6Ii8+PC9nPjwvZz48L3N2Zz4=')] opacity-40" />
 
       <div className="relative w-full max-w-md">
-        {/* Logo */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-600 rounded-2xl shadow-lg shadow-blue-600/30 mb-4">
             <FlaskConical className="h-8 w-8 text-white" />
@@ -84,6 +65,12 @@ export default function LoginPage() {
 
         <Card className="border-slate-700/50 bg-slate-800/60 backdrop-blur-xl shadow-2xl">
           <CardContent className="p-8">
+            {!firebaseReady && (
+              <div className="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+                Firebase is not configured. Add <code className="bg-amber-500/20 px-1 rounded">NEXT_PUBLIC_FIREBASE_*</code> environment variables to enable authentication.
+              </div>
+            )}
+
             <div className="flex items-center gap-2 mb-6">
               <div className="w-8 h-8 bg-blue-600/20 rounded-lg flex items-center justify-center">
                 <Lock className="h-4 w-4 text-blue-400" />
@@ -103,6 +90,7 @@ export default function LoginPage() {
                   placeholder="your.email@company.com"
                   className="bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500 focus:border-blue-500 focus:ring-blue-500/20 h-11"
                   autoComplete="email"
+                  disabled={!firebaseReady}
                 />
                 {errors.email && <p className="text-red-400 text-xs">{errors.email.message}</p>}
               </div>
@@ -121,6 +109,7 @@ export default function LoginPage() {
                     placeholder="••••••••"
                     className="bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500 focus:border-blue-500 focus:ring-blue-500/20 h-11 pr-10"
                     autoComplete="current-password"
+                    disabled={!firebaseReady}
                   />
                   <button
                     type="button"
@@ -135,7 +124,7 @@ export default function LoginPage() {
 
               <Button
                 type="submit"
-                disabled={loading}
+                disabled={loading || !firebaseReady}
                 className="w-full h-11 bg-blue-600 hover:bg-blue-500 text-white font-semibold shadow-lg shadow-blue-600/25 transition-all duration-200"
               >
                 {loading ? (
@@ -146,29 +135,8 @@ export default function LoginPage() {
               </Button>
             </form>
 
-            <div className="mt-6 pt-5 border-t border-slate-700">
-              <p className="text-slate-400 text-xs text-center mb-3">Demo Access</p>
-              <div className="grid grid-cols-2 gap-2">
-                {['Super Admin', 'QA Manager'].map((role) => (
-                  <Button
-                    key={role}
-                    variant="outline"
-                    size="sm"
-                    onClick={() => demoLogin(role)}
-                    disabled={loading}
-                    className="border-slate-600 text-slate-300 hover:bg-slate-700 hover:text-white text-xs"
-                  >
-                    {role}
-                  </Button>
-                ))}
-              </div>
-            </div>
-
             <p className="text-center text-slate-500 text-xs mt-5">
-              Don&apos;t have an account?{' '}
-              <Link href="/auth/signup" className="text-blue-400 hover:text-blue-300">
-                Request Access
-              </Link>
+              Don&apos;t have an account? Contact your system administrator.
             </p>
           </CardContent>
         </Card>

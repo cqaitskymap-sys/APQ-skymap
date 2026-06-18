@@ -1,5 +1,5 @@
-import { redirect } from 'next/navigation';
+import { CapaApprovalPage } from '@/components/capa/approval/capa-approval-page';
 
-export default function CapaApprovalRedirect({ params }: { params: { id: string } }) {
-  redirect(`/qms/capa/${params.id}`);
+export default function Page({ params }: { params: { id: string } }) {
+  return <CapaApprovalPage capaId={params.id} />;
 }

@@ -6,32 +6,19 @@ import {
   PieChart, Pie, Cell, LineChart, Line, Legend,
 } from 'recharts';
 import type { CapaDashboardChartData } from '@/lib/capa-dashboard-records';
+import { ChartEmptyState, hasChartData } from '@/components/ui/chart-empty-state';
 
 const COLORS = ['#2563eb', '#7c3aed', '#dc2626', '#ea580c', '#16a34a', '#0891b2', '#ca8a04', '#64748b'];
-const EMPTY = [{ name: 'No data', count: 0, value: 0 }];
-
-function safeData<T>(data: T[], fallback: T[]): T[] {
-  return data?.length ? data : fallback;
-}
 
 interface CapaDashboardChartsProps {
   charts: CapaDashboardChartData;
 }
 
 export function CapaDashboardCharts({ charts }: CapaDashboardChartsProps) {
-  const monthlyTrend = safeData(charts.monthlyTrend, EMPTY);
-  const byDept = safeData(charts.byDepartment, EMPTY).slice(0, 8);
-  const bySource = safeData(charts.bySource, EMPTY);
-  const byStatus = safeData(charts.byStatus, EMPTY);
-  const openClosed = safeData(charts.openClosedTrend, EMPTY);
-  const overdueTrend = safeData(charts.overdueTrend, EMPTY);
-  const effectiveness = safeData(charts.effectiveness, EMPTY);
-  const closureTime = safeData(charts.closureTimeTrend, EMPTY);
-
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-      <ChartCard title="Monthly CAPA Trend">
-        <LineChart data={monthlyTrend}>
+      <ChartCard title="Monthly CAPA Trend" data={charts.monthlyTrend}>
+        <LineChart data={charts.monthlyTrend}>
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis dataKey="name" tick={{ fontSize: 10 }} />
           <YAxis allowDecimals={false} />
@@ -40,17 +27,17 @@ export function CapaDashboardCharts({ charts }: CapaDashboardChartsProps) {
         </LineChart>
       </ChartCard>
 
-      <ChartCard title="CAPA by Source">
+      <ChartCard title="CAPA by Source" data={charts.bySource}>
         <PieChart>
-          <Pie data={bySource} dataKey="count" nameKey="name" cx="50%" cy="50%" outerRadius={90} label>
-            {bySource.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+          <Pie data={charts.bySource} dataKey="count" nameKey="name" cx="50%" cy="50%" outerRadius={90} label>
+            {charts.bySource.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
           </Pie>
           <Tooltip />
         </PieChart>
       </ChartCard>
 
-      <ChartCard title="CAPA by Department">
-        <BarChart data={byDept} layout="vertical" margin={{ left: 20 }}>
+      <ChartCard title="CAPA by Department" data={charts.byDepartment}>
+        <BarChart data={charts.byDepartment.slice(0, 8)} layout="vertical" margin={{ left: 20 }}>
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis type="number" allowDecimals={false} />
           <YAxis type="category" dataKey="name" width={90} tick={{ fontSize: 11 }} />
@@ -59,8 +46,8 @@ export function CapaDashboardCharts({ charts }: CapaDashboardChartsProps) {
         </BarChart>
       </ChartCard>
 
-      <ChartCard title="CAPA by Status">
-        <BarChart data={byStatus.map((d) => ({ name: d.name, count: d.count ?? d.value ?? 0 }))}>
+      <ChartCard title="CAPA by Status" data={charts.byStatus}>
+        <BarChart data={charts.byStatus.map((d) => ({ name: d.name, count: d.count ?? d.value ?? 0 }))}>
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis dataKey="name" tick={{ fontSize: 9 }} />
           <YAxis allowDecimals={false} />
@@ -69,8 +56,8 @@ export function CapaDashboardCharts({ charts }: CapaDashboardChartsProps) {
         </BarChart>
       </ChartCard>
 
-      <ChartCard title="Open vs Closed Trend">
-        <LineChart data={openClosed}>
+      <ChartCard title="Open vs Closed Trend" data={charts.openClosedTrend}>
+        <LineChart data={charts.openClosedTrend}>
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis dataKey="name" tick={{ fontSize: 10 }} />
           <YAxis allowDecimals={false} />
@@ -81,8 +68,8 @@ export function CapaDashboardCharts({ charts }: CapaDashboardChartsProps) {
         </LineChart>
       </ChartCard>
 
-      <ChartCard title="Overdue CAPA Trend">
-        <BarChart data={overdueTrend}>
+      <ChartCard title="Overdue CAPA Trend" data={charts.overdueTrend}>
+        <BarChart data={charts.overdueTrend}>
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis dataKey="name" tick={{ fontSize: 10 }} />
           <YAxis allowDecimals={false} />
@@ -91,14 +78,14 @@ export function CapaDashboardCharts({ charts }: CapaDashboardChartsProps) {
         </BarChart>
       </ChartCard>
 
-      <ChartCard title="Effective vs Not Effective">
-        <BarChart data={effectiveness}>
+      <ChartCard title="Effective vs Not Effective" data={charts.effectiveness}>
+        <BarChart data={charts.effectiveness}>
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis dataKey="name" />
           <YAxis allowDecimals={false} />
           <Tooltip />
           <Bar dataKey="count" name="Count" radius={[4, 4, 0, 0]}>
-            {effectiveness.map((entry) => (
+            {charts.effectiveness.map((entry) => (
               <Cell
                 key={entry.name}
                 fill={entry.name === 'Effective' ? '#16a34a' : entry.name === 'Not Effective' ? '#dc2626' : '#ca8a04'}
@@ -108,8 +95,8 @@ export function CapaDashboardCharts({ charts }: CapaDashboardChartsProps) {
         </BarChart>
       </ChartCard>
 
-      <ChartCard title="CAPA Closure Time Trend (Avg Days)">
-        <LineChart data={closureTime}>
+      <ChartCard title="CAPA Closure Time Trend (Avg Days)" data={charts.closureTimeTrend}>
+        <LineChart data={charts.closureTimeTrend}>
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis dataKey="name" tick={{ fontSize: 10 }} />
           <YAxis allowDecimals={false} />
@@ -121,16 +108,28 @@ export function CapaDashboardCharts({ charts }: CapaDashboardChartsProps) {
   );
 }
 
-function ChartCard({ title, children }: { title: string; children: React.ReactElement }) {
+function ChartCard({
+  title,
+  data,
+  children,
+}: {
+  title: string;
+  data: unknown[] | undefined;
+  children: React.ReactElement;
+}) {
   return (
     <Card>
       <CardHeader className="pb-2">
         <CardTitle className="text-sm font-medium">{title}</CardTitle>
       </CardHeader>
       <CardContent className="h-[280px]">
-        <ResponsiveContainer width="100%" height="100%">
-          {children}
-        </ResponsiveContainer>
+        {hasChartData(data) ? (
+          <ResponsiveContainer width="100%" height="100%">
+            {children}
+          </ResponsiveContainer>
+        ) : (
+          <ChartEmptyState />
+        )}
       </CardContent>
     </Card>
   );

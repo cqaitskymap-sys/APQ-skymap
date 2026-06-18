@@ -124,20 +124,20 @@ async function nextActionNumber(capaId: string, capaNumber: string): Promise<str
 export async function listCapaCorrectiveActions(capaId?: string, max = 200): Promise<CapaCorrectiveAction[]> {
   if (!isFirebaseConfigured()) return [];
   try {
-    let q = query(
-      collection(getFirebaseFirestore(), CAPA_COLLECTIONS.correctiveActions),
-      orderBy('updated_at', 'desc'),
-      limit(max),
-    );
-    if (capaId) {
-      q = query(
+    const q = capaId
+      ? query(
         collection(getFirebaseFirestore(), CAPA_COLLECTIONS.correctiveActions),
         where('capa_id', '==', capaId),
         where('is_deleted', '==', false),
         orderBy('updated_at', 'desc'),
         limit(max),
+      )
+      : query(
+        collection(getFirebaseFirestore(), CAPA_COLLECTIONS.correctiveActions),
+        where('is_deleted', '==', false),
+        orderBy('updated_at', 'desc'),
+        limit(max),
       );
-    }
     const snap = await getDocs(q);
     return snap.docs
       .map((d) => applyCorrectiveActionOverdueCheck({ id: d.id, ...d.data() } as CapaCorrectiveAction))
@@ -156,8 +156,15 @@ export async function listCapaCorrectiveActions(capaId?: string, max = 200): Pro
         return [];
       }
     }
-    console.error('listCapaCorrectiveActions', e);
-    return [];
+    try {
+      const snap = await getDocs(collection(getFirebaseFirestore(), CAPA_COLLECTIONS.correctiveActions));
+      return snap.docs
+        .map((d) => applyCorrectiveActionOverdueCheck({ id: d.id, ...d.data() } as CapaCorrectiveAction))
+        .filter((a) => !a.is_deleted);
+    } catch {
+      console.error('listCapaCorrectiveActions', e);
+      return [];
+    }
   }
 }
 
@@ -170,6 +177,7 @@ export async function fetchCapaCorrectiveActionDashboard(): Promise<{
     return { actions: [], metrics: computeCorrectiveActionDashboardMetrics([]), error: 'Firebase is not configured.' };
   }
   try {
+    await syncOverdueCorrectiveActions();
     const actions = await listCapaCorrectiveActions();
     const withCapa = await Promise.all(actions.map(async (a) => ({
       ...a,
@@ -395,7 +403,7 @@ export async function submitCapaCorrectiveActionForVerification(
   if (!isFirebaseConfigured()) throw new Error('Firebase is not configured');
   const existing = await getCorrectiveActionById(actionId);
   if (!existing) throw new Error('Corrective action not found');
-  if (!hasRequiredEvidence(existing)) {
+  if (!hasRequiredEvidence({ ...existing, implementation_evidence: existing.implementation_evidence })) {
     throw new Error('Implementation evidence is required before QA verification.');
   }
 

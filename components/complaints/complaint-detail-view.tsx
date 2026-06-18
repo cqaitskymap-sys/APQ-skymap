@@ -2,28 +2,23 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { Printer, Upload } from 'lucide-react';
+import { Printer, Upload, Search, Scale, Link2, CheckSquare, Lock, ScrollText } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
-import { ComplaintStatusBadge, CriticalityBadge } from './complaint-sub-nav';
+import { ComplaintStatusBadge, CriticalityBadge, RiskBadge } from './complaint-sub-nav';
+import { ComplaintInvestigationStatusBadge } from './investigation/investigation-status-badge';
+import { ComplaintImpactStatusBadge } from './impact-assessment/complaint-impact-status-badge';
 import { ComplaintPdfDocument } from './complaint-pdf-document';
-import { investigationSchema, type InvestigationInput } from '@/lib/complaint-schemas';
 import {
   getInvestigation, getAttachments, getAuditLogsForComplaint, submitComplaint,
-  saveInvestigation, createCapaFromComplaint, closeComplaint, uploadAttachment,
+  uploadAttachment,
 } from '@/lib/complaint-service';
-import type { ComplaintRecord, ComplaintInvestigation, ComplaintAttachment } from '@/lib/complaint-types';
-import { canApproveComplaint, isComplaintReadOnly } from '@/lib/complaint-types';
+import type { ComplaintRecord, ComplaintInvestigation, ComplaintAttachment, ComplaintImpactAssessment, ComplaintCapaLink } from '@/lib/complaint-types';
+import { isComplaintReadOnly } from '@/lib/complaint-types';
 import { printPage } from '@/lib/export-utils';
 import { useComplaintActor } from '@/hooks/use-complaint';
 
@@ -33,6 +28,8 @@ export function ComplaintDetailView({ record, onRefresh, defaultTab = 'overview'
   const actor = useComplaintActor();
   const readOnly = isComplaintReadOnly(actor.role);
   const [investigation, setInvestigation] = useState<ComplaintInvestigation | null>(null);
+  const [impact, setImpact] = useState<ComplaintImpactAssessment | null>(null);
+  const [capaLink, setCapaLink] = useState<ComplaintCapaLink | null>(null);
   const [attachments, setAttachments] = useState<ComplaintAttachment[]>([]);
   const [auditLogs, setAuditLogs] = useState<Record<string, unknown>[]>([]);
   const [loading, setLoading] = useState(true);
@@ -40,16 +37,23 @@ export function ComplaintDetailView({ record, onRefresh, defaultTab = 'overview'
 
   const loadSub = async () => {
     setLoading(true);
-    const [inv, att, al] = await Promise.all([getInvestigation(record.id), getAttachments(record.id), getAuditLogsForComplaint(record.id)]);
-    setInvestigation(inv); setAttachments(att); setAuditLogs(al); setLoading(false);
+    const { getComplaintImpactAssessment } = await import('@/lib/complaint-impact-service');
+    const { getActiveComplaintCapaLink } = await import('@/lib/complaint-capa-service');
+    const [inv, imp, cl, att, al] = await Promise.all([
+      getInvestigation(record.id),
+      getComplaintImpactAssessment(record.id),
+      getActiveComplaintCapaLink(record.id),
+      getAttachments(record.id),
+      getAuditLogsForComplaint(record.id),
+    ]);
+    setInvestigation(inv);
+    setImpact(imp);
+    setCapaLink(cl);
+    setAttachments(att);
+    setAuditLogs(al);
+    setLoading(false);
   };
   useEffect(() => { void loadSub(); }, [record.id]);
-
-  const invForm = useForm<InvestigationInput>({
-    resolver: zodResolver(investigationSchema),
-    defaultValues: investigation || { investigation_summary: '', findings: '', root_cause: record.root_cause || '', impact_assessment: record.impact_assessment || '', sample_analysis: '', batch_review: '', conclusion: '', capa_required: record.capa_required },
-  });
-  useEffect(() => { if (investigation) invForm.reset(investigation); }, [investigation]);
 
   if (loading) return <LoadingSpinner label="Loading complaint..." />;
 
@@ -61,21 +65,36 @@ export function ComplaintDetailView({ record, onRefresh, defaultTab = 'overview'
             <h1 className="text-xl font-bold font-mono">{record.complaint_number}</h1>
             <ComplaintStatusBadge status={record.status} />
             <CriticalityBadge value={record.complaint_criticality} />
+            {investigation?.investigation_status && <ComplaintInvestigationStatusBadge status={investigation.investigation_status} />}
+            {impact?.status && <ComplaintImpactStatusBadge status={impact.status} />}
+            {record.risk_level && <RiskBadge level={record.risk_level} />}
           </div>
           <p className="text-muted-foreground">{record.product_name} — {record.customer_name}</p>
         </div>
         <div className="no-print flex flex-wrap gap-2">
+          <Link href={`/qms/complaints/${record.id}/investigation`}>
+            <Button variant="outline" className="gap-1"><Search className="h-4 w-4" />Investigation</Button>
+          </Link>
+          <Link href={`/qms/complaints/${record.id}/impact-assessment`}>
+            <Button variant="outline" className="gap-1"><Scale className="h-4 w-4" />Impact Assessment</Button>
+          </Link>
+          <Link href={`/qms/complaints/${record.id}/capa`}>
+            <Button variant="outline" className="gap-1"><Link2 className="h-4 w-4" />CAPA Link</Button>
+          </Link>
+          <Link href={`/qms/complaints/${record.id}/approval`}>
+            <Button variant="outline" className="gap-1"><CheckSquare className="h-4 w-4" />Approval</Button>
+          </Link>
+          <Link href={`/qms/complaints/${record.id}/closure`}>
+            <Button variant="outline" className="gap-1"><Lock className="h-4 w-4" />Closure</Button>
+          </Link>
+          <Link href={`/qms/complaints/${record.id}/audit-trail`}>
+            <Button variant="outline" className="gap-1"><ScrollText className="h-4 w-4" />Audit Trail</Button>
+          </Link>
           {record.status === 'draft' && !readOnly && (
             <Button disabled={saving} className="bg-blue-600" onClick={async () => {
               try { setSaving(true); await submitComplaint(record.id, actor); toast.success('Complaint submitted'); onRefresh(); await loadSub(); }
               catch (e) { toast.error(e instanceof Error ? e.message : 'Failed'); } finally { setSaving(false); }
             }}>Submit Complaint</Button>
-          )}
-          {canApproveComplaint(actor.role) && !['closed', 'rejected', 'draft'].includes(record.status) && (
-            <Button variant="outline" disabled={saving} onClick={async () => {
-              try { setSaving(true); await closeComplaint(record.id, actor); toast.success('Complaint closed'); onRefresh(); }
-              catch (e) { toast.error(e instanceof Error ? e.message : 'Failed'); } finally { setSaving(false); }
-            }}>Close Complaint</Button>
           )}
           <Button variant="outline" onClick={() => printPage()} className="gap-1"><Printer className="h-4 w-4" />Print PDF</Button>
         </div>
@@ -83,7 +102,7 @@ export function ComplaintDetailView({ record, onRefresh, defaultTab = 'overview'
 
       <Tabs defaultValue={defaultTab}>
         <TabsList className="flex h-auto flex-wrap">
-          {['overview', 'investigation', 'capa', 'attachments', 'audit'].map((t) => (
+          {['overview', 'investigation', 'impact', 'capa', 'attachments', 'audit'].map((t) => (
             <TabsTrigger key={t} value={t} className="capitalize">{t}</TabsTrigger>
           ))}
         </TabsList>
@@ -97,45 +116,67 @@ export function ComplaintDetailView({ record, onRefresh, defaultTab = 'overview'
               ['Category', record.complaint_category], ['Criticality', record.complaint_criticality],
             ].map(([k, v]) => (<div key={String(k)}><span className="text-muted-foreground">{k}: </span><strong>{v}</strong></div>))}
             <div className="md:col-span-3"><span className="text-muted-foreground">Description: </span>{record.complaint_description}</div>
+            <div className="md:col-span-3"><span className="text-muted-foreground">Impact Assessment: </span>{record.impact_assessment || '—'}</div>
             {record.linked_recall_number && <div><Link href={`/qms/recall/${record.linked_recall_id}`} className="text-blue-600 underline">Recall: {record.linked_recall_number}</Link></div>}
           </CardContent></Card>
         </TabsContent>
 
         <TabsContent value="investigation" className="mt-4">
-          <Card><CardHeader><CardTitle className="text-base">Investigation</CardTitle></CardHeader><CardContent>
-            {!readOnly ? (
-              <Form {...invForm}><form onSubmit={invForm.handleSubmit(async (data) => {
-                try { setSaving(true); await saveInvestigation(record.id, data, actor); toast.success('Investigation saved'); onRefresh(); await loadSub(); }
-                catch (e) { toast.error(e instanceof Error ? e.message : 'Failed'); } finally { setSaving(false); }
-              })} className="space-y-4">
-                {(['investigation_summary', 'findings', 'root_cause', 'impact_assessment', 'sample_analysis', 'batch_review', 'conclusion'] as const).map((name) => (
-                  <FormField key={name} control={invForm.control} name={name} render={({ field }) => (
-                    <FormItem><FormLabel className="capitalize">{name.replace(/_/g, ' ')}</FormLabel><FormControl><Textarea rows={2} {...field} /></FormControl><FormMessage /></FormItem>
-                  )} />
-                ))}
-                <FormField control={invForm.control} name="capa_required" render={({ field }) => (
-                  <FormItem className="flex items-center justify-between rounded-lg border p-3"><FormLabel>CAPA Required</FormLabel><FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl></FormItem>
-                )} />
-                <Button type="submit" disabled={saving}>Save Investigation</Button>
-              </form></Form>
-            ) : investigation ? (
-              <div className="text-sm space-y-2">{Object.entries(investigation).filter(([k]) => !['id', 'complaint_id', 'investigated_by', 'investigated_by_name', 'investigated_at', 'created_at', 'updated_at'].includes(k)).map(([k, v]) => (
-                <p key={k}><strong className="capitalize">{k.replace(/_/g, ' ')}:</strong> {String(v)}</p>
-              ))}</div>
-            ) : <p className="text-muted-foreground text-sm">No investigation recorded.</p>}
+          <Card><CardHeader className="flex flex-row items-center justify-between"><CardTitle className="text-base">Investigation</CardTitle>
+            <Link href={`/qms/complaints/${record.id}/investigation`}>
+              <Button size="sm" className="bg-blue-600 hover:bg-blue-700">Open Full Investigation</Button>
+            </Link>
+          </CardHeader><CardContent className="text-sm space-y-2">
+            {investigation ? (
+              <>
+                <p><strong>Status:</strong> {investigation.investigation_status || 'In Progress'}</p>
+                <p><strong>Summary:</strong> {investigation.investigation_summary || '—'}</p>
+                <p><strong>Root Cause:</strong> {investigation.root_cause || '—'}</p>
+                <p><strong>Conclusion:</strong> {investigation.conclusion || '—'}</p>
+              </>
+            ) : (
+              <p className="text-muted-foreground">No investigation started. Use the full investigation module to begin GMP investigation workflow.</p>
+            )}
+          </CardContent></Card>
+        </TabsContent>
+
+        <TabsContent value="impact" className="mt-4">
+          <Card><CardHeader className="flex flex-row items-center justify-between"><CardTitle className="text-base">Impact Assessment</CardTitle>
+            <Link href={`/qms/complaints/${record.id}/impact-assessment`}>
+              <Button size="sm" className="bg-blue-600 hover:bg-blue-700">Open Full Assessment</Button>
+            </Link>
+          </CardHeader><CardContent className="text-sm space-y-2">
+            {impact ? (
+              <>
+                <p><strong>Status:</strong> {impact.status}</p>
+                <p><strong>Risk Level:</strong> {impact.risk_level} (Score: {impact.risk_score})</p>
+                <p><strong>Product Quality:</strong> {impact.product_quality_impact}</p>
+                <p><strong>Patient Safety:</strong> {impact.patient_safety_impact}</p>
+                <p><strong>Conclusion:</strong> {impact.conclusion || '—'}</p>
+              </>
+            ) : (
+              <p className="text-muted-foreground">No impact assessment recorded. Use the impact assessment module to evaluate product, patient, regulatory, and market impact.</p>
+            )}
           </CardContent></Card>
         </TabsContent>
 
         <TabsContent value="capa" className="mt-4">
-          <Card><CardContent className="p-4 text-sm space-y-2">
+          <Card><CardHeader className="flex flex-row items-center justify-between"><CardTitle className="text-base">CAPA Link</CardTitle>
+            <Link href={`/qms/complaints/${record.id}/capa`}>
+              <Button size="sm" className="bg-blue-600 hover:bg-blue-700">Open CAPA Link Module</Button>
+            </Link>
+          </CardHeader><CardContent className="text-sm space-y-2">
             {record.linked_capa_id ? (
-              <Link href={`/qms/capa/${record.linked_capa_id}`} className="text-blue-600 underline">View CAPA {record.linked_capa_number}</Link>
+              <>
+                <p><strong>CAPA Number:</strong> {record.linked_capa_number}</p>
+                <p><strong>Status:</strong> {capaLink?.capa_status || 'Linked'}</p>
+                <Link href={`/qms/capa/${record.linked_capa_id}`} className="text-blue-600 underline">View CAPA Record</Link>
+              </>
             ) : record.capa_required || investigation?.capa_required ? (
-              !readOnly && <Button disabled={saving} onClick={async () => {
-                try { setSaving(true); const capa = await createCapaFromComplaint(record.id, actor); toast.success(`CAPA ${capa.capa_number} created`); onRefresh(); await loadSub(); }
-                catch (e) { toast.error(e instanceof Error ? e.message : 'Failed'); } finally { setSaving(false); }
-              }}>Create CAPA</Button>
-            ) : <p className="text-muted-foreground">No CAPA linkage required.</p>}
+              <p className="text-muted-foreground">CAPA required — use the CAPA Link module to create or link a CAPA.</p>
+            ) : (
+              <p className="text-muted-foreground">No CAPA linkage required.</p>
+            )}
           </CardContent></Card>
         </TabsContent>
 
@@ -153,10 +194,36 @@ export function ComplaintDetailView({ record, onRefresh, defaultTab = 'overview'
         </TabsContent>
 
         <TabsContent value="audit" className="mt-4">
-          <Card><CardContent className="p-0 overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Action</TableHead><TableHead>User</TableHead><TableHead>Date</TableHead></TableRow></TableHeader><TableBody>
-            {auditLogs.length === 0 ? <TableRow><TableCell colSpan={3} className="text-center py-6 text-muted-foreground">No audit entries</TableCell></TableRow>
-              : auditLogs.map((log, i) => <TableRow key={i}><TableCell>{String(log.action || '')}</TableCell><TableCell>{String(log.userName || '')}</TableCell><TableCell>{String(log.dateTime || '')}</TableCell></TableRow>)}
-          </TableBody></Table></CardContent></Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="text-base">Audit Trail</CardTitle>
+              <Link href={`/qms/complaints/${record.id}/audit-trail`}>
+                <Button size="sm" className="bg-blue-600 hover:bg-blue-700 gap-1"><ScrollText className="h-4 w-4" />Full Audit Trail</Button>
+              </Link>
+            </CardHeader>
+            <CardContent className="p-0 overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Action</TableHead>
+                    <TableHead>User</TableHead>
+                    <TableHead>Date</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {auditLogs.length === 0 ? (
+                    <TableRow><TableCell colSpan={3} className="text-center py-6 text-muted-foreground">No audit entries</TableCell></TableRow>
+                  ) : auditLogs.slice(0, 10).map((log, i) => (
+                    <TableRow key={String(log.id || i)}>
+                      <TableCell>{String(log.actionType || log.action || '')}</TableCell>
+                      <TableCell>{String(log.userName || '')}</TableCell>
+                      <TableCell>{String(log.dateTime || '')}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
 

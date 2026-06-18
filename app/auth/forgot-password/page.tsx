@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
-import { shouldUseDemoAuth } from '@/lib/demo-auth-config';
+import { isFirebaseConfigured } from '@/lib/firebase';
 
 const schema = z.object({
   email: z.string().email('Invalid email address'),
@@ -22,16 +22,16 @@ type FormData = z.infer<typeof schema>;
 export default function ForgotPasswordPage() {
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
-  const demoMode = shouldUseDemoAuth();
+  const firebaseReady = isFirebaseConfigured();
 
   const { register, handleSubmit, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
   });
 
   const onSubmit = async (data: FormData) => {
-    if (demoMode) {
-      toast.info('Demo mode', {
-        description: 'Password reset requires Firebase. Use demo123456 for demo accounts, or add Firebase env vars in Netlify.',
+    if (!firebaseReady) {
+      toast.error('Firebase not configured', {
+        description: 'Password reset requires Firebase authentication to be configured.',
       });
       return;
     }
@@ -80,10 +80,9 @@ export default function ForgotPasswordPage() {
               </div>
             </div>
 
-            {demoMode && (
+            {!firebaseReady && (
               <p className="text-amber-300/90 text-xs mb-5 bg-amber-950/40 border border-amber-800/50 rounded-lg px-3 py-2">
-                Demo mode is active — password reset emails are not sent. Use password{' '}
-                <code className="bg-slate-700/60 px-1 rounded">demo123456</code> for demo accounts.
+                Firebase is not configured. Contact your system administrator to enable password reset.
               </p>
             )}
 
@@ -106,13 +105,14 @@ export default function ForgotPasswordPage() {
                     placeholder="your.email@company.com"
                     className="bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500 focus:border-blue-500 focus:ring-blue-500/20 h-11"
                     autoComplete="email"
+                    disabled={!firebaseReady}
                   />
                   {errors.email && <p className="text-red-400 text-xs">{errors.email.message}</p>}
                 </div>
 
                 <Button
                   type="submit"
-                  disabled={loading}
+                  disabled={loading || !firebaseReady}
                   className="w-full h-11 bg-blue-600 hover:bg-blue-500 text-white font-semibold"
                 >
                   {loading ? (

@@ -1,0 +1,32 @@
+export * from '@/lib/capa-preventive-action-service';
+export {
+  canViewCapaPreventiveAction,
+  canCreateCapaPreventiveAction,
+  canUpdateCapaPreventiveActionImplementation,
+  canReviewCapaPreventiveActionByDept,
+  canManageTrainingLinkage,
+  canManageSopLinkage,
+  canManageChangeControlLinkage,
+  canVerifyCapaPreventiveAction,
+  canApproveCriticalCapaPreventiveAction,
+  isCapaPreventiveActionReadOnly,
+  computePreventiveActionProgress,
+  computePreventiveActionDashboardMetrics,
+  mapAuditToPreventiveActionTimeline,
+  actionStatusLabel,
+  actionStatusColor,
+  implementationStatusLabel,
+  implementationStatusColor,
+  riskLevelColor,
+  CAPA_PREVENTIVE_ACTION_MODULE,
+} from '@/lib/capa-preventive-action-records';
+export {
+  capaPreventiveActionSchema,
+  capaPreventiveActionImplementationSchema,
+  capaPreventiveActionVerificationSchema,
+  capaPreventiveActionLinkSchema,
+  type CapaPreventiveActionInput,
+  type CapaPreventiveActionImplementationInput,
+  type CapaPreventiveActionVerificationInput,
+  type CapaPreventiveActionLinkInput,
+} from '@/lib/capa-preventive-action-schemas';

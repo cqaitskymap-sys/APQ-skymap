@@ -123,7 +123,7 @@ async function logSummaryAudit(
 export async function consolidatePqrReviewData(pqr: PqrOption): Promise<ConsolidatedReviewData> {
   const [
     batches, materials, packaging, equipment, utilityEnv, stability,
-    deviationsRaw, oosRaw, capaRaw, ccRaw, risksRaw, cpvRaw, capRaw, trendRaw, recallRaw,
+    deviationsRaw, oosRaw, capaRaw, ccRaw, risksRaw, cpvRaw, capRaw, trendRaw, capaTrendRaw, recallRaw,
   ] = await Promise.all([
     fetchBatchReviewRecords(pqr.id),
     fetchMaterialReviewRecords(pqr.id),
@@ -139,6 +139,7 @@ export async function consolidatePqrReviewData(pqr: PqrOption): Promise<Consolid
     readFirst([PQR_SUMMARY_CONCLUSION_COLLECTIONS.cpvReviews, 'cpv_annual_review']),
     readFirst([PQR_SUMMARY_CONCLUSION_COLLECTIONS.processCapability, 'cpv_capability']),
     readFirst([PQR_SUMMARY_CONCLUSION_COLLECTIONS.trendAnalysis, 'cpv_trends']),
+    readFirst([PQR_SUMMARY_CONCLUSION_COLLECTIONS.capaTrends]),
     readFirst([PQR_SUMMARY_CONCLUSION_COLLECTIONS.recalls, 'recall_records']),
   ]);
 
@@ -157,6 +158,9 @@ export async function consolidatePqrReviewData(pqr: PqrOption): Promise<Consolid
     cpvReviews: filterByPqr(cpvRaw, pqr),
     capability: filterByPqr(capRaw, pqr),
     trends: filterByPqr(trendRaw, pqr),
+    capaTrends: filterByPqr(capaTrendRaw, pqr).sort((a, b) =>
+      str(b.created_at || b.generated_date).localeCompare(str(a.created_at || a.generated_date)),
+    ),
     recalls: filterByPqr(recallRaw, pqr),
   };
 }

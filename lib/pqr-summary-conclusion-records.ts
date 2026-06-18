@@ -32,6 +32,7 @@ export const PQR_SUMMARY_CONCLUSION_COLLECTIONS = {
   cpvReviews: 'cpv_reviews',
   processCapability: 'process_capability',
   trendAnalysis: 'trend_analysis',
+  capaTrends: 'capa_trends',
   recalls: 'recalls',
 } as const;
 
@@ -222,6 +223,7 @@ export interface ConsolidatedReviewData {
   cpvReviews: Record<string, unknown>[];
   capability: Record<string, unknown>[];
   trends: Record<string, unknown>[];
+  capaTrends: Record<string, unknown>[];
   recalls: Record<string, unknown>[];
 }
 
@@ -439,11 +441,19 @@ export function generateSectionNarratives(
     deviationSummary:
       `${metrics.totalDeviations} deviations (${metrics.openDeviations} open, ${metrics.closedDeviations} closed).`,
     oosSummary: `${metrics.totalOos} OOS records (${metrics.openOos} open, ${metrics.closedOos} closed).`,
-    capaSummary: `${metrics.totalCapa} CAPA records (${metrics.openCapa} open, ${metrics.closedCapa} closed).`,
+    capaSummary: `${metrics.totalCapa} CAPA records (${metrics.openCapa} open, ${metrics.closedCapa} closed).${
+      data.capaTrends.length
+        ? ` Latest saved trend: ${str(data.capaTrends[0]?.trend_status)} — ${str(data.capaTrends[0]?.conclusion).slice(0, 180)}`
+        : ''
+    }`,
     riskAssessmentSummary:
       `${metrics.totalRisks} risk items identified; ${metrics.highRisks} high and ${metrics.criticalRisks} critical.`,
     trendAnalysisSummary:
-      `${data.trends.length} trend analysis record(s) reviewed during the period.`,
+      `${data.trends.length + data.capaTrends.length} trend analysis record(s) reviewed during the period.${
+        data.capaTrends.length
+          ? ` CAPA trend (${str(data.capaTrends[0]?.review_period_from)} to ${str(data.capaTrends[0]?.review_period_to)}): ${str(data.capaTrends[0]?.trend_status)}.`
+          : ''
+      }`,
     cpvSummary:
       `${data.cpvReviews.length} CPV review(s); average Cpk ${metrics.averageCpk}, average Ppk ${metrics.averagePpk}.`,
   };

@@ -159,6 +159,9 @@ export function CapaDetailView({ record, onRefresh }: CapaDetailViewProps) {
           <Link href={`/qms/capa/${record.id}/corrective-action`}>
             <Button variant="outline" className="gap-1">Corrective Actions</Button>
           </Link>
+          <Link href={`/qms/capa/${record.id}/preventive-action`}>
+            <Button variant="outline" className="gap-1">Preventive Actions</Button>
+          </Link>
           {record.capa_status === 'draft' && !readOnly && (
             <Button onClick={handleSubmit} disabled={saving} className="bg-blue-600">Submit CAPA</Button>
           )}
@@ -315,7 +318,12 @@ export function CapaDetailView({ record, onRefresh }: CapaDetailViewProps) {
 
         <TabsContent value="effectiveness" className="mt-4">
           <Card>
-            <CardHeader><CardTitle className="text-base">Effectiveness Check</CardTitle></CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="text-base">Effectiveness Check</CardTitle>
+              <Link href={`/qms/capa/${record.id}/effectiveness`}>
+                <Button variant="outline" size="sm">Open Full Review</Button>
+              </Link>
+            </CardHeader>
             <CardContent>
               {effectiveness ? (
                 <div className="text-sm space-y-2">
@@ -390,7 +398,12 @@ export function CapaDetailView({ record, onRefresh }: CapaDetailViewProps) {
 
         <TabsContent value="approval" className="mt-4">
           <Card>
-            <CardHeader><CardTitle className="text-base">Approval History</CardTitle></CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="text-base">Approval History</CardTitle>
+              <Link href={`/qms/capa/${record.id}/approval`}>
+                <Button variant="outline" size="sm">Open Approval Workflow</Button>
+              </Link>
+            </CardHeader>
             <CardContent className="space-y-4">
               {approvals.length > 0 && (
                 <Table>
@@ -403,7 +416,7 @@ export function CapaDetailView({ record, onRefresh }: CapaDetailViewProps) {
                         <TableCell>{a.approver_name}</TableCell>
                         <TableCell>{a.approval_level}</TableCell>
                         <TableCell className="capitalize">{a.decision}</TableCell>
-                        <TableCell>{new Date(a.signed_at).toLocaleDateString()}</TableCell>
+                        <TableCell>{a.signed_at ? new Date(a.signed_at).toLocaleDateString() : '—'}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -461,6 +474,12 @@ export function CapaDetailView({ record, onRefresh }: CapaDetailViewProps) {
 
         <TabsContent value="audit" className="mt-4">
           <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-base">Audit Trail</CardTitle>
+              <Link href={`/qms/capa/${record.id}/audit-trail`}>
+                <Button variant="outline" size="sm">View Full Audit Trail</Button>
+              </Link>
+            </CardHeader>
             <CardContent className="p-0 overflow-x-auto">
               <Table>
                 <TableHeader><TableRow><TableHead>Action</TableHead><TableHead>User</TableHead><TableHead>Date</TableHead></TableRow></TableHeader>

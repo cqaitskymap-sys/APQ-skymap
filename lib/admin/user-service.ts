@@ -1,8 +1,9 @@
 import { doc, setDoc } from 'firebase/firestore';
 import { createUserWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 import { getFirebaseAuth, getFirebaseFirestore, isFirebaseConfigured } from '@/lib/firebase';
-import { shouldUseDemoAuth } from '@/lib/demo-auth-config';
 import { writeAuditTrail } from '@/lib/audit-trail';
+import { saveUserPermissions } from '@/services/permissionService';
+import type { PermissionMatrixData } from '@/lib/permission-presets';
 import {
   getAdminRecords, createAdminRecord, updateAdminRecord,
   checkUniqueField, logAuditEvent,
@@ -93,6 +94,7 @@ export async function createSystemUser(
   data: AdminUser,
   temporaryPassword: string,
   meta: UserAuditMeta,
+  accessOptions?: { modulePermissions?: PermissionMatrixData; presetId?: string },
 ): Promise<{ user: AdminUser | null; error: string | null }> {
   try {
     const emailUnique = await checkUniqueField(ADMIN_COLLECTIONS.users, 'email', data.email);
@@ -109,9 +111,8 @@ export async function createSystemUser(
     }
 
     let authUid = data.authUid;
-    const useDemo = shouldUseDemoAuth();
 
-    if (!useDemo && isFirebaseConfigured()) {
+    if (isFirebaseConfigured()) {
       if (!temporaryPassword || temporaryPassword.length < 8) {
         return { user: null, error: 'Temporary password required (min 8 characters)' };
       }
@@ -129,8 +130,8 @@ export async function createSystemUser(
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       });
-    } else if (useDemo) {
-      authUid = `demo-${data.employeeId.toLowerCase()}`;
+    } else {
+      return { user: null, error: 'Firebase is not configured. Cannot create authentication account.' };
     }
 
     const userId = data.userId || `USR-${data.employeeId}`;
@@ -150,6 +151,16 @@ export async function createSystemUser(
     });
 
     await logUserAudit('CREATE_USER', created.id || '', meta, null, payload);
+
+    if (authUid && (accessOptions?.modulePermissions || accessOptions?.presetId)) {
+      await saveUserPermissions(authUid, {
+        roleId: data.role,
+        modulePermissions: accessOptions.modulePermissions,
+        customPermissions: accessOptions.modulePermissions,
+        presetId: accessOptions.presetId,
+      }, { id: meta.userId, name: meta.userName });
+    }
+
     return { user: created, error: null };
   } catch (e) {
     return { user: null, error: (e as Error).message };
@@ -162,6 +173,7 @@ export async function updateSystemUser(
   existing: AdminUser,
   meta: UserAuditMeta,
   action = 'EDIT_USER',
+  accessOptions?: { modulePermissions?: PermissionMatrixData; presetId?: string },
 ): Promise<{ user: AdminUser | null; error: string | null }> {
   try {
     if (updates.email && updates.email !== existing.email) {
@@ -188,7 +200,7 @@ export async function updateSystemUser(
       oldValue: JSON.stringify(existing),
     });
 
-    if (existing.authUid && isFirebaseConfigured() && !shouldUseDemoAuth()) {
+    if (existing.authUid && isFirebaseConfigured()) {
       await setDoc(doc(getFirebaseFirestore(), 'profiles', existing.authUid), {
         full_name: updates.fullName ?? existing.fullName,
         email: updates.email ?? existing.email,
@@ -203,6 +215,17 @@ export async function updateSystemUser(
 
     const auditAction = updates.role && updates.role !== existing.role ? 'ROLE_CHANGE' : action;
     await logUserAudit(auditAction, id, meta, existing, { ...existing, ...updates });
+
+    const authUid = existing.authUid || existing.id;
+    if (authUid && (accessOptions?.modulePermissions || accessOptions?.presetId)) {
+      await saveUserPermissions(authUid, {
+        roleId: updates.role || existing.role,
+        modulePermissions: accessOptions.modulePermissions,
+        customPermissions: accessOptions.modulePermissions,
+        presetId: accessOptions.presetId,
+      }, { id: meta.userId, name: meta.userName });
+    }
+
     return { user: record, error: null };
   } catch (e) {
     return { user: null, error: (e as Error).message };
@@ -275,14 +298,8 @@ export async function resetUserPassword(
   target: AdminUser,
   meta: UserAuditMeta,
 ): Promise<{ success: boolean; error?: string }> {
-  if (shouldUseDemoAuth()) {
-    await updateAdminRecord(ADMIN_COLLECTIONS.users, target.id!, { passwordResetRequired: true }, {
-      userId: meta.userId,
-      userName: meta.userName,
-      module: 'User Management',
-    });
-    await logUserAudit('PASSWORD_RESET', target.id!, meta, null, { email: target.email });
-    return { success: true };
+  if (!isFirebaseConfigured()) {
+    return { success: false, error: 'Firebase is not configured' };
   }
   try {
     await sendPasswordResetEmail(getFirebaseAuth(), target.email);

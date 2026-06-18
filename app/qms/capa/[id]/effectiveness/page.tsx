@@ -1,5 +1,5 @@
-import { redirect } from 'next/navigation';
+import { CapaEffectivenessPage } from '@/components/capa/effectiveness/capa-effectiveness-page';
 
-export default function CapaEffectivenessRedirect({ params }: { params: { id: string } }) {
-  redirect(`/qms/capa/${params.id}`);
+export default function Page({ params }: { params: { id: string } }) {
+  return <CapaEffectivenessPage capaId={params.id} />;
 }

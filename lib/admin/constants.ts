@@ -242,6 +242,7 @@ export const ADMIN_COLLECTIONS = {
   users: 'users',
   roles: 'roles',
   permissions: 'permissions',
+  userPermissions: 'user_permissions',
   departments: 'departments',
   designations: 'designations',
   companySites: 'company_sites',

@@ -1,0 +1,22 @@
+export * from '@/lib/complaint-dashboard-service';
+export {
+  COMPLAINT_DASHBOARD_MODULE,
+  KPI_FILTER_MAP,
+  applyComplaintDashboardFilters,
+  buildComplaintActivityTimeline,
+  canExportComplaintDashboard,
+  canViewComplaintDashboard,
+  exportComplaintDashboardCsv,
+  filterComplaintsByRole,
+  getComplaintDaysOverdue,
+  getCriticalComplaints,
+  getOverdueComplaints,
+  getRecentComplaints,
+  isComplaintCapaLinked,
+  isComplaintDashboardReadOnly,
+  isComplaintOverdue,
+  isMarketImpact,
+  isProductQualityImpact,
+  isRecallEvaluationRequired,
+  isRepeatComplaint,
+} from '@/lib/complaint-dashboard-records';

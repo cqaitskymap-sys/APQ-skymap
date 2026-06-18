@@ -103,6 +103,13 @@ export function CapaCorrectiveActionPage({ capaId }: { capaId: string }) {
   });
 
   const timeline = useMemo(() => mapAuditToCorrectiveActionTimeline(auditLogs), [auditLogs]);
+  const actionTimeline = useMemo(() => {
+    if (!selected?.action_number) return timeline;
+    return timeline.filter((e) =>
+      e.action.toLowerCase().includes('corrective')
+      || (e.detail && (e.detail.includes(selected.action_number) || e.detail.includes(selected.corrective_action_id))),
+    );
+  }, [timeline, selected?.action_number, selected?.corrective_action_id]);
   const canEditImpl = selected && capa ? canUpdateCapaCorrectiveActionImplementation(actor.role, selected, capa, actor.id) : false;
   const canApproveCritical = canApproveCriticalCapaCorrectiveAction(actor.role, selected?.priority);
 
@@ -498,7 +505,7 @@ export function CapaCorrectiveActionPage({ capaId }: { capaId: string }) {
           <TabsContent value="timeline" className="mt-4">
             <Card>
               <CardHeader><CardTitle className="text-base">Action Timeline</CardTitle></CardHeader>
-              <CardContent><CapaCorrectiveActionTimeline entries={timeline} /></CardContent>
+              <CardContent><CapaCorrectiveActionTimeline entries={actionTimeline} /></CardContent>
             </Card>
           </TabsContent>
 

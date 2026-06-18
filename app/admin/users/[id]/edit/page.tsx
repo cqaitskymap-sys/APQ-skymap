@@ -16,6 +16,7 @@ import {
   fetchUserById, updateSystemUser, canModifyTargetUser,
 } from '@/lib/admin/user-service';
 import type { AdminUser } from '@/lib/admin/schemas';
+import type { UserFormSubmitOptions } from '@/components/admin/users/user-form';
 
 function EditUserContent({ id }: { id: string }) {
   const router = useRouter();
@@ -44,11 +45,14 @@ function EditUserContent({ id }: { id: string }) {
     return <ErrorCard accessDenied title="Action Not Allowed" message={modifyCheck.reason} />;
   }
 
-  const onSubmit = async (data: AdminUser) => {
+  const onSubmit = async (data: AdminUser, options?: UserFormSubmitOptions) => {
     setSubmitting(true);
     const result = await updateSystemUser(existing.id!, data, existing, {
       userId: user?.uid || 'system',
       userName: profile?.full_name || profile?.email || 'Admin',
+    }, 'EDIT_USER', {
+      modulePermissions: options?.modulePermissions,
+      presetId: options?.presetId,
     });
     setSubmitting(false);
     if (result.error) {

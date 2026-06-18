@@ -3,11 +3,18 @@ export const CAPA_COLLECTIONS = {
   actions: 'capa_actions',
   effectiveness: 'capa_effectiveness',
   approvals: 'capa_approvals',
+  approvalHistory: 'capa_approval_history',
+  closure: 'capa_closure',
+  trends: 'capa_trends',
+  reports: 'capa_reports',
   attachments: 'capa_attachments',
   sourceLinks: 'capa_source_links',
   investigations: 'capa_investigations',
   rootCauseAnalysis: 'capa_root_cause_analysis',
   correctiveActions: 'capa_corrective_actions',
+  preventiveActions: 'capa_preventive_actions',
+  trainingRecords: 'training_records',
+  sopManagement: 'sop_management',
   auditLogs: 'audit_logs',
   notifications: 'notifications',
   deviations: 'deviations',
@@ -40,6 +47,26 @@ export const OPEN_CAPA_STATUSES = [
 ] as const;
 
 export const EFFECTIVENESS_RESULTS = ['Effective', 'Not Effective', 'Pending', 'N/A'] as const;
+
+export const CAPA_EFF_REVIEW_RESULTS = [
+  'Effective', 'Partially Effective', 'Not Effective', 'Pending Review',
+] as const;
+
+export const CAPA_EFF_REVIEW_STATUSES = [
+  'draft', 'scheduled', 'under_review', 'qa_review', 'approved', 'rejected', 'closed', 'reassessment_required',
+] as const;
+
+export const CAPA_EFF_EVALUATION_CRITERIA = [
+  'No repeat deviation',
+  'No repeat OOS',
+  'No repeat complaint',
+  'No repeat audit finding',
+  'Risk reduction achieved',
+  'Process improvement achieved',
+  'Compliance maintained',
+  'Training effectiveness verified',
+  'SOP effectiveness verified',
+] as const;
 export const CAPA_PRIORITIES = ['low', 'medium', 'high', 'critical'] as const;
 
 export const CAPA_DEPARTMENTS = [
@@ -87,6 +114,9 @@ export interface CapaRecord {
   qa_reviewer?: string;
   qa_reviewer_name?: string;
   head_qa_approval_required?: boolean;
+  patient_safety_impact?: boolean | string;
+  regulatory_impact?: boolean | string;
+  is_locked?: boolean;
   /** Linked source IDs */
   deviation_id: string | null;
   oos_id: string | null;
@@ -123,32 +153,398 @@ export interface CapaAction {
 
 export interface CapaEffectiveness {
   id: string;
+  effectiveness_id?: string;
   capa_id: string;
+  capa_number?: string;
+  source_type?: string;
+  source_reference_number?: string;
+  effectiveness_required?: boolean;
+  effectiveness_due_date?: string | null;
+  effectiveness_review_date?: string;
+  reviewed_by?: string;
+  reviewed_by_name?: string;
+  department?: string;
+  review_period?: string;
+  evaluation_criteria?: string[];
+  evidence_reviewed?: string;
+  data_reviewed?: string;
+  repeat_issue_observed?: boolean;
+  issue_reoccurred?: boolean;
+  risk_reduced?: boolean;
+  root_cause_eliminated?: boolean;
+  corrective_action_effective?: boolean;
+  preventive_action_effective?: boolean;
+  effectiveness_result?: string;
+  effectiveness_score?: number;
+  qa_comments?: string;
+  head_qa_comments?: string;
+  final_conclusion?: string;
+  status?: string;
+  follow_up_required?: boolean;
+  follow_up_capa_id?: string | null;
+  new_capa_recommended?: boolean;
+  capa_closure_recommended?: boolean;
+  is_deleted?: boolean;
+  created_by?: string;
+  created_by_name?: string;
+  updated_by?: string;
+  updated_by_name?: string;
+  /** Legacy fields */
   check_date: string;
   criteria: string;
   result: EffectivenessResult | string;
   evidence: string;
   checked_by: string;
   checked_by_name: string;
-  follow_up_required: boolean;
-  follow_up_capa_id: string | null;
   remarks: string;
   created_at: string;
   updated_at: string;
 }
 
+export interface CapaEffectivenessDashboardMetrics {
+  total: number;
+  pendingReviews: number;
+  effective: number;
+  partiallyEffective: number;
+  notEffective: number;
+  reassessmentRequired: number;
+  overdue: number;
+  readyForClosure: number;
+}
+
+export interface CapaEffectivenessChartData {
+  resultDistribution: { name: string; count: number }[];
+  monthlyTrend: { name: string; count: number; effective: number; notEffective: number }[];
+  byDepartment: { name: string; count: number }[];
+  bySource: { name: string; count: number }[];
+  effectiveTrend: { name: string; effective: number; notEffective: number }[];
+}
+
+export interface CapaEffectivenessTimelineEntry {
+  action: string;
+  user: string;
+  at: string;
+  detail?: string;
+}
+
 export interface CapaApproval {
   id: string;
   capa_id: string;
-  approval_level: 'qa_review' | 'head_qa' | 'final';
+  capa_number?: string;
+  approval_id?: string;
+  current_workflow_step?: string;
+  current_approver?: string;
+  current_approver_name?: string;
+  current_approver_role?: string;
+  current_role?: string;
+  approval_level: number | string;
+  approval_level_legacy?: 'qa_review' | 'head_qa' | 'final';
+  approval_status?: string;
   approver_id: string;
   approver_name: string;
   approver_role: string;
-  decision: 'approved' | 'rejected';
+  decision: 'approved' | 'rejected' | 'pending' | 'sent_back' | 'escalated';
   comments: string;
+  rejection_reason?: string;
+  send_back_reason?: string;
+  e_signature_required?: boolean;
   e_signature: string;
-  signed_at: string;
+  e_signature_status?: string;
+  signed_at: string | null;
+  signed_by?: string;
+  signed_date?: string | null;
+  due_date?: string | null;
+  completed_date?: string | null;
+  escalation_status?: string;
+  created_by?: string;
+  created_by_name?: string;
+  updated_by?: string;
+  updated_by_name?: string;
   created_at: string;
+  updated_at?: string;
+  is_deleted?: boolean;
+}
+
+export interface CapaApprovalHistoryEntry {
+  id?: string;
+  capa_id: string;
+  capa_number: string;
+  approval_id: string;
+  action: string;
+  workflow_step: string;
+  user_id: string;
+  user_name: string;
+  user_role: string;
+  comments: string;
+  rejection_reason?: string;
+  send_back_reason?: string;
+  e_signature_status?: string;
+  created_at: string;
+  created_by: string;
+  is_deleted?: boolean;
+}
+
+export interface CapaApprovalDashboardCounts {
+  pendingApprovals: number;
+  myPendingApprovals: number;
+  approvedCapa: number;
+  rejectedCapa: number;
+  sentBackCapa: number;
+  criticalPending: number;
+  overdueApprovals: number;
+  headQaPending: number;
+  readyForClosure: number;
+}
+
+export interface CapaApprovalTimelineEntry {
+  action: string;
+  user: string;
+  at: string;
+  detail?: string;
+  workflow_step?: string;
+}
+
+export const CAPA_CLOSURE_STATUSES = [
+  'Pending', 'Ready For Closure', 'QA Review', 'Head QA Review', 'Closed', 'Rejected', 'Reopened',
+] as const;
+
+export interface CapaClosure {
+  id: string;
+  closure_id: string;
+  capa_id: string;
+  capa_number: string;
+  source_type?: string;
+  source_reference_number?: string;
+  closure_date: string | null;
+  closed_by: string;
+  closed_by_name?: string;
+  department: string;
+  rca_approved?: boolean;
+  corrective_actions_completed: boolean;
+  preventive_actions_completed: boolean;
+  implementation_verified?: boolean;
+  evidence_uploaded?: boolean;
+  effectiveness_check_completed: boolean;
+  effectiveness_result: string;
+  risk_reduced?: boolean;
+  root_cause_eliminated?: boolean;
+  recurrence_prevented?: boolean;
+  training_completed?: boolean;
+  sop_updated?: boolean;
+  change_control_completed?: boolean;
+  all_evidence_reviewed?: boolean;
+  qa_approval_completed?: boolean;
+  qa_closure_comments: string;
+  head_qa_comments?: string;
+  final_closure_conclusion: string;
+  closure_status: string;
+  closure_recommendation?: string;
+  new_capa_recommended?: boolean;
+  additional_monitoring_recommended?: boolean;
+  readiness_percent?: number;
+  e_signature_required?: boolean;
+  e_signature?: string;
+  e_signature_status?: string;
+  signed_by?: string;
+  signed_date?: string | null;
+  created_at: string;
+  updated_at: string;
+  created_by: string;
+  created_by_name?: string;
+  updated_by: string;
+  updated_by_name?: string;
+  is_deleted: boolean;
+}
+
+export interface CapaClosureDashboardMetrics {
+  readyForClosure: number;
+  pendingReview: number;
+  closed: number;
+  rejected: number;
+  reopened: number;
+  effectiveClosures: number;
+  partiallyEffective: number;
+  notEffective: number;
+}
+
+export interface CapaClosureTimelineEntry {
+  action: string;
+  user: string;
+  at: string;
+  detail?: string;
+}
+
+export const CAPA_TREND_STATUSES = [
+  'Improving', 'Stable', 'Increasing', 'Critical', 'Insufficient Data',
+] as const;
+
+export interface CapaTrendMetrics {
+  total: number;
+  open: number;
+  closed: number;
+  overdue: number;
+  effective: number;
+  notEffective: number;
+  avgClosureDays: number;
+  monthlyTrend: { name: string; month?: string; count?: number }[];
+  bySource: { name: string; count?: number }[];
+  byDepartment: { name: string; count?: number }[];
+  byRootCause: { name: string; count?: number }[];
+  byPriority: { name: string; count?: number }[];
+  openClosedTrend: { name: string; open?: number; closed?: number }[];
+  overdueTrend: { name: string; count?: number }[];
+  effectivenessTrend: { name: string; effective?: number; notEffective?: number }[];
+  closureTimeTrend: { name: string; avgDays?: number }[];
+}
+
+export interface CapaTrendRecord {
+  id: string;
+  trend_id: string;
+  review_period_from: string;
+  review_period_to: string;
+  department: string;
+  product: string;
+  capa_source: string;
+  root_cause_category: string;
+  priority: string;
+  total_capa: number;
+  open_capa: number;
+  closed_capa: number;
+  overdue_capa: number;
+  effective_capa: number;
+  not_effective_capa: number;
+  average_closure_days: number;
+  trend_status: string;
+  risk_level: string;
+  conclusion: string;
+  recommendation: string;
+  generated_by: string;
+  generated_by_name?: string;
+  generated_date: string;
+  approved_by?: string;
+  approved_by_name?: string;
+  approved_date?: string | null;
+  alerts?: string[];
+  chart_snapshot?: Record<string, unknown>;
+  filters?: Record<string, string>;
+  created_at: string;
+  updated_at: string;
+  created_by?: string;
+  updated_by?: string;
+  is_deleted: boolean;
+}
+
+export const CAPA_REPORT_TYPES = [
+  'CAPA Register',
+  'Open CAPA Report',
+  'Closed CAPA Report',
+  'Overdue CAPA Report',
+  'CAPA Effectiveness Report',
+  'Department-wise CAPA Report',
+  'Source-wise CAPA Report',
+  'Corrective Action Report',
+  'Preventive Action Report',
+  'CAPA Closure Report',
+  'CAPA Trend Report',
+  'Management Review Report',
+] as const;
+
+export type CapaReportType = typeof CAPA_REPORT_TYPES[number];
+
+export const CAPA_MANAGEMENT_REPORT_TYPES: CapaReportType[] = [
+  'Management Review Report',
+  'CAPA Trend Report',
+];
+
+export interface CapaReportPreviewRow {
+  capa_number: string;
+  capa_source: string;
+  source_reference: string;
+  department: string;
+  product: string;
+  root_cause: string;
+  priority: string;
+  owner: string;
+  target_date: string;
+  closure_date: string;
+  status: string;
+  effectiveness_result: string;
+  risk_level: string;
+}
+
+export interface CapaReportAnalyticsMetrics extends CapaDashboardMetrics {
+  capaSuccessRate: number;
+  overdueRate: number;
+  effectivenessRate: number;
+  repeatCapa: number;
+  highRiskCapa: number;
+}
+
+export interface CapaReportChartData {
+  monthlyTrend: { name: string; count?: number }[];
+  bySource: { name: string; count?: number }[];
+  byDepartment: { name: string; count?: number }[];
+  byPriority: { name: string; count?: number }[];
+  byStatus: { name: string; count?: number }[];
+  effectivenessTrend: { name: string; effective?: number; notEffective?: number }[];
+  closurePerformanceTrend: { name: string; avgDays?: number }[];
+  overdueTrend: { name: string; count?: number }[];
+  rootCauseTrend: { name: string; count?: number }[];
+  riskDistribution: { name: string; count?: number }[];
+}
+
+export interface CapaManagementReviewSummary {
+  totalCapaCreated: number;
+  totalCapaClosed: number;
+  overdueCapaPct: number;
+  capaEffectivenessPct: number;
+  topRootCauses: { name: string; count: number }[];
+  topDepartments: { name: string; count: number }[];
+  repeatIssues: string[];
+  improvementOpportunities: string[];
+  narrative: string;
+}
+
+export interface CapaReportRecord {
+  id: string;
+  report_id: string;
+  report_name: string;
+  report_number: string;
+  report_type: CapaReportType | string;
+  review_period_from: string;
+  review_period_to: string;
+  department: string;
+  product: string;
+  capa_source: string;
+  priority: string;
+  status_filter: string;
+  effectiveness_result: string;
+  capa_number: string;
+  owner: string;
+  overdue_only: boolean;
+  critical_only: boolean;
+  generated_by: string;
+  generated_by_name?: string;
+  generated_at: string;
+  generated_date: string;
+  total_records: number;
+  export_type: string;
+  file_url: string;
+  file_name?: string;
+  report_status: string;
+  scheduled?: boolean;
+  schedule_frequency?: string;
+  schedule_next_run?: string | null;
+  filters_applied: Record<string, string | boolean>;
+  preview_rows?: Record<string, unknown>[];
+  chart_snapshot?: Record<string, unknown>;
+  metrics_snapshot?: Record<string, unknown>;
+  management_summary?: CapaManagementReviewSummary | Record<string, unknown>;
+  summary: string;
+  recommendations?: string;
+  created_at: string;
+  updated_at: string;
+  is_deleted: boolean;
 }
 
 export interface CapaAttachment {
@@ -225,8 +621,16 @@ export function isCapaOpen(status: string): boolean {
   return !isCapaClosed(status) && status !== 'rejected';
 }
 
-export function requiresHeadQaApproval(priority: string): boolean {
-  return priority === 'critical';
+export function requiresHeadQaApproval(priority: string, capa?: Partial<CapaRecord>): boolean {
+  if (priority === 'critical') return true;
+  if (capa?.head_qa_approval_required) return true;
+  const ps = capa?.patient_safety_impact;
+  if (ps === true || ps === 'yes' || ps === 'Yes') return true;
+  const reg = capa?.regulatory_impact;
+  if (reg === true || reg === 'yes' || reg === 'Yes') return true;
+  if (/patient|regulatory|critical/i.test(capa?.criticality || '')) return true;
+  if (['Market Complaint', 'Recall'].includes(capa?.capa_source || '')) return true;
+  return false;
 }
 
 import { normalizeRole } from '@/lib/permissions';
@@ -460,6 +864,85 @@ export interface CapaCorrectiveActionDashboardMetrics {
 }
 
 export interface CapaCorrectiveActionTimelineEntry {
+  action: string;
+  user: string;
+  at: string;
+  detail?: string;
+}
+
+export const CAPA_PA_RISK_LEVELS = ['low', 'medium', 'high', 'critical'] as const;
+export type CapaPaRiskLevel = typeof CAPA_PA_RISK_LEVELS[number];
+
+export interface CapaPreventiveActionEvidence {
+  id: string;
+  file_name: string;
+  description: string;
+  file_url?: string;
+  uploaded_at: string;
+  uploaded_by: string;
+  uploaded_by_name: string;
+}
+
+export interface CapaPreventiveAction {
+  id: string;
+  preventive_action_id: string;
+  capa_id: string;
+  capa_number: string;
+  action_number: string;
+  risk_reference: string;
+  root_cause_reference: string;
+  preventive_action_description: string;
+  objective: string;
+  expected_outcome: string;
+  action_owner: string;
+  action_owner_name: string;
+  department: string;
+  priority: CapaCaPriority | string;
+  risk_level: CapaPaRiskLevel | string;
+  target_completion_date: string;
+  actual_completion_date: string | null;
+  implementation_status: CapaCaImplementationStatus | string;
+  implementation_evidence: string;
+  evidence_items: CapaPreventiveActionEvidence[];
+  training_required: boolean;
+  training_reference: string;
+  training_record_id: string | null;
+  sop_revision_required: boolean;
+  sop_reference: string;
+  sop_record_id: string | null;
+  change_control_required: boolean;
+  change_control_reference: string;
+  change_control_id: string | null;
+  verification_required: boolean;
+  verified_by: string;
+  verified_by_name: string;
+  verification_date: string | null;
+  verification_comments: string;
+  qa_review_comments: string;
+  action_status: CapaCaActionStatus | string;
+  remarks: string;
+  is_deleted: boolean;
+  created_at: string;
+  updated_at: string;
+  created_by: string;
+  created_by_name: string;
+  updated_by: string;
+  updated_by_name: string;
+}
+
+export interface CapaPreventiveActionDashboardMetrics {
+  total: number;
+  open: number;
+  implemented: number;
+  trainingLinked: number;
+  sopRevision: number;
+  changeControlLinked: number;
+  qaVerificationPending: number;
+  overdue: number;
+  closed: number;
+}
+
+export interface CapaPreventiveActionTimelineEntry {
   action: string;
   user: string;
   at: string;

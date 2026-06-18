@@ -82,13 +82,20 @@ let firestoreInstance: Firestore | null = null;
 let storageInstance: FirebaseStorage | null = null;
 let emulatorsConnected = false;
 
+export function isFirebaseEmulatorEnabled(): boolean {
+  return process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATOR === 'true';
+}
+
 function connectEmulators(auth: Auth, db: Firestore) {
   if (emulatorsConnected || typeof window === 'undefined') return;
-  if (process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATOR !== 'true') return;
+  if (!isFirebaseEmulatorEnabled()) return;
   try {
     connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
     connectFirestoreEmulator(db, '127.0.0.1', 8080);
     emulatorsConnected = true;
+    if (process.env.NODE_ENV === 'development') {
+      console.info('[Firebase] Using local emulators (auth:9099, firestore:8080)');
+    }
   } catch {
     // Already connected
   }
@@ -123,11 +130,6 @@ export function getFirebaseStorage(): FirebaseStorage {
     storageInstance = getStorage(getFirebaseApp());
   }
   return storageInstance;
-}
-
-
-export function isDemoAuthEnabled(): boolean {
-  return process.env.NEXT_PUBLIC_DEMO_AUTH === 'true';
 }
 
 export type UserRole =

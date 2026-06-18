@@ -1,20 +1,220 @@
 'use client';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
-import { complaintChartData } from '@/lib/complaint-service';
-import type { ComplaintRecord } from '@/lib/complaint-types';
+import {
+  Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart,
+  Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
+} from 'recharts';
+import type { ComplaintDashboardChartData } from '@/lib/complaint-types';
 
-const COLORS = ['#2563eb', '#7c3aed', '#dc2626', '#ea580c', '#16a34a', '#0891b2'];
+const COLORS = ['#2563eb', '#7c3aed', '#dc2626', '#ea580c', '#16a34a', '#0891b2', '#ca8a04', '#64748b'];
 
-export function ComplaintDashboardCharts({ records }: { records: ComplaintRecord[] }) {
-  const charts = complaintChartData(records);
+function EmptyChart() {
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-      <Card><CardHeader className="pb-2"><CardTitle className="text-sm">Complaint by Product</CardTitle></CardHeader><CardContent className="h-[260px]"><ResponsiveContainer width="100%" height="100%"><BarChart data={charts.byProduct.slice(0, 8)} layout="vertical" margin={{ left: 20 }}><CartesianGrid strokeDasharray="3 3" /><XAxis type="number" /><YAxis type="category" dataKey="name" width={90} tick={{ fontSize: 10 }} /><Tooltip /><Bar dataKey="value" fill="#2563eb" radius={[0, 4, 4, 0]} /></BarChart></ResponsiveContainer></CardContent></Card>
-      <Card><CardHeader className="pb-2"><CardTitle className="text-sm">Complaint by Category</CardTitle></CardHeader><CardContent className="h-[260px]"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={charts.byCategory} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90} label>{charts.byCategory.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}</Pie><Tooltip /></PieChart></ResponsiveContainer></CardContent></Card>
-      <Card><CardHeader className="pb-2"><CardTitle className="text-sm">Monthly Complaint Trend</CardTitle></CardHeader><CardContent className="h-[240px]"><ResponsiveContainer width="100%" height="100%"><LineChart data={charts.monthlyTrend}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="month" tick={{ fontSize: 11 }} /><YAxis /><Tooltip /><Line type="monotone" dataKey="count" stroke="#16a34a" strokeWidth={2} dot={{ r: 4 }} /></LineChart></ResponsiveContainer></CardContent></Card>
-      <Card><CardHeader className="pb-2"><CardTitle className="text-sm">Market Wise Complaint</CardTitle></CardHeader><CardContent className="h-[240px]"><ResponsiveContainer width="100%" height="100%"><BarChart data={charts.byMarket}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="name" tick={{ fontSize: 10 }} /><YAxis /><Tooltip /><Bar dataKey="value" fill="#7c3aed" radius={[4, 4, 0, 0]} /></BarChart></ResponsiveContainer></CardContent></Card>
+    <div className="flex h-full min-h-[220px] items-center justify-center text-sm text-muted-foreground">
+      No data for selected filters
+    </div>
+  );
+}
+
+function hasCount(items?: { count?: number; open?: number; closed?: number; avgDays?: number; value?: number }[]): boolean {
+  if (!items?.length) return false;
+  return items.some((d) =>
+    (d.count ?? 0) > 0 || (d.open ?? 0) > 0 || (d.closed ?? 0) > 0
+    || (d.avgDays ?? 0) > 0 || (d.value ?? 0) > 0,
+  );
+}
+
+export function ComplaintDashboardCharts({ charts }: { charts: ComplaintDashboardChartData }) {
+  return (
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <Card>
+        <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Monthly Complaint Trend</CardTitle></CardHeader>
+        <CardContent className="h-[260px]">
+          {hasCount(charts.monthlyTrend) ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={charts.monthlyTrend}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+                <YAxis allowDecimals={false} />
+                <Tooltip />
+                <Line type="monotone" dataKey="count" stroke="#2563eb" strokeWidth={2} dot={{ r: 3 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          ) : <EmptyChart />}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Complaint by Product</CardTitle></CardHeader>
+        <CardContent className="h-[260px]">
+          {hasCount(charts.byProduct) ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={charts.byProduct.slice(0, 8)} layout="vertical" margin={{ left: 10 }}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis type="number" allowDecimals={false} />
+                <YAxis type="category" dataKey="name" width={90} tick={{ fontSize: 10 }} />
+                <Tooltip />
+                <Bar dataKey="count" fill="#2563eb" radius={[0, 4, 4, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : <EmptyChart />}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Complaint by Market</CardTitle></CardHeader>
+        <CardContent className="h-[260px]">
+          {hasCount(charts.byMarket) ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={charts.byMarket.slice(0, 8)}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+                <YAxis allowDecimals={false} />
+                <Tooltip />
+                <Bar dataKey="count" fill="#7c3aed" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : <EmptyChart />}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Complaint by Category</CardTitle></CardHeader>
+        <CardContent className="h-[260px]">
+          {hasCount(charts.byCategory) ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie data={charts.byCategory} dataKey="count" nameKey="name" cx="50%" cy="50%" outerRadius={90} label>
+                  {charts.byCategory.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                </Pie>
+                <Tooltip />
+              </PieChart>
+            </ResponsiveContainer>
+          ) : <EmptyChart />}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Complaint by Criticality</CardTitle></CardHeader>
+        <CardContent className="h-[260px]">
+          {hasCount(charts.byCriticality) ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={charts.byCriticality}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                <YAxis allowDecimals={false} />
+                <Tooltip />
+                <Bar dataKey="count" fill="#dc2626" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : <EmptyChart />}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Open vs Closed Trend</CardTitle></CardHeader>
+        <CardContent className="h-[260px]">
+          {hasCount(charts.openClosedTrend) ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={charts.openClosedTrend}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                <YAxis allowDecimals={false} />
+                <Tooltip />
+                <Legend />
+                <Line type="monotone" dataKey="open" stroke="#ea580c" strokeWidth={2} dot={{ r: 3 }} />
+                <Line type="monotone" dataKey="closed" stroke="#16a34a" strokeWidth={2} dot={{ r: 3 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          ) : <EmptyChart />}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">CAPA Linked Trend</CardTitle></CardHeader>
+        <CardContent className="h-[260px]">
+          {hasCount(charts.capaLinkedTrend) ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={charts.capaLinkedTrend}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                <YAxis allowDecimals={false} />
+                <Tooltip />
+                <Line type="monotone" dataKey="count" stroke="#7c3aed" strokeWidth={2} dot={{ r: 3 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          ) : <EmptyChart />}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Recall Evaluation Trend</CardTitle></CardHeader>
+        <CardContent className="h-[260px]">
+          {hasCount(charts.recallEvaluationTrend) ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={charts.recallEvaluationTrend}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                <YAxis allowDecimals={false} />
+                <Tooltip />
+                <Line type="monotone" dataKey="count" stroke="#dc2626" strokeWidth={2} dot={{ r: 3 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          ) : <EmptyChart />}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Root Cause Distribution</CardTitle></CardHeader>
+        <CardContent className="h-[260px]">
+          {hasCount(charts.byRootCause ?? []) ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie data={charts.byRootCause ?? []} dataKey="count" nameKey="name" cx="50%" cy="50%" outerRadius={80} label>
+                  {(charts.byRootCause ?? []).map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                </Pie>
+                <Tooltip />
+                <Legend />
+              </PieChart>
+            </ResponsiveContainer>
+          ) : <EmptyChart />}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Repeat Complaint Trend</CardTitle></CardHeader>
+        <CardContent className="h-[260px]">
+          {hasCount(charts.repeatComplaintTrend ?? []) ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={charts.repeatComplaintTrend ?? []}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                <YAxis allowDecimals={false} />
+                <Tooltip />
+                <Line type="monotone" dataKey="count" stroke="#ea580c" strokeWidth={2} dot={{ r: 3 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          ) : <EmptyChart />}
+        </CardContent>
+      </Card>
+
+      <Card className="lg:col-span-2">
+        <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Average Closure Time Trend (days)</CardTitle></CardHeader>
+        <CardContent className="h-[260px]">
+          {hasCount(charts.closureTimeTrend) ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={charts.closureTimeTrend}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                <YAxis allowDecimals={false} />
+                <Tooltip />
+                <Bar dataKey="avgDays" fill="#0891b2" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : <EmptyChart />}
+        </CardContent>
+      </Card>
     </div>
   );
 }

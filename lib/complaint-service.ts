@@ -2,7 +2,8 @@ import {
   addDoc, collection, doc, getDoc, getDocs, limit, orderBy, query, updateDoc, where,
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { getFirebaseFirestore, getFirebaseStorage } from '@/lib/firebase';
+import { generateDocumentNumber } from '@/lib/admin/document-numbering-service';
+import { getFirebaseFirestore, getFirebaseStorage, isFirebaseConfigured } from '@/lib/firebase';
 import { logAuditEvent } from '@/lib/admin/admin-service';
 import { downloadCsv } from '@/lib/export-utils';
 import { createCapa } from '@/lib/capa-service';
@@ -12,7 +13,9 @@ import {
   type ComplaintAttachment, type ComplaintFilters, type ComplaintDashboardMetrics,
   type ComplaintActor, isComplaintClosed, isSafetyCategory,
 } from './complaint-types';
-import type { ComplaintCreateInput, InvestigationInput } from './complaint-schemas';
+import { computeComplaintDashboardMetrics } from './complaint-dashboard-records';
+import { buildComplaintNumberFallback } from './complaint-create-records';
+import type { ComplaintCreateInput } from './complaint-schemas';
 
 function now() { return new Date().toISOString(); }
 
@@ -39,7 +42,15 @@ async function notify(title: string, message: string, recordId: string, roles: s
 
 export async function generateComplaintNumber(): Promise<string> {
   const year = new Date().getFullYear();
-  const prefix = `CMP-${year}-`;
+  if (isFirebaseConfigured()) {
+    try {
+      const result = await generateDocumentNumber('CMP', 'Market Complaint', { increment: true });
+      if (result.number) return result.number;
+    } catch (e) {
+      console.error('generateComplaintNumber document numbering', e);
+    }
+  }
+  const prefix = `CMP/${year}/`;
   try {
     const snap = await getDocs(query(
       collection(getFirebaseFirestore(), COMPLAINT_COLLECTIONS.records),
@@ -49,66 +60,100 @@ export async function generateComplaintNumber(): Promise<string> {
       limit(1),
     ));
     if (!snap.empty) {
-      const last = snap.docs[0].data().complaint_number as string;
-      return `${prefix}${String(parseInt(last.split('-').pop() || '0', 10) + 1).padStart(4, '0')}`;
+      const last = String(snap.docs[0].data().complaint_number || '');
+      const seq = parseInt(last.split('/').pop() || '0', 10) + 1;
+      return buildComplaintNumberFallback(year, seq);
     }
   } catch {
-    const all = await getDocs(collection(getFirebaseFirestore(), COMPLAINT_COLLECTIONS.records));
-    return `${prefix}${String(all.size + 1).padStart(4, '0')}`;
+    try {
+      const all = await getDocs(collection(getFirebaseFirestore(), COMPLAINT_COLLECTIONS.records));
+      return buildComplaintNumberFallback(year, all.size + 1);
+    } catch {
+      return buildComplaintNumberFallback(year, 1);
+    }
   }
-  return `${prefix}0001`;
+  return buildComplaintNumberFallback(year, 1);
 }
 
 async function linkBatch(batchNumber: string) {
-  if (!batchNumber) return { batch_id: null, pqr_id: null };
+  if (!batchNumber) return { batch_id: null, pqr_id: null, cpv_product_id: null as string | null };
   try {
     const snap = await getDocs(query(
       collection(getFirebaseFirestore(), COMPLAINT_COLLECTIONS.batches),
       where('batch_number', '==', batchNumber),
       limit(1),
     ));
-    if (snap.empty) return { batch_id: null, pqr_id: null };
+    if (snap.empty) return { batch_id: null, pqr_id: null, cpv_product_id: null };
     const data = snap.docs[0].data();
-    return { batch_id: snap.docs[0].id, pqr_id: (data.pqr_id as string) || null };
+    return {
+      batch_id: snap.docs[0].id,
+      pqr_id: (data.pqr_id as string) || null,
+      cpv_product_id: String(data.cpv_product_id || data.cpvProductId || data.product_id || '') || null,
+    };
   } catch {
-    return { batch_id: null, pqr_id: null };
+    return { batch_id: null, pqr_id: null, cpv_product_id: null };
   }
 }
 
-export async function createComplaint(input: ComplaintCreateInput, actor: ComplaintActor): Promise<ComplaintRecord> {
-  const complaintNumber = await generateComplaintNumber();
-  const timestamp = now();
-  const batchLink = await linkBatch(input.batch_number);
+function mapCreateInputToRecord(
+  input: ComplaintCreateInput,
+  complaintNumber: string,
+  batchLink: Awaited<ReturnType<typeof linkBatch>>,
+  actor: ComplaintActor,
+  timestamp: string,
+  status: string,
+): Omit<ComplaintRecord, 'id'> {
   const safetyImpact = input.product_safety_impact || isSafetyCategory(input.complaint_category);
+  const marketImpact = input.market_impact === true;
+  const recallEval = marketImpact || input.recall_evaluation_required === true;
 
-  const record: Omit<ComplaintRecord, 'id'> = {
+  return {
     complaint_number: complaintNumber,
     complaint_date: input.complaint_date,
     received_from: input.received_from,
     customer_name: input.customer_name,
+    customer_type: input.customer_type || 'Retail',
     customer_contact: input.customer_contact || '',
+    contact_person: input.contact_person || '',
+    country: input.country || '',
     market_region: input.market_region,
     product_name: input.product_name,
-    batch_number: input.batch_number,
+    product_code: input.product_code || '',
+    batch_number: input.batch_number || '',
     mfg_date: input.mfg_date || '',
     exp_date: input.exp_date || '',
     complaint_category: input.complaint_category,
+    complaint_subcategory: input.complaint_subcategory || 'Other',
     complaint_description: input.complaint_description,
+    issue_reported: input.issue_reported || '',
+    quantity_involved: input.quantity_involved || '',
     sample_received: input.sample_received,
+    photographs_available: input.photographs_available,
     retain_sample_required: input.retain_sample_required,
     complaint_criticality: input.complaint_criticality,
     initial_assessment: input.initial_assessment || '',
     investigation_required: input.investigation_required,
     product_safety_impact: safetyImpact,
+    product_quality_impact: input.product_quality_impact,
+    regulatory_impact: input.regulatory_impact,
+    market_impact: marketImpact,
+    recall_evaluation_required: recallEval,
+    assigned_to: input.assigned_to || null,
+    assigned_to_name: input.assigned_to_name || null,
+    due_date: input.due_date || null,
+    risk_level: input.risk_level || 'Low',
+    capa_recommendation_required: input.product_quality_impact === true,
+    head_qa_approval_required: input.complaint_criticality === 'Critical',
     root_cause: '',
     impact_assessment: '',
-    capa_required: false,
+    capa_required: input.product_quality_impact === true,
     linked_capa_id: null,
     linked_capa_number: null,
     linked_recall_id: null,
     linked_recall_number: null,
+    cpv_product_id: batchLink.cpv_product_id,
     closure_date: null,
-    status: 'draft',
+    status,
     qa_remarks: input.qa_remarks || '',
     batch_id: batchLink.batch_id,
     pqr_id: batchLink.pqr_id,
@@ -119,12 +164,41 @@ export async function createComplaint(input: ComplaintCreateInput, actor: Compla
     created_at: timestamp,
     updated_at: timestamp,
   };
+}
+
+export async function createComplaint(
+  input: ComplaintCreateInput,
+  actor: ComplaintActor,
+  options?: { status?: string; submit?: boolean },
+): Promise<ComplaintRecord> {
+  const complaintNumber = await generateComplaintNumber();
+  const timestamp = now();
+  const batchLink = await linkBatch(input.batch_number || '');
+  const status = options?.status || 'draft';
+
+  const record = mapCreateInputToRecord(input, complaintNumber, batchLink, actor, timestamp, status);
 
   const refDoc = await addDoc(collection(getFirebaseFirestore(), COMPLAINT_COLLECTIONS.records), record);
   await audit(actor, 'CREATE', refDoc.id, null, record);
 
   if (input.complaint_criticality === 'Critical') {
     await notify('Critical Complaint', `Critical complaint ${complaintNumber} registered — immediate Head QA review required`, refDoc.id, ['head_qa', 'qa']);
+  }
+  if (input.product_safety_impact) {
+    await notify('Patient Safety Complaint', `Complaint ${complaintNumber} reported patient safety impact`, refDoc.id, ['head_qa']);
+  }
+  if (input.regulatory_impact) {
+    await notify('Regulatory Impact Complaint', `Complaint ${complaintNumber} has regulatory impact`, refDoc.id, ['regulatory_affairs']);
+  }
+
+  if (options?.submit && status === 'received') {
+    const created = { id: refDoc.id, ...record } as ComplaintRecord;
+    if (created.product_safety_impact || created.recall_evaluation_required) {
+      await createRecallEvaluationTask(created, actor);
+    }
+    if (created.assigned_to) {
+      await notify('Complaint Assigned', `Complaint ${complaintNumber} assigned for investigation`, refDoc.id, ['qa', 'qc']);
+    }
   }
 
   return { id: refDoc.id, ...record };
@@ -187,32 +261,56 @@ export async function submitComplaint(id: string, actor: ComplaintActor): Promis
   const complaint = await getComplaintById(id);
   if (!complaint || complaint.status !== 'draft') throw new Error('Only draft complaints can be submitted');
   const updated = await updateComplaint(id, { status: 'received' }, actor, true);
-  if (complaint.product_safety_impact) {
-    await createRecallEvaluationTask(complaint, actor);
+  if (complaint.product_safety_impact || complaint.recall_evaluation_required) {
+    await createRecallEvaluationTask(updated, actor);
+  }
+  if (updated.assigned_to) {
+    await notify(
+      'Complaint Assigned for Investigation',
+      `Complaint ${updated.complaint_number} assigned to ${updated.assigned_to_name || 'investigator'}`,
+      id,
+      ['qa', 'qc'],
+    );
   }
   return updated;
 }
 
 async function createRecallEvaluationTask(complaint: ComplaintRecord, actor: ComplaintActor) {
   const { createRecall } = await import('./recall-service');
+  const due = new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0];
   const recall = await createRecall({
     recall_date: now().split('T')[0],
     recall_type: 'Voluntary',
     recall_classification: complaint.complaint_criticality === 'Critical' ? 'Class I' : 'Class II',
+    recall_source: 'Complaint',
+    source_reference_number: complaint.complaint_number,
     product_name: complaint.product_name,
+    product_code: complaint.product_code || '',
     batch_number: complaint.batch_number,
+    mfg_date: complaint.mfg_date || '',
+    exp_date: complaint.exp_date || '',
     market_region: complaint.market_region,
+    customer_name: complaint.customer_name || '',
     reason_for_recall: `Recall evaluation from complaint ${complaint.complaint_number}: ${complaint.complaint_description.slice(0, 200)}`,
+    recall_justification: '',
     recall_initiated_by_name: actor.name,
     regulatory_notification_required: complaint.complaint_criticality === 'Critical',
+    regulatory_authority: complaint.complaint_criticality === 'Critical' ? 'CDSCO' : '',
+    notification_due_date: null,
     stock_quantity: 0,
-    distributed_quantity: 0,
+    distributed_quantity: 1,
     recovered_quantity: 0,
     impact_assessment: complaint.initial_assessment,
     risk_assessment: '',
     capa_required: false,
+    linked_capa_id: null,
+    linked_capa_number: '',
     linked_complaint_id: complaint.id,
+    assigned_owner: actor.id,
+    assigned_owner_name: actor.name,
+    due_date: due,
     qa_remarks: 'Auto-generated recall evaluation task from product safety complaint',
+    include_in_pqr_review: true,
   }, actor, { status: 'draft', fromComplaint: true });
 
   await updateDoc(doc(getFirebaseFirestore(), COMPLAINT_COLLECTIONS.records, complaint.id), {
@@ -224,120 +322,76 @@ async function createRecallEvaluationTask(complaint: ComplaintRecord, actor: Com
 }
 
 export async function saveInvestigation(
-  complaintId: string, data: InvestigationInput, actor: ComplaintActor,
+  complaintId: string, data: import('./complaint-schemas').ComplaintInvestigationInput, actor: ComplaintActor,
 ): Promise<ComplaintInvestigation> {
-  const timestamp = now();
-  const existing = await getInvestigation(complaintId);
-  const payload = {
-    complaint_id: complaintId,
-    ...data,
-    investigated_by: actor.id,
-    investigated_by_name: actor.name,
-    investigated_at: timestamp,
-    updated_at: timestamp,
-  };
-
-  let refId: string;
-  if (existing) {
-    await updateDoc(doc(getFirebaseFirestore(), COMPLAINT_COLLECTIONS.investigations, existing.id), payload);
-    refId = existing.id;
-  } else {
-    const ref = await addDoc(collection(getFirebaseFirestore(), COMPLAINT_COLLECTIONS.investigations), { ...payload, created_at: timestamp });
-    refId = ref.id;
-  }
-
-  const status = data.capa_required ? 'capa_required' : 'qa_review';
-  await updateComplaint(complaintId, {
-    status,
-    root_cause: data.root_cause,
-    impact_assessment: data.impact_assessment,
-    capa_required: data.capa_required,
-  }, actor, true);
-
-  if (data.capa_required) {
-    await createCapaFromComplaint(complaintId, actor);
-  }
-
-  await audit(actor, 'INVESTIGATION', complaintId, null, payload);
-  return { id: refId, ...payload, created_at: existing?.created_at || timestamp } as ComplaintInvestigation;
+  const { saveInvestigation: saveInv } = await import('./complaint-investigation-service');
+  return saveInv(complaintId, data, actor);
 }
 
 export async function getInvestigation(complaintId: string): Promise<ComplaintInvestigation | null> {
-  const snap = await getDocs(query(
-    collection(getFirebaseFirestore(), COMPLAINT_COLLECTIONS.investigations),
-    where('complaint_id', '==', complaintId),
-    limit(1),
-  ));
-  if (snap.empty) return null;
-  return { id: snap.docs[0].id, ...snap.docs[0].data() } as ComplaintInvestigation;
+  const { getComplaintInvestigationRecord } = await import('./complaint-investigation-service');
+  return getComplaintInvestigationRecord(complaintId);
 }
 
 export async function createCapaFromComplaint(complaintId: string, actor: ComplaintActor): Promise<CapaRecord> {
-  const complaint = await getComplaintById(complaintId);
-  if (!complaint) throw new Error('Complaint not found');
-  if (complaint.linked_capa_id) {
-    const { getCapaById } = await import('@/lib/capa-service');
-    const existing = await getCapaById(complaint.linked_capa_id);
-    if (existing) return existing;
-  }
-
-  const capa = await createCapa({
-    capa_date: now().split('T')[0],
-    capa_source: 'Market Complaint',
-    source_reference_number: complaint.complaint_number,
-    department: 'QA',
-    product_name: complaint.product_name,
-    batch_number: complaint.batch_number,
-    capa_title: `CAPA from Complaint ${complaint.complaint_number}`,
-    problem_description: complaint.complaint_description,
-    root_cause: complaint.root_cause,
-    corrective_action: '',
-    preventive_action: '',
-    action_owner: actor.name,
-    action_owner_name: actor.name,
-    target_completion_date: new Date(Date.now() + 90 * 86400000).toISOString().split('T')[0],
-    effectiveness_check_required: true,
-    effectiveness_criteria: 'No repeat complaint for same root cause within 12 months',
-    priority: complaint.complaint_criticality === 'Critical' ? 'critical' : complaint.complaint_criticality === 'Major' ? 'high' : 'medium',
-    qa_remarks: complaint.qa_remarks,
-  }, actor, { status: 'submitted' });
-
-  await updateDoc(doc(getFirebaseFirestore(), COMPLAINT_COLLECTIONS.records, complaintId), {
-    linked_capa_id: capa.id,
-    linked_capa_number: capa.capa_number,
-    capa_required: true,
-    status: 'capa_required',
-    updated_at: now(),
-  });
-
-  await audit(actor, 'CAPA_LINK', complaintId, null, { capa_number: capa.capa_number });
-  return capa;
+  const { createCapaFromComplaintLegacy } = await import('./complaint-capa-service');
+  return createCapaFromComplaintLegacy(complaintId, actor);
 }
 
 export async function closeComplaint(id: string, actor: ComplaintActor, qaRemarks?: string): Promise<ComplaintRecord> {
+  const { closeComplaintWithClosure } = await import('./complaint-closure-service');
+  const { defaultComplaintClosureForm } = await import('./complaint-closure-records');
   const complaint = await getComplaintById(id);
   if (!complaint) throw new Error('Complaint not found');
-  if (complaint.capa_required && !complaint.linked_capa_id) {
-    throw new Error('CAPA must be linked before closure');
-  }
-  return updateComplaint(id, {
-    status: 'closed',
-    closure_date: now().split('T')[0],
-    qa_remarks: qaRemarks || complaint.qa_remarks,
-  }, actor, true);
+
+  const {
+    getActiveComplaintCapaLink,
+  } = await import('./complaint-capa-service');
+  const { getComplaintImpactAssessment } = await import('./complaint-impact-service');
+  const { getComplaintInvestigationRecord } = await import('./complaint-investigation-service');
+  const { getCapaById } = await import('@/lib/capa-service');
+  const { getComplaintClosure } = await import('./complaint-closure-service');
+
+  const [link, impact, investigation, attachments, closure] = await Promise.all([
+    getActiveComplaintCapaLink(id),
+    getComplaintImpactAssessment(id),
+    getComplaintInvestigationRecord(id),
+    getAttachments(id),
+    getComplaintClosure(id),
+  ]);
+  let capa = null;
+  if (link?.capa_id) capa = await getCapaById(link.capa_id);
+  else if (complaint.linked_capa_id) capa = await getCapaById(complaint.linked_capa_id);
+
+  const recallComplete = Boolean(complaint.linked_recall_id) || !complaint.recall_evaluation_required;
+  const form = defaultComplaintClosureForm(complaint, investigation, impact, link, capa, attachments, recallComplete, closure);
+  form.qa_closure_comments = qaRemarks || closure?.qa_closure_comments || complaint.qa_remarks || 'Closed via legacy action';
+  form.final_complaint_conclusion = closure?.final_complaint_conclusion || form.final_complaint_conclusion || 'Complaint closed.';
+
+  const result = await closeComplaintWithClosure(id, form, actor.name, actor);
+  if (result.error) throw new Error(result.error);
+  const updated = await getComplaintById(id);
+  if (!updated) throw new Error('Complaint not found after closure');
+  return updated;
 }
 
 export async function syncOverdueComplaints(): Promise<number> {
   const records = await listComplaints();
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - 30);
-  const cutoffStr = cutoff.toISOString().split('T')[0];
+  const today = new Date().toISOString().split('T')[0];
   let count = 0;
   for (const r of records) {
     if (isComplaintClosed(r.status) || r.status === 'overdue') continue;
-    if (r.complaint_date < cutoffStr && !['closed', 'qa_review'].includes(r.status)) {
-      await updateDoc(doc(getFirebaseFirestore(), COMPLAINT_COLLECTIONS.records, r.id), { status: 'overdue', updated_at: now() });
-      count++;
+    const overdue = Boolean(r.due_date && r.due_date < today);
+    if (overdue) {
+      try {
+        await updateDoc(doc(getFirebaseFirestore(), COMPLAINT_COLLECTIONS.records, r.id), {
+          status: 'overdue',
+          updated_at: now(),
+        });
+        count++;
+      } catch (e) {
+        console.error('syncOverdueComplaints update', r.id, e);
+      }
     }
   }
   return count;
@@ -364,19 +418,12 @@ export async function uploadAttachment(complaintId: string, file: File, actor: C
 }
 
 export async function getAuditLogsForComplaint(complaintId: string) {
-  const snap = await getDocs(query(collection(getFirebaseFirestore(), COMPLAINT_COLLECTIONS.auditLogs), where('recordId', '==', complaintId), limit(100)));
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  const { getAuditLogsForComplaint: getLogs } = await import('@/lib/complaint-audit-trail-service');
+  return getLogs(complaintId);
 }
 
 export function computeDashboardMetrics(records: ComplaintRecord[]): ComplaintDashboardMetrics {
-  return {
-    total: records.length,
-    open: records.filter((r) => !isComplaintClosed(r.status)).length,
-    closed: records.filter((r) => r.status === 'closed').length,
-    critical: records.filter((r) => r.complaint_criticality === 'Critical').length,
-    capaLinked: records.filter((r) => r.linked_capa_id).length,
-    overdue: records.filter((r) => r.status === 'overdue').length,
-  };
+  return computeComplaintDashboardMetrics(records);
 }
 
 export function complaintChartData(records: ComplaintRecord[]) {

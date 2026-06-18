@@ -509,7 +509,7 @@ export async function submitApproval(
     throw new Error('Effectiveness check must be completed before approval');
   }
 
-  const needsHeadQa = requiresHeadQaApproval(capa.priority);
+  const needsHeadQa = requiresHeadQaApproval(capa.priority, capa);
   const isHeadQa = ['head_qa', 'super_admin'].includes(actor.role);
   const approvalLevel = needsHeadQa && !isHeadQa ? 'qa_review' : needsHeadQa ? 'head_qa' : 'final';
 
@@ -544,24 +544,8 @@ export async function submitApproval(
 }
 
 export async function closeCapa(id: string, actor: CapaActor, qaRemarks?: string): Promise<CapaRecord> {
-  const capa = await getCapaById(id);
-  if (!capa) throw new Error('CAPA not found');
-
-  if (capa.effectiveness_check_required && !['Effective', 'N/A'].includes(capa.effectiveness_result)) {
-    throw new Error('CAPA cannot close until effectiveness result is Effective or N/A');
-  }
-  if (!['approved', 'effectiveness_completed', 'implemented'].includes(capa.capa_status)) {
-    throw new Error('CAPA must be approved or implementation complete before closure');
-  }
-
-  const updated = await updateCapa(id, {
-    capa_status: 'closed',
-    qa_remarks: qaRemarks || capa.qa_remarks,
-    actual_completion_date: capa.actual_completion_date || now().split('T')[0],
-  }, actor, { workflow: true });
-
-  await audit(actor, 'CLOSE', id, capa, updated);
-  return updated;
+  const { closeCapaWithClosure } = await import('./capa-closure-service');
+  return closeCapaWithClosure(id, { id: actor.id, name: actor.name, role: actor.role }, qaRemarks);
 }
 
 export async function createCapaFromDeviation(deviationId: string, actor: CapaActor) {
@@ -634,21 +618,13 @@ export async function addCapaAction(capaId: string, input: Omit<CapaAction, 'id'
 }
 
 export async function getCapaEffectiveness(capaId: string): Promise<CapaEffectiveness | null> {
-  const snap = await getDocs(query(
-    collection(getFirebaseFirestore(), CAPA_COLLECTIONS.effectiveness),
-    where('capa_id', '==', capaId),
-    limit(1),
-  ));
-  if (snap.empty) return null;
-  return { id: snap.docs[0].id, ...snap.docs[0].data() } as CapaEffectiveness;
+  const { getCapaEffectivenessReview } = await import('./capa-effectiveness-service');
+  return getCapaEffectivenessReview(capaId);
 }
 
 export async function getCapaApprovals(capaId: string): Promise<CapaApproval[]> {
-  const snap = await getDocs(query(
-    collection(getFirebaseFirestore(), CAPA_COLLECTIONS.approvals),
-    where('capa_id', '==', capaId),
-  ));
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as CapaApproval));
+  const { getCapaApprovals: getApprovals } = await import('./capa-approval-service');
+  return getApprovals(capaId);
 }
 
 export async function getCapaAttachments(capaId: string): Promise<CapaAttachment[]> {
@@ -690,12 +666,8 @@ export async function getCapaSourceLinks(capaId: string): Promise<CapaSourceLink
 }
 
 export async function getAuditLogsForCapa(capaId: string) {
-  const snap = await getDocs(query(
-    collection(getFirebaseFirestore(), CAPA_COLLECTIONS.auditLogs),
-    where('recordId', '==', capaId),
-    limit(100),
-  ));
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  const { getAuditLogsForCapa: fetchLogs } = await import('./capa-audit-trail-service');
+  return fetchLogs(capaId);
 }
 
 export function computeDashboardMetrics(records: CapaRecord[]): CapaDashboardMetrics {

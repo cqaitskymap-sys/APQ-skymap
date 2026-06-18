@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Printer, Upload } from 'lucide-react';
+import { Printer, Upload, Lock } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -19,7 +19,7 @@ import { RecallPdfDocument } from './recall-pdf-document';
 import { distributionSchema, recoverySchema, recallApprovalSchema, type DistributionInput, type RecoveryInput, type RecallApprovalInput } from '@/lib/recall-schemas';
 import {
   getDistributions, getRecoveries, getAttachments, getAuditLogsForRecall,
-  initiateRecall, addDistribution, addRecovery, submitRecallApproval, closeRecall, uploadAttachment,
+  initiateRecall, addDistribution, addRecovery, submitRecallApproval, uploadAttachment,
 } from '@/lib/recall-service';
 import type { RecallRecord, RecallDistribution, RecallRecovery, RecallAttachment } from '@/lib/recall-types';
 import { canApproveRecall, isRecallReadOnly, requiresClassIApproval } from '@/lib/recall-types';
@@ -69,12 +69,17 @@ export function RecallDetailView({ record, onRefresh }: { record: RecallRecord; 
             }}>Initiate Recall</Button>
           )}
           {canApproveRecall(actor.role) && !['closed', 'draft'].includes(record.recall_status) && (
-            <Button variant="outline" disabled={saving} onClick={async () => {
-              try { setSaving(true); await closeRecall(record.id, actor); toast.success('Recall closed'); onRefresh(); }
-              catch (e) { toast.error(e instanceof Error ? e.message : 'Failed'); } finally { setSaving(false); }
-            }}>Close Recall</Button>
+            <Button variant="outline" asChild className="gap-1 bg-green-600 text-white hover:bg-green-700">
+              <Link href={`/qms/recall/${record.id}/closure`}><Lock className="h-4 w-4" />Proceed to Closure</Link>
+            </Button>
           )}
           <Button variant="outline" onClick={() => printPage()} className="gap-1"><Printer className="h-4 w-4" />Print PDF</Button>
+          <Button variant="outline" asChild className="gap-1">
+            <Link href={`/qms/recall/${record.id}/recovery`}>Recovery & Distribution</Link>
+          </Button>
+          <Button variant="outline" asChild className="gap-1">
+            <Link href={`/qms/recall/${record.id}/regulatory`}>Regulatory Notification</Link>
+          </Button>
         </div>
       </div>
 

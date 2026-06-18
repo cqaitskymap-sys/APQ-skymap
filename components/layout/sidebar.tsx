@@ -16,7 +16,7 @@ import {
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/contexts/auth-context';
-import { canAccessModule } from '@/lib/permissions';
+import { usePermissions } from '@/hooks/usePermissions';
 import { navHrefModule } from '@/lib/nav-permissions';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
@@ -162,8 +162,8 @@ const navItems: NavItem[] = [
     ],
   },
   { label: 'Reports', href: '/dashboard/reports', icon: BarChart3 },
-  { label: 'AI Analytics', href: '/dashboard/ai-analytics', icon: Brain, badge: 4, badgeVariant: 'default' },
-  { label: 'Notifications', href: '/dashboard/notifications', icon: Bell, badge: 9, badgeVariant: 'destructive' },
+  { label: 'AI Analytics', href: '/dashboard/ai-analytics', icon: Brain },
+  { label: 'Notifications', href: '/dashboard/notifications', icon: Bell },
 ];
 
 interface SidebarProps {
@@ -175,13 +175,22 @@ interface SidebarProps {
 export function Sidebar({ collapsed, onToggle, embedded = false }: SidebarProps) {
   const pathname = usePathname();
   const { profile, signOut } = useAuth();
-  const role = profile?.role;
+  const { canAccessModule, canViewDashboard, loading: permLoading } = usePermissions();
+  const [openGroups, setOpenGroups] = useState<string[]>([
+    'Admin',
+    'Continued Process Verification',
+    'PQR Management',
+  ]);
 
   const visibleNavItems = navItems
     .map((item) => {
       if (!item.children) {
-        if (item.href && navHrefModule(item.href) && !canAccessModule(role, navHrefModule(item.href)!)) {
-          return null;
+        if (item.href === '/dashboard') {
+          return canViewDashboard ? item : null;
+        }
+        if (item.href && navHrefModule(item.href)) {
+          const mod = navHrefModule(item.href)!;
+          if (!canAccessModule(mod)) return null;
         }
         return item;
       }
@@ -189,19 +198,21 @@ export function Sidebar({ collapsed, onToggle, embedded = false }: SidebarProps)
         if (!child.href) return true;
         const mod = navHrefModule(child.href);
         if (!mod) return true;
-        return canAccessModule(role, mod);
+        return canAccessModule(mod);
       });
       if (!children.length) return null;
-      if (item.label === 'Admin' && !canAccessModule(role, 'admin')) return null;
+      if (item.label === 'Admin' && !canAccessModule('admin')) return null;
       return { ...item, children };
     })
     .filter(Boolean) as NavItem[];
 
-  const [openGroups, setOpenGroups] = useState<string[]>([
-    'Admin',
-    'Continued Process Verification',
-    'PQR Management',
-  ]);
+  if (permLoading) {
+    return (
+      <aside className="hidden lg:flex h-screen w-[260px] items-center justify-center sidebar-bg border-r">
+        <span className="text-slate-400 text-sm">Loading menu...</span>
+      </aside>
+    );
+  }
 
   const toggleGroup = (label: string) => {
     setOpenGroups((prev) =>

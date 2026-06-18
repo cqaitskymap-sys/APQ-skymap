@@ -40,6 +40,24 @@ export {
 } from '@/lib/auth';
 
 export {
+  FIRESTORE_COLLECTIONS,
+} from './firebaseCrudService';
+
+export {
+  resolveUserPermissions,
+  saveUserPermissions,
+  assignPresetToUser,
+  canAccessModuleFromMatrix,
+  canPerformActionFromMatrix,
+  canViewDashboard,
+  logAccessDenied,
+  USER_PERMISSIONS_COLLECTION,
+  type UserPermissionRecord,
+} from './permissionService';
+
+export { logSecurityEvent, type SecurityAuditAction } from './auditTrailService';
+
+export {
   listCpvRecords,
   createCpp,
   createCqa,

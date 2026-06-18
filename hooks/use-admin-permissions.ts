@@ -9,49 +9,41 @@ import {
   getDefaultPermissionMatrix,
   type AdminModule, type PermissionAction,
 } from '@/lib/permissions';
-import { getRecords } from '@/lib/firestore-service';
-import { ADMIN_COLLECTIONS } from '@/lib/admin/constants';
-import { isDemoAuthEnabled } from '@/lib/demo-auth-config';
+import { resolveUserPermissions } from '@/services/permissionService';
 import type { PermissionMatrix } from '@/lib/admin/schemas';
 
 export function useAdminPermissions() {
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
   const role = normalizeRole(profile?.role);
   const [permissions, setPermissions] = useState<PermissionMatrix | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function load() {
-      if (!profile?.role) {
+      if (!profile?.role || !user?.uid) {
         setPermissions(null);
         setLoading(false);
         return;
       }
 
-      if (isDemoAuthEnabled()) {
-        setPermissions(getDefaultPermissionMatrix(role));
-        setLoading(false);
-        return;
-      }
-
-      const timeout = window.setTimeout(() => {
-        setPermissions(getDefaultPermissionMatrix(role));
-        setLoading(false);
-      }, 4000);
-
       try {
-        const all = await getRecords<PermissionMatrix>(ADMIN_COLLECTIONS.permissions);
-        const match = all.find((p) => p.roleId === role);
-        setPermissions(match || getDefaultPermissionMatrix(role));
+        const matrix = await resolveUserPermissions(user.uid, profile.role);
+        setPermissions({
+          roleId: role,
+          roleName: role,
+          permissions: matrix,
+          status: 'Active',
+          createdBy: 'system',
+          updatedBy: 'system',
+        });
       } catch {
         setPermissions(getDefaultPermissionMatrix(role));
       } finally {
-        window.clearTimeout(timeout);
         setLoading(false);
       }
     }
     load();
-  }, [profile?.role, role]);
+  }, [profile?.role, role, user?.uid]);
 
   return {
     role,

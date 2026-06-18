@@ -3,7 +3,7 @@
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { Download, Eye, FileText, Plus, RefreshCw } from 'lucide-react';
+import { Download, Eye, FileText, Plus, RefreshCw, TrendingUp } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/auth-context';
 import {
@@ -26,6 +26,7 @@ import {
   logCapaRecordOpened,
   openCapaDashboardPdfPlaceholder,
 } from '@/lib/capa-dashboard-service';
+import { getLatestCapaTrendSummary } from '@/lib/capa-trend-service';
 import type { CapaDashboardMetrics, CapaFilters, CapaRecord } from '@/lib/capa-types';
 import { CpvPageHeader } from '@/components/cpv/product-master/cpv-page-header';
 import { ResponsiveDataTable } from '@/components/cpv/product-master/responsive-data-table';
@@ -86,6 +87,7 @@ function CapaDashboardContent() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeKpi, setActiveKpi] = useState<string | null>(null);
+  const [trendSummary, setTrendSummary] = useState<string | null>(null);
 
   const actor = useMemo(() => ({
     id: user?.uid || 'system',
@@ -104,6 +106,7 @@ function CapaDashboardContent() {
       setMetrics(data.metrics);
       setCharts(data.charts);
       setActivity(data.activity);
+      setTrendSummary(await getLatestCapaTrendSummary());
       if (isRefresh) {
         await logCapaDashboardRefreshed(actor, data.records.length);
         toast.success('Dashboard refreshed');
@@ -279,6 +282,23 @@ function CapaDashboardContent() {
             )}
 
             {charts && <CapaDashboardCharts charts={charts} />}
+
+            {trendSummary && (
+              <Card className="border-l-4 border-l-blue-600">
+                <CardHeader className="flex flex-row items-start justify-between gap-3 pb-2">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <TrendingUp className="h-4 w-4 text-blue-600" />
+                    CAPA Trend Analysis Summary
+                  </CardTitle>
+                  <Link href="/qms/capa/trend-analysis">
+                    <Button variant="outline" size="sm">View Trend Analysis</Button>
+                  </Link>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-muted-foreground">{trendSummary}</p>
+                </CardContent>
+              </Card>
+            )}
 
             <Tabs defaultValue="recent">
               <TabsList className="flex h-auto flex-wrap gap-1">

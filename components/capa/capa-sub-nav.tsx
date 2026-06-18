@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-  LayoutDashboard, Plus, Link2, Wrench, CheckCircle2, ShieldCheck, FileDown, ListChecks,
+  LayoutDashboard, Plus, Link2, Wrench, CheckCircle2, ShieldCheck, FileDown, ListChecks, Shield, Lock, TrendingUp, History,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -12,9 +12,13 @@ const items = [
   { label: 'Create CAPA', href: '/qms/capa/create', icon: Plus, alsoMatch: '/qms/capa/new' },
   { label: 'Investigation & RCA', href: '/qms/capa/investigation', icon: Link2 },
   { label: 'Corrective Actions', href: '/qms/capa/corrective-action', icon: ListChecks },
+  { label: 'Preventive Actions', href: '/qms/capa/preventive-action', icon: Shield },
   { label: 'Implementation', href: '/qms/capa/implementation', icon: Wrench },
-  { label: 'Effectiveness Check', href: '/qms/capa/effectiveness', icon: CheckCircle2 },
+  { label: 'Effectiveness Check', href: '/qms/capa/effectiveness-check', icon: CheckCircle2 },
   { label: 'Approval Workflow', href: '/qms/capa/approval', icon: ShieldCheck },
+  { label: 'Closure', href: '/qms/capa/closure', icon: Lock },
+  { label: 'Trend Analysis', href: '/qms/capa/trend-analysis', icon: TrendingUp },
+  { label: 'Audit Trail', href: '/qms/capa/audit-trail', icon: History },
   { label: 'Reports', href: '/qms/capa/reports', icon: FileDown },
 ];
 
@@ -35,7 +39,14 @@ export function CapaSubNav() {
             ? pathname === base || pathname === alsoMatch
             : pathname.startsWith(base)
               || (base === '/qms/capa/investigation' && /\/qms\/capa\/[^/]+\/investigation/.test(pathname))
-              || (base === '/qms/capa/corrective-action' && /\/qms\/capa\/[^/]+\/corrective-action/.test(pathname));
+              || (base === '/qms/capa/corrective-action' && /\/qms\/capa\/[^/]+\/corrective-action/.test(pathname))
+              || (base === '/qms/capa/preventive-action' && /\/qms\/capa\/[^/]+\/preventive-action/.test(pathname))
+              || (base === '/qms/capa/effectiveness-check' && /\/qms\/capa\/[^/]+\/effectiveness/.test(pathname))
+              || (base === '/qms/capa/approval' && /\/qms\/capa\/[^/]+\/approval/.test(pathname))
+              || (base === '/qms/capa/closure' && /\/qms\/capa\/[^/]+\/closure/.test(pathname))
+              || (base === '/qms/capa/trend-analysis' && (pathname.startsWith('/qms/capa/trend') || pathname === '/qms/capa/trends'))
+              || (base === '/qms/capa/reports' && (pathname.startsWith('/qms/capa/report') || pathname === '/qms/capa/analytics'))
+              || (base === '/qms/capa/audit-trail' && (pathname.startsWith('/qms/capa/audit-trail') || /\/qms\/capa\/[^/]+\/audit-trail/.test(pathname)));
           return (
             <Link
               key={item.href}

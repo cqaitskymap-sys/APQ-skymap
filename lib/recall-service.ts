@@ -4,6 +4,8 @@ import {
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { getFirebaseFirestore, getFirebaseStorage } from '@/lib/firebase';
 import { logAuditEvent } from '@/lib/admin/admin-service';
+import { generateDocumentNumber } from '@/lib/admin/document-numbering-service';
+import { buildRecallNumberFallback } from '@/lib/recall-create-records';
 import { downloadCsv } from '@/lib/export-utils';
 import { createCapa } from '@/lib/capa-service';
 import {
@@ -11,6 +13,7 @@ import {
   type RecallAttachment, type RecallFilters, type RecallDashboardMetrics,
   type RecallActor, isRecallClosed, requiresClassIApproval, calcRecoveryPercent,
 } from './recall-types';
+import { computeRecallDashboardMetrics, computeRecallChartData } from './recall-dashboard-records';
 import type { RecallCreateInput, DistributionInput, RecoveryInput } from './recall-schemas';
 
 function now() { return new Date().toISOString(); }
@@ -38,7 +41,13 @@ async function notify(title: string, message: string, recordId: string, roles: s
 
 export async function generateRecallNumber(): Promise<string> {
   const year = new Date().getFullYear();
-  const prefix = `RCL-${year}-`;
+  try {
+    const result = await generateDocumentNumber('REC', 'Product Recall', { increment: true });
+    if (result.number) return result.number;
+  } catch (e) {
+    console.error('generateRecallNumber document numbering', e);
+  }
+  const prefix = `REC/${year}/`;
   try {
     const snap = await getDocs(query(
       collection(getFirebaseFirestore(), RECALL_COLLECTIONS.records),
@@ -49,13 +58,14 @@ export async function generateRecallNumber(): Promise<string> {
     ));
     if (!snap.empty) {
       const last = snap.docs[0].data().recall_number as string;
-      return `${prefix}${String(parseInt(last.split('-').pop() || '0', 10) + 1).padStart(4, '0')}`;
+      const seq = parseInt(last.split('/').pop() || '0', 10) + 1;
+      return buildRecallNumberFallback(year, seq);
     }
   } catch {
     const all = await getDocs(collection(getFirebaseFirestore(), RECALL_COLLECTIONS.records));
-    return `${prefix}${String(all.size + 1).padStart(4, '0')}`;
+    return buildRecallNumberFallback(year, all.size + 1);
   }
-  return `${prefix}0001`;
+  return buildRecallNumberFallback(year, 1);
 }
 
 async function linkBatch(batchNumber: string) {
@@ -97,13 +107,23 @@ export async function createRecall(
     recall_date: input.recall_date,
     recall_type: input.recall_type,
     recall_classification: input.recall_classification,
+    recall_source: input.recall_source || 'Internal Quality Review',
+    source_reference_number: input.source_reference_number || '',
     product_name: input.product_name,
+    product_code: input.product_code || '',
     batch_number: input.batch_number,
+    mfg_date: input.mfg_date || '',
+    exp_date: input.exp_date || '',
     market_region: input.market_region,
+    customer_name: input.customer_name || '',
     reason_for_recall: input.reason_for_recall,
+    recall_justification: input.recall_justification || '',
     recall_initiated_by: actor.id,
     recall_initiated_by_name: input.recall_initiated_by_name,
     regulatory_notification_required: input.regulatory_notification_required,
+    regulatory_authority: input.regulatory_authority || '',
+    notification_due_date: input.notification_due_date || null,
+    notification_status: input.regulatory_notification_required ? 'Pending' : 'Not Required',
     regulatory_notified: false,
     stock_quantity: input.stock_quantity,
     distributed_quantity: input.distributed_quantity,
@@ -112,12 +132,18 @@ export async function createRecall(
     impact_assessment: input.impact_assessment || '',
     risk_assessment: input.risk_assessment || '',
     capa_required: input.capa_required,
-    linked_capa_id: null,
-    linked_capa_number: null,
+    linked_capa_id: input.linked_capa_id || null,
+    linked_capa_number: input.linked_capa_number || null,
     linked_complaint_id: input.linked_complaint_id || null,
     linked_complaint_number: linkedComplaintNumber,
-    linked_deviation_id: null,
-    linked_oos_id: null,
+    linked_deviation_id: input.linked_deviation_id || null,
+    linked_oos_id: input.linked_oos_id || null,
+    assigned_owner: input.assigned_owner || null,
+    assigned_owner_name: input.assigned_owner_name || input.recall_initiated_by_name,
+    due_date: input.due_date || null,
+    responsible_person: input.assigned_owner || null,
+    responsible_person_name: input.assigned_owner_name || input.recall_initiated_by_name,
+    include_in_pqr_review: input.include_in_pqr_review !== false,
     recall_status: options?.status || 'draft',
     qa_remarks: input.qa_remarks || '',
     batch_id: batchLink.batch_id,
@@ -205,54 +231,38 @@ export async function initiateRecall(id: string, actor: RecallActor): Promise<Re
 }
 
 export async function addDistribution(recallId: string, input: DistributionInput, actor: RecallActor): Promise<RecallDistribution> {
-  const timestamp = now();
-  const ref = await addDoc(collection(getFirebaseFirestore(), RECALL_COLLECTIONS.distribution), {
-    recall_id: recallId, ...input, created_at: timestamp, updated_at: timestamp,
-  });
-  const distributions = await getDistributions(recallId);
-  const totalDistributed = distributions.reduce((sum, d) => sum + d.quantity_distributed, 0);
-  const recall = await getRecallById(recallId);
-  if (recall) {
-    await updateRecall(recallId, {
-      distributed_quantity: totalDistributed,
-      recovery_percent: calcRecoveryPercent(totalDistributed, recall.recovered_quantity),
-      recall_status: 'in_progress',
-    }, actor, true);
-  }
-  await audit(actor, 'DISTRIBUTION_UPDATE', recallId, null, input);
-  return { id: ref.id, recall_id: recallId, ...input, created_at: timestamp, updated_at: timestamp };
+  const { addRecallDistributionRecord } = await import('./recall-recovery-service');
+  return addRecallDistributionRecord(recallId, input, actor);
 }
 
 export async function getDistributions(recallId: string): Promise<RecallDistribution[]> {
-  const snap = await getDocs(query(collection(getFirebaseFirestore(), RECALL_COLLECTIONS.distribution), where('recall_id', '==', recallId)));
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as RecallDistribution));
+  const { getRecallDistributions } = await import('./recall-recovery-service');
+  return getRecallDistributions(recallId);
 }
 
 export async function addRecovery(recallId: string, input: RecoveryInput, actor: RecallActor): Promise<RecallRecovery> {
-  const timestamp = now();
-  const ref = await addDoc(collection(getFirebaseFirestore(), RECALL_COLLECTIONS.recovery), {
-    recall_id: recallId, ...input,
-    recorded_by: actor.id, recorded_by_name: actor.name,
-    created_at: timestamp, updated_at: timestamp,
-  });
-  const recoveries = await getRecoveries(recallId);
-  const totalRecovered = recoveries.reduce((sum, r) => sum + r.quantity_recovered, 0);
+  const { upsertRecallRecoveryRecord } = await import('./recall-recovery-service');
   const recall = await getRecallById(recallId);
-  if (recall) {
-    const recoveryPercent = calcRecoveryPercent(recall.distributed_quantity, totalRecovered);
-    await updateRecall(recallId, {
-      recovered_quantity: totalRecovered,
-      recovery_percent: recoveryPercent,
-      recall_status: recoveryPercent >= 100 ? 'completed' : 'recovery_in_progress',
-    }, actor, true);
-  }
-  await audit(actor, 'RECOVERY_UPDATE', recallId, null, input);
-  return { id: ref.id, recall_id: recallId, ...input, recorded_by: actor.id, recorded_by_name: actor.name, created_at: timestamp, updated_at: timestamp };
+  if (!recall) throw new Error('Recall not found');
+  return upsertRecallRecoveryRecord(recallId, {
+    customer_name: input.recovered_from,
+    market_region: recall.market_region,
+    distributed_quantity: Math.max(input.quantity_recovered, recall.distributed_quantity || 1),
+    quantity_recovered: input.quantity_recovered,
+    recovery_date: input.recovery_date,
+    recovered_by_name: actor.name,
+    recovery_status: input.recovery_status,
+    reason_for_pending: '',
+    follow_up_required: false,
+    follow_up_date: null,
+    remarks: input.remarks || '',
+    distribution_id: null,
+  }, actor);
 }
 
 export async function getRecoveries(recallId: string): Promise<RecallRecovery[]> {
-  const snap = await getDocs(query(collection(getFirebaseFirestore(), RECALL_COLLECTIONS.recovery), where('recall_id', '==', recallId)));
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as RecallRecovery));
+  const { getRecallRecoveries } = await import('./recall-recovery-service');
+  return getRecallRecoveries(recallId);
 }
 
 export async function submitRecallApproval(
@@ -288,16 +298,7 @@ export async function submitRecallApproval(
 }
 
 export async function closeRecall(recallId: string, actor: RecallActor): Promise<RecallRecord> {
-  const recall = await getRecallById(recallId);
-  if (!recall) throw new Error('Recall not found');
-  if (requiresClassIApproval(recall.recall_classification) && (!recall.head_qa_approved || !recall.regulatory_approved)) {
-    throw new Error('Class I recall requires Head QA and Regulatory approval before closure');
-  }
-  if (recall.capa_required && !recall.linked_capa_id) {
-    const capa = await createCapaFromRecall(recallId, actor);
-    await updateRecall(recallId, { linked_capa_id: capa.id, linked_capa_number: capa.capa_number }, actor, true);
-  }
-  return updateRecall(recallId, { recall_status: 'closed' }, actor, true);
+  throw new Error('Use the Recall Closure module at /qms/recall/[id]/closure for GMP-compliant closure workflow');
 }
 
 async function createCapaFromRecall(recallId: string, actor: RecallActor) {
@@ -351,40 +352,16 @@ export async function getAuditLogsForRecall(recallId: string) {
 }
 
 export function computeDashboardMetrics(records: RecallRecord[]): RecallDashboardMetrics {
-  const open = records.filter((r) => !isRecallClosed(r.recall_status));
-  const withRecovery = records.filter((r) => r.distributed_quantity > 0);
-  return {
-    total: records.length,
-    open: open.length,
-    closed: records.filter((r) => r.recall_status === 'closed').length,
-    mockRecalls: records.filter((r) => r.recall_type === 'Mock Recall' || r.recall_classification === 'Mock').length,
-    avgRecoveryPercent: withRecovery.length
-      ? Math.round(withRecovery.reduce((s, r) => s + r.recovery_percent, 0) / withRecovery.length)
-      : 0,
-    regulatoryPending: records.filter((r) => r.regulatory_notification_required && !r.regulatory_notified).length,
-  };
+  return computeRecallDashboardMetrics(records);
 }
 
 export function recallChartData(records: RecallRecord[]) {
-  const byProduct = new Map<string, number>();
-  const byClassification = new Map<string, number>();
-  const byMarket = new Map<string, number>();
-  const recoveryTrend: Array<{ month: string; percent: number }> = [];
-
-  records.forEach((r) => {
-    byProduct.set(r.product_name, (byProduct.get(r.product_name) || 0) + 1);
-    byClassification.set(r.recall_classification, (byClassification.get(r.recall_classification) || 0) + 1);
-    byMarket.set(r.market_region, (byMarket.get(r.market_region) || 0) + 1);
-    if (r.distributed_quantity > 0) {
-      recoveryTrend.push({ month: r.recall_date.slice(0, 7), percent: r.recovery_percent });
-    }
-  });
-
+  const charts = computeRecallChartData(records);
   return {
-    byProduct: Array.from(byProduct.entries()).map(([name, value]) => ({ name, value })),
-    byClassification: Array.from(byClassification.entries()).map(([name, value]) => ({ name, value })),
-    byMarket: Array.from(byMarket.entries()).map(([name, value]) => ({ name, value })),
-    recoveryTrend: recoveryTrend.sort((a, b) => a.month.localeCompare(b.month)),
+    byProduct: charts.byProduct,
+    byClassification: charts.byClassification,
+    byMarket: charts.byMarket,
+    recoveryTrend: charts.recoveryTrend.map((r) => ({ month: r.name, percent: r.avgPercent })),
   };
 }
 

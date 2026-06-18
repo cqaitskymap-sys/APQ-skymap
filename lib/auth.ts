@@ -69,7 +69,10 @@ export function formatAuthError(error: unknown): string {
     'auth/email-already-in-use': 'An account with this email already exists.',
     'auth/weak-password': 'Password must be at least 6 characters.',
     'auth/too-many-requests': 'Too many attempts. Please try again later.',
-    'auth/network-request-failed': 'Network error. Check your connection or use demo mode.',
+    'auth/network-request-failed':
+      process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATOR === 'true'
+        ? 'Cannot reach Firebase Emulator on port 9099. Run "npm run emulators" in a separate terminal, or set NEXT_PUBLIC_USE_FIREBASE_EMULATOR=false in .env.local for real Firebase.'
+        : 'Network error connecting to Firebase. Check your internet connection and Firebase project settings.',
   };
   if (code && messages[code]) return messages[code];
   if (error instanceof Error) return error.message;
