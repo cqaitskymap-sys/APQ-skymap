@@ -120,7 +120,7 @@ export async function getRecallReportById(id: string): Promise<RecallReportRecor
     if (!snap.exists()) return null;
     const data = snap.data() as RecallReportRecord;
     if (data.is_deleted) return null;
-    return { id: snap.id, ...data };
+    return { ...data, id: snap.id };
   } catch {
     return null;
   }
@@ -153,7 +153,7 @@ export async function generateRecallReport(
   const payload = mapRecallReportToRecord(form, analytics, actor, reportNumber);
   try {
     const ref = await addDoc(collection(getFirebaseFirestore(), RECALL_COLLECTIONS.reports), payload);
-    const record = { id: ref.id, ...payload };
+    const record = { ...payload, id: ref.id };
     await audit(actor, 'report generated', ref.id, `${form.report_type} — ${reportNumber}`, payload);
     return { record };
   } catch (e) {
