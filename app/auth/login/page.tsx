@@ -17,6 +17,11 @@ import { useAuth } from '@/contexts/auth-context';
 import { isFirebaseConfigured } from '@/lib/firebase-config';
 import { isDemoAuthEnabled } from '@/lib/demo-auth-config';
 import { DEMO_SUPER_ADMIN } from '@/lib/demo-auth';
+import {
+  DEFAULT_ADMIN_EMAIL,
+  DEFAULT_ADMIN_PASSWORD,
+  showDefaultAdminHint,
+} from '@/lib/default-admin-config';
 
 const schema = z.object({
   email: z.string().email('Invalid email address'),
@@ -79,6 +84,20 @@ export default function LoginPage() {
 
         <Card className="border-slate-700/50 bg-slate-800/60 backdrop-blur-xl shadow-2xl">
           <CardContent className="p-8">
+            {firebaseReady && showDefaultAdminHint() && !demoMode && (
+              <div className="mb-4 rounded-lg border border-blue-500/40 bg-blue-500/10 px-3 py-2 text-xs text-blue-100">
+                <p className="font-medium text-blue-200 mb-1">Default Super Admin (full access)</p>
+                <p>
+                  Email: <code className="bg-blue-500/20 px-1 rounded">{DEFAULT_ADMIN_EMAIL}</code>
+                  {' · '}
+                  Password: <code className="bg-blue-500/20 px-1 rounded">{DEFAULT_ADMIN_PASSWORD}</code>
+                </p>
+                <p className="text-blue-300/80 mt-1">
+                  Create this user in Firebase once: <code className="bg-blue-500/20 px-1 rounded">npm run setup:admin</code>
+                </p>
+              </div>
+            )}
+
             {!firebaseReady && !demoMode && (
               <div className="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
                 Firebase is not configured. Add <code className="bg-amber-500/20 px-1 rounded">NEXT_PUBLIC_FIREBASE_*</code> environment variables to enable authentication.

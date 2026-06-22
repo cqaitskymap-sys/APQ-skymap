@@ -147,8 +147,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         demoSignOut();
         setIsDemoMode(false);
       }
-      await firebaseSignIn(email, password);
+      const signedInUser = await firebaseSignIn(email, password);
       setAuthSessionCookie();
+      await fetchProfile(signedInUser.uid);
       return { error: null };
     } catch (error) {
       if (error instanceof FirebaseNotConfiguredError || (error as Error)?.name === 'FirebaseNotConfiguredError') {

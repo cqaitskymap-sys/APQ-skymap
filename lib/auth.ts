@@ -55,6 +55,25 @@ function requireDb() {
   return getFirebaseFirestore();
 }
 
+/** Dev/setup: promote Firebase Console users to Super Admin (disable in production). */
+function isFirstAdminBootstrapEnabled(): boolean {
+  return process.env.NEXT_PUBLIC_BOOTSTRAP_FIRST_ADMIN === 'true';
+}
+
+function isBootstrapAdminEmail(email: string): boolean {
+  const configured = process.env.NEXT_PUBLIC_BOOTSTRAP_ADMIN_EMAIL?.trim().toLowerCase();
+  return Boolean(configured && email.trim().toLowerCase() === configured);
+}
+
+function resolveLoginRole(email: string, existingRole?: UserRole | null): UserRole {
+  if (existingRole === 'super_admin' || existingRole === 'admin') return existingRole;
+  if (isBootstrapAdminEmail(email)) return 'super_admin';
+  if (isFirstAdminBootstrapEnabled() && (!existingRole || existingRole === 'viewer')) {
+    return 'super_admin';
+  }
+  return existingRole || 'viewer';
+}
+
 export function formatAuthError(error: unknown): string {
   if (error instanceof FirebaseNotConfiguredError || (error as Error)?.name === 'FirebaseNotConfiguredError') {
     return 'Firebase is not configured. Add NEXT_PUBLIC_FIREBASE_* variables in Netlify Site settings → Environment variables, then redeploy.';
@@ -88,14 +107,17 @@ export async function signIn(email: string, password: string): Promise<User> {
     const auth = requireAuth();
     const result = await signInWithEmailAndPassword(auth, email, password);
     if (result.user) {
-      const profileRef = doc(requireDb(), PROFILES_COLLECTION, result.user.uid);
+      const db = requireDb();
+      const profileRef = doc(db, PROFILES_COLLECTION, result.user.uid);
       const profileSnap = await getDoc(profileRef);
+      const loginEmail = result.user.email || email;
       if (!profileSnap.exists()) {
-        await setDoc(profileRef, {
+        const role = resolveLoginRole(loginEmail);
+        const profile: Profile = {
           id: result.user.uid,
-          email: result.user.email || email,
-          full_name: result.user.displayName || email.split('@')[0] || 'User',
-          role: 'viewer' as UserRole,
+          email: loginEmail,
+          full_name: result.user.displayName || loginEmail.split('@')[0] || 'User',
+          role,
           department: '',
           employee_id: '',
           phone: '',
@@ -104,12 +126,32 @@ export async function signIn(email: string, password: string): Promise<User> {
           last_login: nowIso(),
           created_at: nowIso(),
           updated_at: nowIso(),
-        });
+        };
+        await setDoc(profileRef, profile);
+        await setDoc(doc(db, USERS_COLLECTION, result.user.uid), {
+          ...profile,
+          createdAt: nowIso(),
+          updatedAt: nowIso(),
+          status: 'active',
+          isDeleted: false,
+        }).catch(() => undefined);
       } else {
-        await updateDoc(profileRef, {
+        const existing = profileSnap.data() as Profile;
+        const role = resolveLoginRole(loginEmail, existing.role);
+        const updates: Record<string, string> = {
           last_login: nowIso(),
           updated_at: nowIso(),
-        }).catch(() => undefined);
+        };
+        if (role !== existing.role) {
+          updates.role = role;
+        }
+        await updateDoc(profileRef, updates).catch(() => undefined);
+        if (role !== existing.role) {
+          await updateDoc(doc(db, USERS_COLLECTION, result.user.uid), {
+            role,
+            updatedAt: nowIso(),
+          }).catch(() => undefined);
+        }
       }
 
       const profile = await getUserProfile(result.user.uid);

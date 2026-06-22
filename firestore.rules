@@ -97,7 +97,11 @@ service cloud.firestore {
     match /profiles/{userId} {
       allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin() || isQaRole());
       allow create: if isAuthenticated() && request.auth.uid == userId;
-      allow update: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+      allow update: if isAuthenticated() && (
+        (request.auth.uid == userId
+          && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role']))
+        || isAdmin()
+      );
       allow delete: if isSuperAdmin();
     }
 

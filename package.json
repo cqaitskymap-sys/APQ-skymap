@@ -10,7 +10,8 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "type-check": "tsc --noEmit",
-    "emulators": "npx firebase emulators:start --only auth,firestore"
+    "emulators": "npx firebase emulators:start --only auth,firestore",
+    "setup:admin": "node scripts/setup-default-admin.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",
