@@ -7,6 +7,7 @@ export const RECALL_COLLECTIONS = {
   regulatoryNotifications: 'recall_regulatory_notifications',
   closure: 'recall_closure',
   trends: 'recall_trends',
+  reports: 'recall_reports',
   approvals: 'recall_approvals',
   attachments: 'recall_attachments',
   auditLogs: 'audit_logs',
@@ -101,6 +102,41 @@ export const RECALL_TREND_STATUSES = [
 ] as const;
 
 export type RecallTrendStatus = typeof RECALL_TREND_STATUSES[number];
+
+export const RECALL_REPORT_TYPES = [
+  'Recall Register',
+  'Open Recall Report',
+  'Closed Recall Report',
+  'Class I Recall Report',
+  'Class II Recall Report',
+  'Class III Recall Report',
+  'Mock Recall Report',
+  'Recovery Status Report',
+  'Market-wise Recall Report',
+  'Product-wise Recall Report',
+  'Regulatory Notification Report',
+  'CAPA Linked Recall Report',
+  'Recall Trend Report',
+  'Recall Closure Report',
+] as const;
+
+export type RecallReportType = typeof RECALL_REPORT_TYPES[number];
+
+export const RECALL_REGULATORY_REPORT_TYPES: RecallReportType[] = [
+  'Regulatory Notification Report',
+];
+
+export const RECALL_RECOVERY_REPORT_TYPES: RecallReportType[] = [
+  'Recovery Status Report',
+];
+
+export const RECALL_MANAGEMENT_REPORT_TYPES: RecallReportType[] = [
+  'Market-wise Recall Report',
+  'Product-wise Recall Report',
+  'Recall Trend Report',
+  'Recall Closure Report',
+  'Recall Register',
+];
 
 export interface RecallActor {
   id: string;
@@ -487,6 +523,98 @@ export interface RecallDashboardChartData {
   capaLinkedTrend: { name: string; count: number }[];
 }
 
+export interface RecallReportAnalyticsMetrics extends RecallDashboardMetrics {
+  avgClosureDays: number;
+}
+
+export interface RecallReportChartData {
+  monthlyTrend: { name: string; count: number }[];
+  byProduct: { name: string; count: number }[];
+  byMarket: { name: string; count: number }[];
+  byClassification: { name: string; count: number }[];
+  byType: { name: string; count: number }[];
+  recoveryTrend: { name: string; avgPercent: number }[];
+  regulatoryTrend: { name: string; count: number }[];
+  capaLinkageTrend: { name: string; count: number }[];
+  closurePerformanceTrend: { name: string; avgDays: number }[];
+}
+
+export interface RecallReportPreviewRow {
+  recall_number: string;
+  recall_date: string;
+  product_name: string;
+  batch_number: string;
+  market_region: string;
+  recall_type: string;
+  recall_classification: string;
+  recall_status: string;
+  recovery_percent: string;
+  regulatory_status: string;
+  capa_linked: string;
+  closure_date: string;
+}
+
+export interface RecallManagementReviewSummary {
+  totalRecalls: number;
+  openRecalls: number;
+  closedRecalls: number;
+  classIRecalls: number;
+  avgRecoveryPercent: number;
+  avgClosureDays: number;
+  topProducts: { name: string; count: number }[];
+  topMarkets: { name: string; count: number }[];
+  regulatoryPending: number;
+  capaLinked: number;
+  overdueRecalls: number;
+  narrative: string;
+  recommendations: string[];
+}
+
+export interface RecallReportRecord {
+  id: string;
+  report_id: string;
+  report_name: string;
+  report_number: string;
+  report_type: RecallReportType | string;
+  review_period_from: string;
+  review_period_to: string;
+  recall_number?: string;
+  product?: string;
+  batch_number?: string;
+  market_region?: string;
+  recall_type_filter?: string;
+  recall_classification?: string;
+  status_filter?: string;
+  regulatory_notification_required?: string;
+  capa_required?: string;
+  generated_by: string;
+  generated_by_name: string;
+  generated_at: string;
+  generated_date: string;
+  total_records: number;
+  export_type: string;
+  file_url: string;
+  file_name?: string;
+  report_status: string;
+  filters_applied: Record<string, unknown>;
+  preview_rows?: Record<string, unknown>[];
+  chart_snapshot?: Record<string, unknown>;
+  metrics_snapshot?: Record<string, unknown>;
+  management_summary?: RecallManagementReviewSummary;
+  distribution_summary?: Record<string, unknown>;
+  recovery_summary?: Record<string, unknown>;
+  regulatory_summary?: Record<string, unknown>;
+  capa_summary?: Record<string, unknown>;
+  summary: string;
+  recommendations?: string;
+  created_at: string;
+  updated_at: string;
+  is_deleted?: boolean;
+  scheduled?: boolean;
+  schedule_frequency?: string;
+  schedule_next_run?: string;
+}
+
 export interface RecallOpenRecoveryRow {
   id: string;
   recall_number: string;
@@ -781,4 +909,46 @@ export function canExportRecallTrend(role?: string | null): boolean {
 
 export function isRecallTrendReadOnly(role?: string | null): boolean {
   return normalizeRole(role) === 'auditor';
+}
+
+export function canViewRecallReports(role?: string | null): boolean {
+  const r = normalizeRole(role || '');
+  return [
+    'super_admin', 'admin', 'head_qa', 'qa_manager', 'qa', 'qa_executive',
+    'regulatory_affairs', 'warehouse', 'warehouse_manager', 'auditor', 'viewer',
+  ].includes(r);
+}
+
+export function canGenerateRecallReports(role?: string | null): boolean {
+  const r = normalizeRole(role || '');
+  return ['super_admin', 'admin', 'head_qa', 'qa_manager', 'qa', 'qa_executive'].includes(r);
+}
+
+export function canGenerateRecallReportType(role?: string | null, reportType?: RecallReportType): boolean {
+  if (!reportType) return canGenerateRecallReports(role);
+  const r = normalizeRole(role || '');
+  if (RECALL_REGULATORY_REPORT_TYPES.includes(reportType)) {
+    return ['super_admin', 'admin', 'head_qa', 'regulatory_affairs'].includes(r);
+  }
+  if (RECALL_RECOVERY_REPORT_TYPES.includes(reportType)) {
+    return ['super_admin', 'admin', 'head_qa', 'qa_manager', 'qa', 'qa_executive', 'warehouse', 'warehouse_manager'].includes(r);
+  }
+  if (RECALL_MANAGEMENT_REPORT_TYPES.includes(reportType)) {
+    return ['super_admin', 'admin', 'head_qa', 'qa_manager'].includes(r);
+  }
+  return canGenerateRecallReports(role);
+}
+
+export function canExportRecallReports(role?: string | null): boolean {
+  const r = normalizeRole(role || '');
+  return ['super_admin', 'admin', 'head_qa', 'qa_manager', 'qa', 'qa_executive', 'regulatory_affairs', 'auditor'].includes(r);
+}
+
+export function canViewRecallManagementReview(role?: string | null): boolean {
+  const r = normalizeRole(role || '');
+  return ['super_admin', 'admin', 'head_qa', 'qa_manager'].includes(r);
+}
+
+export function isRecallReportsReadOnly(role?: string | null): boolean {
+  return normalizeRole(role || '') === 'auditor';
 }

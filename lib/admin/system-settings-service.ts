@@ -7,6 +7,7 @@ import {
 import { ADMIN_COLLECTIONS } from './constants';
 import type { SystemSettings } from './schemas';
 import { getFirebaseStorage, isFirebaseConfigured, getFirebaseAuth } from '@/lib/firebase';
+import { isDemoAuthEnabled } from '@/lib/demo-auth-config';
 
 export interface SystemSettingsAuditMeta {
   userId: string;
@@ -162,13 +163,31 @@ export function normalizeSystemSettings(raw: SystemSettings): SystemSettings {
   };
 }
 
+function getLocalSystemSettings(id = 'local'): SystemSettings {
+  return normalizeSystemSettings({
+    id,
+    ...getDefaultSystemSettings(),
+  } as SystemSettings);
+}
+
 export async function fetchSystemSettings(): Promise<SystemSettings | null> {
+  if (isDemoAuthEnabled()) {
+    const { demoGetSession } = await import('@/lib/demo-auth');
+    if (demoGetSession()) return getLocalSystemSettings('demo');
+    return null;
+  }
+
+  if (!isFirebaseConfigured()) return null;
+
+  const auth = getFirebaseAuth();
+  if (!auth.currentUser) return null;
+
   try {
     const records = await getAdminRecords<SystemSettings>(ADMIN_COLLECTIONS.systemSettings);
-    if (!records.length) return null;
+    if (!records.length) return getLocalSystemSettings('default');
     return normalizeSystemSettings(records[0]);
   } catch {
-    return null;
+    return getLocalSystemSettings('local');
   }
 }
 

@@ -13,7 +13,7 @@ const items = [
   { label: 'Regulatory', href: '/qms/recall/regulatory-notification', icon: ShieldAlert, match: ['/qms/recall/regulatory-notification'] },
   { label: 'Closure', href: '/qms/recall/closure', icon: Lock, match: ['/qms/recall/closure'] },
   { label: 'Trend Analysis', href: '/qms/recall/trend-analysis', icon: TrendingUp, match: ['/qms/recall/trend-analysis', '/qms/recall/trends'] },
-  { label: 'Reports', href: '/qms/recall/reports', icon: FileDown, match: ['/qms/recall/reports'] },
+  { label: 'Reports', href: '/qms/recall/reports', icon: FileDown, match: ['/qms/recall/reports', '/qms/recall/analytics'] },
 ];
 
 export function RecallSubNav() {
@@ -30,6 +30,7 @@ export function RecallSubNav() {
               || (item.href.includes('/regulatory') && pathname.includes('/regulatory'))
               || (item.href.includes('/closure') && pathname.includes('/closure'))
               || (item.href.includes('/trend-analysis') && (pathname.includes('/trend-analysis') || pathname.includes('/trends')))
+              || (item.href.includes('/reports') && (pathname.includes('/reports') || pathname.includes('/analytics')))
             : pathname.startsWith(item.href) && pathname !== '/qms/recall';
           return (
             <Link key={item.href} href={item.href} className={cn('flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors', active ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300 font-medium' : 'text-muted-foreground hover:bg-muted hover:text-foreground')}>

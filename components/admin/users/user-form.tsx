@@ -61,8 +61,8 @@ export function UserForm({
   const [modulePermissions, setModulePermissions] = useState<PermissionMatrixData>(emptyPermissionMatrix());
   const [presetId, setPresetId] = useState('');
   const [masters, setMasters] = useState<{
-    departments: { departmentName: string; departmentCode: string; status?: string }[];
-    designations: { designationName: string; designationCode: string; department: string; status?: string }[];
+    departments: { id?: string; departmentName: string; departmentCode: string; status?: string }[];
+    designations: { id?: string; designationName: string; designationCode: string; department: string; status?: string }[];
   }>({ departments: [], designations: [] });
 
   const form = useForm<AdminUser>({
@@ -139,7 +139,7 @@ export function UserForm({
             {masters.departments
               .filter((d) => d.status === 'Active' || !d.status)
               .map((d) => (
-                <SelectItem key={d.departmentCode} value={d.departmentName}>{d.departmentName}</SelectItem>
+                <SelectItem key={d.id ?? d.departmentName} value={d.departmentName}>{d.departmentName}</SelectItem>
               ))}
           </SelectContent>
         </Select>
@@ -158,7 +158,7 @@ export function UserForm({
           <SelectTrigger><SelectValue placeholder="Select designation" /></SelectTrigger>
           <SelectContent>
             {deptDesignations.map((d) => (
-              <SelectItem key={d.designationCode} value={d.designationName}>{d.designationName}</SelectItem>
+              <SelectItem key={d.id ?? `${d.department}-${d.designationName}`} value={d.designationName}>{d.designationName}</SelectItem>
             ))}
           </SelectContent>
         </Select>

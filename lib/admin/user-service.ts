@@ -1,5 +1,5 @@
 import { doc, setDoc } from 'firebase/firestore';
-import { createUserWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
+import { createUserWithEmailAndPassword, sendPasswordResetEmail, signOut as firebaseSignOut } from 'firebase/auth';
 import { getFirebaseAuth, getFirebaseFirestore, isFirebaseConfigured } from '@/lib/firebase';
 import { writeAuditTrail } from '@/lib/audit-trail';
 import { saveUserPermissions } from '@/services/permissionService';
@@ -81,12 +81,49 @@ export async function fetchUserById(id: string): Promise<AdminUser | null> {
   return users.find((u) => u.id === id) ?? null;
 }
 
+type UserMasterDepartment = {
+  id?: string;
+  departmentName: string;
+  departmentCode: string;
+  status?: string;
+  isDeleted?: boolean;
+};
+
+type UserMasterDesignation = {
+  id?: string;
+  designationName: string;
+  designationCode: string;
+  department: string;
+  status?: string;
+  isDeleted?: boolean;
+};
+
+function dedupeMasterRecords<T>(records: T[], keyFn: (record: T) => string): T[] {
+  const seen = new Set<string>();
+  return records.filter((record) => {
+    const key = keyFn(record);
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 export async function fetchUserMasters() {
-  const [departments, designations, roles] = await Promise.all([
-    getAdminRecords<{ departmentName: string; departmentCode: string; status?: string }>(ADMIN_COLLECTIONS.departments).catch(() => []),
-    getAdminRecords<{ designationName: string; designationCode: string; department: string; status?: string }>(ADMIN_COLLECTIONS.designations).catch(() => []),
+  const [departmentsRaw, designationsRaw, roles] = await Promise.all([
+    getAdminRecords<UserMasterDepartment>(ADMIN_COLLECTIONS.departments).catch(() => []),
+    getAdminRecords<UserMasterDesignation>(ADMIN_COLLECTIONS.designations).catch(() => []),
     getAdminRecords<{ roleName: string; roleId: string }>(ADMIN_COLLECTIONS.roles).catch(() => []),
   ]);
+
+  const departments = dedupeMasterRecords(
+    departmentsRaw.filter((d) => !d.isDeleted),
+    (d) => d.departmentName || d.departmentCode,
+  );
+  const designations = dedupeMasterRecords(
+    designationsRaw.filter((d) => !d.isDeleted),
+    (d) => `${d.department}|${d.designationName || d.designationCode}`,
+  );
+
   return { departments, designations, roles };
 }
 
@@ -130,6 +167,8 @@ export async function createSystemUser(
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       });
+      // createUserWithEmailAndPassword signs in as the new user — restore prior session.
+      await firebaseSignOut(getFirebaseAuth());
     } else {
       return { user: null, error: 'Firebase is not configured. Cannot create authentication account.' };
     }

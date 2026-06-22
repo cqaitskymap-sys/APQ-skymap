@@ -14,7 +14,9 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/contexts/auth-context';
-import { isFirebaseConfigured } from '@/lib/firebase';
+import { isFirebaseConfigured } from '@/lib/firebase-config';
+import { isDemoAuthEnabled } from '@/lib/demo-auth-config';
+import { DEMO_SUPER_ADMIN } from '@/lib/demo-auth';
 
 const schema = z.object({
   email: z.string().email('Invalid email address'),
@@ -29,6 +31,7 @@ export default function LoginPage() {
   const { signIn } = useAuth();
   const router = useRouter();
   const firebaseReady = isFirebaseConfigured();
+  const demoMode = isDemoAuthEnabled();
 
   const { register, handleSubmit, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
@@ -42,6 +45,17 @@ export default function LoginPage() {
       setLoading(false);
     } else {
       toast.success('Welcome back!', { description: 'Redirecting to dashboard...' });
+      router.push('/dashboard');
+    }
+  };
+
+  const demoLogin = async () => {
+    setLoading(true);
+    const { error } = await signIn(DEMO_SUPER_ADMIN.email, DEMO_SUPER_ADMIN.password);
+    if (error) {
+      toast.error('Demo login failed', { description: error.message });
+      setLoading(false);
+    } else {
       router.push('/dashboard');
     }
   };
@@ -65,7 +79,7 @@ export default function LoginPage() {
 
         <Card className="border-slate-700/50 bg-slate-800/60 backdrop-blur-xl shadow-2xl">
           <CardContent className="p-8">
-            {!firebaseReady && (
+            {!firebaseReady && !demoMode && (
               <div className="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
                 Firebase is not configured. Add <code className="bg-amber-500/20 px-1 rounded">NEXT_PUBLIC_FIREBASE_*</code> environment variables to enable authentication.
               </div>
@@ -90,7 +104,7 @@ export default function LoginPage() {
                   placeholder="your.email@company.com"
                   className="bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500 focus:border-blue-500 focus:ring-blue-500/20 h-11"
                   autoComplete="email"
-                  disabled={!firebaseReady}
+                  disabled={!firebaseReady && !demoMode}
                 />
                 {errors.email && <p className="text-red-400 text-xs">{errors.email.message}</p>}
               </div>
@@ -109,7 +123,7 @@ export default function LoginPage() {
                     placeholder="••••••••"
                     className="bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500 focus:border-blue-500 focus:ring-blue-500/20 h-11 pr-10"
                     autoComplete="current-password"
-                    disabled={!firebaseReady}
+                    disabled={!firebaseReady && !demoMode}
                   />
                   <button
                     type="button"
@@ -124,7 +138,7 @@ export default function LoginPage() {
 
               <Button
                 type="submit"
-                disabled={loading || !firebaseReady}
+                disabled={loading || (!firebaseReady && !demoMode)}
                 className="w-full h-11 bg-blue-600 hover:bg-blue-500 text-white font-semibold shadow-lg shadow-blue-600/25 transition-all duration-200"
               >
                 {loading ? (
@@ -134,6 +148,26 @@ export default function LoginPage() {
                 )}
               </Button>
             </form>
+
+            {demoMode && (
+              <div className="mt-6 pt-5 border-t border-slate-700">
+                <p className="text-slate-400 text-xs text-center mb-3">Local Demo (Super Admin)</p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full border-slate-600 text-slate-300 hover:bg-slate-700 hover:text-white"
+                  onClick={demoLogin}
+                  disabled={loading}
+                >
+                  Login as Super Admin (Demo)
+                </Button>
+                <p className="text-slate-500 text-[11px] text-center mt-2">
+                  Email: <code className="text-slate-400">{DEMO_SUPER_ADMIN.email}</code>
+                  {' · '}
+                  Password: <code className="text-slate-400">{DEMO_SUPER_ADMIN.password}</code>
+                </p>
+              </div>
+            )}
 
             <p className="text-center text-slate-500 text-xs mt-5">
               Don&apos;t have an account? Contact your system administrator.

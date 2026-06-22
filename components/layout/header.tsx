@@ -21,6 +21,7 @@ function getBreadcrumbs(pathname: string) {
   let path = '';
   for (const part of parts) {
     path += `/${part}`;
+    if (path === '/dashboard') continue;
     crumbs.push({ label: formatBreadcrumbLabel(part), href: path });
   }
   return crumbs;
@@ -47,13 +48,14 @@ export function Header() {
       <MobileNav />
       {/* Company Logo & Name */}
       <div className="flex items-center gap-2 min-w-fit">
-        <div className="relative w-8 h-8">
+        <div className="relative h-8">
           <Image
             src="/logo-1.png"
             alt="Skymap Logo"
-            width={32}
-            height={32}
-            className="object-contain"
+            width={298}
+            height={143}
+            className="h-8 w-auto object-contain"
+            priority
           />
         </div>
         <div className="flex flex-col leading-none">
@@ -66,9 +68,9 @@ export function Header() {
       <div className="hidden md:block w-px h-6 bg-border" />
 
       {/* Breadcrumb */}
-      <nav className="hidden md:flex items-center gap-1 text-sm text-muted-foreground flex-1">
+      <nav aria-label="Breadcrumb" className="hidden md:flex items-center gap-1 text-sm text-muted-foreground flex-1">
         {crumbs.map((crumb, i) => (
-          <span key={crumb.href} className="flex items-center gap-1">
+          <span key={`${crumb.href}-${i}`} className="flex items-center gap-1">
             {i > 0 && <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/50" />}
             {i === crumbs.length - 1 ? (
               <span className="text-foreground font-medium">{crumb.label}</span>
@@ -83,7 +85,9 @@ export function Header() {
       <div className="relative hidden lg:block w-64">
         <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
         <Input
+          type="search"
           placeholder="Search modules, records..."
+          aria-label="Search modules and records"
           className="pl-8 h-8 text-sm bg-muted/50 border-muted-foreground/20 focus:bg-background"
         />
       </div>
@@ -94,6 +98,7 @@ export function Header() {
           variant="ghost"
           size="icon"
           className="h-8 w-8"
+          aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
           onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
         >
           <Sun className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />

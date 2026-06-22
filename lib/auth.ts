@@ -88,10 +88,29 @@ export async function signIn(email: string, password: string): Promise<User> {
     const auth = requireAuth();
     const result = await signInWithEmailAndPassword(auth, email, password);
     if (result.user) {
-      await updateDoc(doc(requireDb(), PROFILES_COLLECTION, result.user.uid), {
-        last_login: nowIso(),
-        updated_at: nowIso(),
-      }).catch(() => undefined);
+      const profileRef = doc(requireDb(), PROFILES_COLLECTION, result.user.uid);
+      const profileSnap = await getDoc(profileRef);
+      if (!profileSnap.exists()) {
+        await setDoc(profileRef, {
+          id: result.user.uid,
+          email: result.user.email || email,
+          full_name: result.user.displayName || email.split('@')[0] || 'User',
+          role: 'viewer' as UserRole,
+          department: '',
+          employee_id: '',
+          phone: '',
+          avatar_url: '',
+          is_active: true,
+          last_login: nowIso(),
+          created_at: nowIso(),
+          updated_at: nowIso(),
+        });
+      } else {
+        await updateDoc(profileRef, {
+          last_login: nowIso(),
+          updated_at: nowIso(),
+        }).catch(() => undefined);
+      }
 
       const profile = await getUserProfile(result.user.uid);
       await writeAuditTrail({

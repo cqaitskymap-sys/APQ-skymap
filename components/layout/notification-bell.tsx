@@ -11,20 +11,20 @@ import {
   DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useAuth } from '@/contexts/auth-context';
-import { isFirebaseConfigured } from '@/lib/firebase';
+import { isFirebaseConfigured } from '@/lib/firebase-config';
 import {
   subscribeToNotifications, markNotificationAsRead, type NotificationRecord,
 } from '@/lib/notification-service';
 import { cn } from '@/lib/utils';
 
 export function NotificationBell() {
-  const { user } = useAuth();
+  const { user, isDemoMode } = useAuth();
   const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
 
   useEffect(() => {
-    if (!user?.uid || !isFirebaseConfigured()) return;
+    if (!user?.uid || !isFirebaseConfigured() || isDemoMode) return;
     return subscribeToNotifications(user.uid, setNotifications, undefined, 15);
-  }, [user?.uid]);
+  }, [user?.uid, isDemoMode]);
 
   const unreadCount = notifications.filter((n) => !n.isRead).length;
 
@@ -36,7 +36,12 @@ export function NotificationBell() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="h-8 w-8 relative">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 relative"
+          aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : 'Notifications'}
+        >
           <Bell className="h-4 w-4" />
           {unreadCount > 0 && (
             <span className="absolute top-0.5 right-0.5 min-w-[16px] h-4 px-1 bg-red-500 text-white text-[10px] rounded-full flex items-center justify-center font-bold">

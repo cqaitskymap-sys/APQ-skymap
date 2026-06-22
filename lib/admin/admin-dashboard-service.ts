@@ -4,6 +4,7 @@ import {
   getFirebaseFirestore, getFirebaseStorage, isFirebaseConfigured, getFirebaseAuth,
 } from '@/lib/firebase';
 import { ADMIN_COLLECTIONS, ADMIN_ROLES } from './constants';
+import { isDemoAuthEnabled } from '@/lib/demo-auth-config';
 import {
   checkFirebaseConnection, getAuditLogs, logAuditEvent,
 } from './admin-service';
@@ -87,7 +88,7 @@ export interface AdminDashboardData {
 const EMPTY_CHART: ChartPoint[] = [{ name: 'No Data', value: 0 }];
 
 async function safeDocs(collectionName: string, max = 500): Promise<Record<string, unknown>[]> {
-  if (!isFirebaseConfigured()) return [];
+  if (!isFirebaseConfigured() || isDemoAuthEnabled()) return [];
   try {
     const snap = await getDocs(
       query(collection(getFirebaseFirestore(), collectionName), limit(max))
@@ -140,6 +141,19 @@ export async function getExtendedSystemHealth(): Promise<{
   checks: SystemHealthDetail[];
   checkedAt: string;
 }> {
+  if (isDemoAuthEnabled()) {
+    const checks: SystemHealthDetail[] = [
+      { name: 'Demo Mode', status: 'Healthy', detail: 'Local demo — Firebase backend skipped' },
+      { name: 'Application', status: 'Healthy', detail: 'UI running normally' },
+    ];
+    return {
+      overall: 'Healthy',
+      score: 100,
+      checks,
+      checkedAt: new Date().toISOString(),
+    };
+  }
+
   const checks: SystemHealthDetail[] = [];
   const firebase = await checkFirebaseConnection();
 

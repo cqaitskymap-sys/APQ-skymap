@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { isFirebaseConfigured, getFirebaseSetupMessage } from '@/lib/firebase';
+import { isFirebaseConfigured, getFirebaseSetupMessage } from '@/lib/firebase-config';
 import { AlertTriangle } from 'lucide-react';
 
 export function FirebaseSetupBanner() {

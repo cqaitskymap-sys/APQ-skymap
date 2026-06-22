@@ -33,7 +33,7 @@ export function AdminBreadcrumb() {
           </BreadcrumbLink>
         </BreadcrumbItem>
         {crumbs.map((crumb, i) => (
-          <span key={crumb.href} className="flex items-center gap-1.5">
+          <span key={`${crumb.href}-${i}`} className="flex items-center gap-1.5">
             <BreadcrumbSeparator><ChevronRight className="h-3.5 w-3.5" /></BreadcrumbSeparator>
             <BreadcrumbItem>
               {i === crumbs.length - 1 ? (

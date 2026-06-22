@@ -4,6 +4,7 @@ import {
 } from 'firebase/firestore';
 import { createAuditLog } from '@/lib/audit-trail';
 import { getFirebaseFirestore, isFirebaseConfigured } from '@/lib/firebase';
+import { isDemoAuthEnabled } from '@/lib/demo-auth-config';
 import { ADMIN_COLLECTIONS } from '@/lib/admin/constants';
 
 export const NOTIFICATIONS_COLLECTION = 'notifications';
@@ -276,7 +277,7 @@ export function subscribeToNotifications(
   onError?: (error: Error) => void,
   max = 25,
 ): Unsubscribe {
-  if (!isFirebaseConfigured()) {
+  if (!isFirebaseConfigured() || isDemoAuthEnabled()) {
     onData([]);
     return () => undefined;
   }

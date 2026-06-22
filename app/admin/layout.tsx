@@ -10,13 +10,13 @@ import { seedDefaultData } from '@/lib/admin/admin-service';
 
 export default function AdminRootLayout({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
-  const { user } = useAuth();
+  const { user, isDemoMode } = useAuth();
 
   useEffect(() => {
-    if (user?.uid) {
+    if (user?.uid && !isDemoMode) {
       seedDefaultData(user.uid).catch(console.error);
     }
-  }, [user?.uid]);
+  }, [user?.uid, isDemoMode]);
 
   return (
     <AdminAuthGuard>

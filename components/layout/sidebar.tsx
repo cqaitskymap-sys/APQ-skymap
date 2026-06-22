@@ -264,8 +264,8 @@ export function Sidebar({ collapsed, onToggle, embedded = false }: SidebarProps)
       )} style={{ borderColor: 'hsl(var(--sidebar-border))' }}>
         <div className="flex items-center h-16 border-b px-4 flex-shrink-0" style={{ borderColor: 'hsl(var(--sidebar-border))' }}>
           <div className="flex items-center gap-2.5 flex-shrink-0 w-full">
-            <div className="relative w-8 h-8 flex-shrink-0">
-              <Image src="/logo-1.png" alt="Skymap Logo" width={32} height={32} className="object-contain" />
+            <div className="relative h-8 flex-shrink-0">
+              <Image src="/logo-1.png" alt="Skymap Logo" width={298} height={143} className="h-8 w-auto object-contain" priority />
             </div>
             {!collapsed && (
               <div className="overflow-hidden flex-1">
@@ -273,7 +273,7 @@ export function Sidebar({ collapsed, onToggle, embedded = false }: SidebarProps)
                 <span className="text-xs leading-tight block text-blue-300">Pharmaceuticals</span>
               </div>
             )}
-            <button onClick={onToggle} className="ml-auto text-slate-400 hover:text-white transition-colors p-1 rounded">
+            <button type="button" onClick={onToggle} aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} className="ml-auto text-slate-400 hover:text-white transition-colors p-1 rounded">
               {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
             </button>
           </div>
