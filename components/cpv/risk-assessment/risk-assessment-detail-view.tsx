@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
@@ -11,7 +12,7 @@ import { cpvPermissions } from '@/lib/cpv';
 import {
   fetchRiskAssessmentById, fetchRiskAssessmentAuditTrail,
   reviewRiskAssessment, approveRiskAssessment, rejectRiskAssessment,
-  closeRiskAssessment, recordEffectivenessReview, addRiskControl,
+  recordEffectivenessReview, addRiskControl,
   linkRiskRecord, logRiskExport, updateRiskAssessment,
 } from '@/lib/cpv-risk-assessment-service';
 import {
@@ -194,11 +195,24 @@ export function RiskAssessmentDetailView({ id }: { id: string }) {
               </>
             )}
             {canClose && !['Closed', 'Accepted', 'Rejected'].includes(record.riskStatus) && (
-              <Button size="sm" variant="outline" onClick={async () => {
-                await closeRiskAssessment(record.id, actor, record);
-                toast.success('Risk closed');
-                await load();
-              }}>Close Risk</Button>
+              <Button size="sm" variant="outline" asChild>
+                <Link href={`/qms/risk-management/${record.id}/fmea`}>FMEA</Link>
+              </Button>
+            )}
+            {canClose && !['Closed', 'Accepted', 'Rejected'].includes(record.riskStatus) && (
+              <Button size="sm" variant="outline" asChild>
+                <Link href={`/qms/risk-management/${record.id}/fmea`}>FMEA Assessment</Link>
+              </Button>
+            )}
+            {canClose && !['Closed', 'Accepted', 'Rejected'].includes(record.riskStatus) && (
+              <Button size="sm" variant="outline" asChild>
+                <Link href={`/qms/risk-management/${record.id}/mitigation-plan`}>Mitigation Plan</Link>
+              </Button>
+            )}
+            {canClose && !['Closed', 'Accepted', 'Rejected'].includes(record.riskStatus) && (
+              <Button size="sm" variant="outline" asChild>
+                <Link href={`/qms/risk-management/${record.id}/closure`}>Risk Closure</Link>
+              </Button>
             )}
           </>
         }

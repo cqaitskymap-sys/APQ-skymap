@@ -5,28 +5,40 @@ import {
 
 const yesNoImpact = z.boolean().default(false);
 
-export const changeCreateSchema = z.object({
+const baseFields = {
   change_date: z.string().min(1, 'Change date is required'),
   department: z.enum(CC_DEPARTMENTS as unknown as [string, ...string[]]),
   initiated_by_name: z.string().min(1, 'Initiated by is required'),
-  product_name: z.string().optional().default(''),
-  batch_number: z.string().optional().default(''),
+  change_type: z.enum(CHANGE_TYPES as unknown as [string, ...string[]]),
+  change_category: z.enum(CHANGE_CATEGORIES as unknown as [string, ...string[]]),
+  change_priority: z.enum(CHANGE_PRIORITIES as unknown as [string, ...string[]]),
+  temporary_permanent: z.enum(TEMPORARY_OPTIONS as unknown as [string, ...string[]]).default('Permanent'),
+};
+
+export const ccCreateStep1Schema = z.object({
+  ...baseFields,
+});
+
+export const ccCreateStep2Schema = z.object({
   change_title: z.string().min(3, 'Title must be at least 3 characters'),
   change_description: z.string().min(10, 'Description is required'),
   current_system: z.string().min(5, 'Current system/process is required'),
   proposed_change: z.string().min(5, 'Proposed change is required'),
   reason_for_change: z.string().min(5, 'Reason for change is required'),
-  change_type: z.enum(CHANGE_TYPES as unknown as [string, ...string[]]),
-  change_category: z.enum(CHANGE_CATEGORIES as unknown as [string, ...string[]]),
-  change_priority: z.enum(CHANGE_PRIORITIES as unknown as [string, ...string[]]),
-  temporary_permanent: z.enum(TEMPORARY_OPTIONS as unknown as [string, ...string[]]).default('Permanent'),
-  planned_implementation_date: z.string().min(1, 'Planned implementation date is required'),
+});
+
+export const ccCreateStep3Schema = z.object({
+  product_name: z.string().optional().default(''),
+  batch_number: z.string().optional().default(''),
   affected_documents: z.string().optional().default(''),
   affected_equipment: z.string().optional().default(''),
   affected_material: z.string().optional().default(''),
   affected_vendor: z.string().optional().default(''),
   affected_process: z.string().optional().default(''),
   affected_product: z.string().optional().default(''),
+});
+
+export const ccCreateStep4Schema = z.object({
   regulatory_impact: yesNoImpact,
   validation_impact: yesNoImpact,
   csv_impact: yesNoImpact,
@@ -38,9 +50,32 @@ export const changeCreateSchema = z.object({
   risk_assessment_required: z.boolean().default(true),
   capa_required: z.boolean().default(false),
   effectiveness_check_required: z.boolean().default(true),
+});
+
+export const ccCreateStep5Schema = z.object({
+  planned_implementation_date: z.string().min(1, 'Planned implementation date is required'),
+  target_closure_date: z.string().optional().default(''),
+  assigned_owner: z.string().min(1, 'Assigned owner is required'),
+  assigned_owner_name: z.string().optional().default(''),
+  qa_reviewer: z.string().min(1, 'QA reviewer is required'),
+  qa_reviewer_name: z.string().optional().default(''),
+  remarks: z.string().optional().default(''),
   qa_remarks: z.string().optional().default(''),
 });
 
+export const changeCreateSchema = ccCreateStep1Schema
+  .merge(ccCreateStep2Schema)
+  .merge(ccCreateStep3Schema)
+  .merge(ccCreateStep4Schema)
+  .merge(ccCreateStep5Schema);
+
+export type ChangeCreateInput = z.infer<typeof changeCreateSchema>;
+
+export {
+  CHANGE_TYPES, CHANGE_CATEGORIES, CHANGE_PRIORITIES, CC_DEPARTMENTS, TEMPORARY_OPTIONS,
+};
+
+// Legacy exports for other modules
 export const impactAssessmentSchema = z.object({
   quality_impact: z.string().min(3, 'Required'),
   safety_impact: z.string().min(3, 'Required'),
@@ -88,11 +123,8 @@ export const changeApprovalSchema = z.object({
   e_signature: z.string().min(3, 'E-signature required'),
 });
 
-export type ChangeCreateInput = z.infer<typeof changeCreateSchema>;
 export type ImpactAssessmentInput = z.infer<typeof impactAssessmentSchema>;
 export type RiskAssessmentInput = z.infer<typeof riskAssessmentSchema>;
 export type ImplementationActionInput = z.infer<typeof implementationActionSchema>;
 export type EffectivenessReviewInput = z.infer<typeof effectivenessReviewSchema>;
 export type ChangeApprovalInput = z.infer<typeof changeApprovalSchema>;
-
-export { CHANGE_TYPES, CHANGE_CATEGORIES, CHANGE_PRIORITIES, CC_DEPARTMENTS, TEMPORARY_OPTIONS };

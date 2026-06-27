@@ -22,7 +22,7 @@ function getBreadcrumbs(pathname: string) {
   for (const part of parts) {
     path += `/${part}`;
     if (path === '/dashboard') continue;
-    crumbs.push({ label: formatBreadcrumbLabel(part), href: path });
+    crumbs.push({ label: formatBreadcrumbLabel(part, pathname), href: path });
   }
   return crumbs;
 }

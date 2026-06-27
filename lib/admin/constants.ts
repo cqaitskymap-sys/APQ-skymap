@@ -426,7 +426,9 @@ export const BACKUP_EXPORT_COLLECTIONS = [
   'esign_settings', 'notification_settings', 'cpv_reviews', 'cpp_parameters', 'cpp_results',
   'cqa_parameters', 'cqa_results', 'pqr_records', 'deviations', 'oos_records', 'capa_records',
   'change_controls', 'stability_studies', 'complaints', 'recalls', 'documents',
-  'training_records', 'audits', 'vendors', 'validation_records', 'csv_systems',
+  'training_records', 'training_master', 'training_assignments', 'training_assessments',
+  'training_effectiveness', 'training_matrix', 'training_attendance', 'competency_records',
+  'document_training_links', 'audits', 'vendors', 'validation_records', 'csv_systems',
   'equipment_master', 'monitoring_records', 'warehouse_materials', 'ebmr_records',
   'audit_trail', 'notifications',
 ] as const;
@@ -440,7 +442,9 @@ export const BACKUP_SCOPE_COLLECTIONS: Record<string, readonly string[]> = {
   ],
   'QMS Data': [
     'deviations', 'oos_records', 'capa_records', 'change_controls', 'stability_studies',
-    'complaints', 'recalls', 'documents', 'training_records', 'audits', 'vendors',
+    'complaints', 'recalls', 'documents', 'training_records', 'training_master',
+    'training_assignments', 'training_assessments', 'training_effectiveness', 'training_matrix',
+    'training_attendance', 'competency_records', 'audits', 'vendors',
     'validation_records', 'csv_systems', 'equipment_master', 'monitoring_records',
     'warehouse_materials', 'ebmr_records',
   ],

@@ -1,0 +1,30 @@
+export {
+  previewRiskReport,
+  fetchRiskReportRecords,
+  getRiskReportById,
+  generateRiskReport,
+  scheduleRiskReport,
+  softDeleteRiskReport,
+  logRiskReportPreviewed,
+  logManagementReportViewed,
+  exportRiskReport,
+  logRiskReportPrinted,
+  fetchRiskReportProductOptions,
+  fetchRiskReportOwnerOptions,
+  fetchRiskDashboardAnalytics,
+  fetchRiskExportHistory,
+  openRiskReportPdfHtml,
+  type RiskReportActor,
+  type RiskReportFilterInput,
+  type RiskReportFormData,
+  type RiskReportRecord,
+} from '@/lib/risk-reports-service';
+
+export type {
+  RiskReportAnalyticsResult,
+  RiskReportAnalyticsMetrics,
+  RiskReportChartData,
+  RiskManagementReviewSummary,
+  RiskReportPreviewRow,
+  RiskReportType,
+} from '@/lib/risk-reports-records';

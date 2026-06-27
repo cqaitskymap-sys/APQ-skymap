@@ -25,10 +25,12 @@ async function audit(actor: CcActor, action: string, recordId: string, oldValue:
   });
 }
 
-async function notify(title: string, message: string, changeId: string, userId: string) {
+async function notify(title: string, message: string, changeId: string, opts?: { userId?: string; targetRole?: string }) {
   try {
     await addDoc(collection(getFirebaseFirestore(), CC_COLLECTIONS.notifications), {
-      title, message, module: 'Change Control', record_id: changeId, user_id: userId,
+      title, message, module: 'Change Control', record_id: changeId,
+      ...(opts?.userId ? { user_id: opts.userId } : {}),
+      ...(opts?.targetRole ? { target_role: opts.targetRole } : {}),
       read: false, created_at: now(),
     });
   } catch (e) { console.error('Notification failed:', e); }
@@ -36,7 +38,7 @@ async function notify(title: string, message: string, changeId: string, userId: 
 
 export async function generateChangeNumber(): Promise<string> {
   const year = new Date().getFullYear();
-  const prefix = `CC-${year}-`;
+  const prefix = `CC/${year}/`;
   try {
     const snap = await getDocs(query(
       collection(getFirebaseFirestore(), CC_COLLECTIONS.records),
@@ -47,29 +49,34 @@ export async function generateChangeNumber(): Promise<string> {
     ));
     if (!snap.empty) {
       const last = snap.docs[0].data().change_control_number as string;
-      const seq = parseInt(last.split('-').pop() || '0', 10) + 1;
+      const seq = parseInt(last.split('/').pop() || '0', 10) + 1;
       return `${prefix}${String(seq).padStart(4, '0')}`;
     }
   } catch {
     const all = await getDocs(collection(getFirebaseFirestore(), CC_COLLECTIONS.records));
-    return `${prefix}${String(all.size + 1).padStart(4, '0')}`;
+    const yearCount = all.docs.filter((d) => String(d.data().change_control_number || '').startsWith(prefix)).length;
+    return `${prefix}${String(yearCount + 1).padStart(4, '0')}`;
   }
   return `${prefix}0001`;
 }
 
 async function linkBatch(batchNumber: string) {
-  if (!batchNumber) return { batch_id: null, pqr_id: null };
+  if (!batchNumber) return { batch_id: null, pqr_id: null, cpv_id: null };
   try {
     const snap = await getDocs(query(
       collection(getFirebaseFirestore(), CC_COLLECTIONS.batches),
       where('batch_number', '==', batchNumber),
       limit(1),
     ));
-    if (snap.empty) return { batch_id: null, pqr_id: null };
+    if (snap.empty) return { batch_id: null, pqr_id: null, cpv_id: null };
     const data = snap.docs[0].data();
-    return { batch_id: snap.docs[0].id, pqr_id: (data.pqr_id as string) || null };
+    return {
+      batch_id: snap.docs[0].id,
+      pqr_id: (data.pqr_id as string) || null,
+      cpv_id: (data.cpv_id as string) || (data.cpp_id as string) || null,
+    };
   } catch {
-    return { batch_id: null, pqr_id: null };
+    return { batch_id: null, pqr_id: null, cpv_id: null };
   }
 }
 
@@ -99,6 +106,7 @@ export async function createChangeControl(
     change_priority: input.change_priority,
     temporary_permanent: input.temporary_permanent,
     planned_implementation_date: input.planned_implementation_date,
+    target_closure_date: input.target_closure_date || null,
     actual_implementation_date: null,
     affected_documents: input.affected_documents || '',
     affected_equipment: input.affected_equipment || '',
@@ -117,12 +125,18 @@ export async function createChangeControl(
     risk_assessment_required: input.risk_assessment_required,
     capa_required: input.capa_required,
     effectiveness_check_required: input.effectiveness_check_required,
-    qa_remarks: input.qa_remarks || '',
+    assigned_owner: input.assigned_owner,
+    assigned_owner_name: input.assigned_owner_name || input.assigned_owner,
+    qa_reviewer: input.qa_reviewer,
+    qa_reviewer_name: input.qa_reviewer_name || input.qa_reviewer,
+    remarks: input.remarks || '',
+    qa_remarks: input.qa_remarks || input.remarks || '',
     status: 'draft',
     linked_capa_id: null,
     linked_capa_number: null,
     pqr_id: batchLink.pqr_id,
     batch_id: batchLink.batch_id,
+    cpv_id: batchLink.cpv_id,
     created_by: actor.id,
     created_by_name: actor.name,
     updated_by: actor.id,
@@ -199,10 +213,32 @@ export async function syncOverdueChanges(): Promise<number> {
 export async function submitChange(id: string, actor: CcActor): Promise<ChangeControlRecord> {
   const cc = await getChangeById(id);
   if (!cc || cc.status !== 'draft') throw new Error('Only draft changes can be submitted');
-  return updateChange(id, { status: 'submitted' }, actor, true);
+  const updated = await updateChange(id, { status: 'submitted' }, actor, true);
+  if (cc.qa_reviewer) {
+    await notify('Change Control Submitted', `${cc.change_control_number} — ${cc.change_title} submitted for QA review.`, id, { userId: cc.qa_reviewer });
+  } else {
+    await notify('Change Control Submitted', `${cc.change_control_number} submitted for QA review.`, id, { targetRole: 'qa' });
+  }
+  if (cc.regulatory_impact) {
+    await notify('Regulatory Review Required', `Change ${cc.change_control_number} requires Regulatory Affairs review.`, id, { targetRole: 'regulatory' });
+  }
+  if (cc.csv_impact) {
+    await notify('CSV Review Required', `Change ${cc.change_control_number} requires IT/CSV team review.`, id, { targetRole: 'it_csv' });
+  }
+  if (requiresHeadQaApproval(cc.change_category)) {
+    await notify('Head QA Approval Required', `Critical change ${cc.change_control_number} requires Head QA approval.`, id, { targetRole: 'head_qa' });
+  }
+  if (cc.validation_impact) {
+    await notify('Validation Task Recommended', `Validation activities recommended for ${cc.change_control_number}.`, id, { userId: cc.assigned_owner || actor.id });
+  }
+  if (cc.training_impact) {
+    await notify('Training Task Recommended', `Training plan recommended for ${cc.change_control_number}.`, id, { userId: cc.assigned_owner || actor.id });
+  }
+  await audit(actor, 'SUBMIT', id, cc, updated, 'Change control submitted');
+  return updated;
 }
 
-async function createAutoImplementationTasks(change: ChangeControlRecord, actor: CcActor) {
+export async function createAutoImplementationTasks(change: ChangeControlRecord, actor: CcActor) {
   const existing = await getImplementationActions(change.id);
   const existingTypes = new Set(existing.map((a) => a.action_type));
   const tasks: Array<{ action_item: string; action_type: ChangeImplementationAction['action_type'] }> = [];
@@ -266,9 +302,14 @@ export async function saveImpactAssessment(
 }
 
 export async function getImpactAssessment(changeId: string): Promise<ChangeImpactAssessment | null> {
-  const snap = await getDocs(query(collection(getFirebaseFirestore(), CC_COLLECTIONS.impact), where('change_id', '==', changeId), limit(1)));
-  if (snap.empty) return null;
-  return { id: snap.docs[0].id, ...snap.docs[0].data() } as ChangeImpactAssessment;
+  try {
+    const { getLegacyImpactAssessment } = await import('@/lib/cc-impact-service');
+    return await getLegacyImpactAssessment(changeId);
+  } catch {
+    const snap = await getDocs(query(collection(getFirebaseFirestore(), CC_COLLECTIONS.impact), where('change_id', '==', changeId), limit(1)));
+    if (snap.empty) return null;
+    return { id: snap.docs[0].id, ...snap.docs[0].data() } as ChangeImpactAssessment;
+  }
 }
 
 export async function saveRiskAssessment(
@@ -306,6 +347,13 @@ export async function saveRiskAssessment(
 }
 
 export async function getRiskAssessment(changeId: string): Promise<ChangeRiskAssessment | null> {
+  try {
+    const { getLegacyRiskAssessment } = await import('@/lib/cc-risk-service');
+    const legacy = await getLegacyRiskAssessment(changeId);
+    if (legacy) return legacy;
+  } catch {
+    // fall through
+  }
   const snap = await getDocs(query(collection(getFirebaseFirestore(), CC_COLLECTIONS.risk), where('change_id', '==', changeId), limit(1)));
   if (snap.empty) return null;
   return { id: snap.docs[0].id, ...snap.docs[0].data() } as ChangeRiskAssessment;
@@ -327,7 +375,16 @@ export async function addImplementationAction(
 
 export async function getImplementationActions(changeId: string): Promise<ChangeImplementationAction[]> {
   const snap = await getDocs(query(collection(getFirebaseFirestore(), CC_COLLECTIONS.implementation), where('change_id', '==', changeId)));
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as ChangeImplementationAction));
+  const legacy = snap.docs.map((d) => ({ id: d.id, ...d.data() } as ChangeImplementationAction));
+  if (legacy.length) return legacy;
+  try {
+    const { getCcImplementationTasks } = await import('@/lib/cc-implementation-service');
+    const { mapCcImplementationTaskToLegacyAction } = await import('@/lib/cc-implementation-records');
+    const tasks = await getCcImplementationTasks(changeId);
+    return tasks.map((task) => mapCcImplementationTaskToLegacyAction(task) as ChangeImplementationAction);
+  } catch {
+    return legacy;
+  }
 }
 
 export async function completeImplementationAction(
@@ -376,9 +433,8 @@ export async function saveEffectivenessReview(
 }
 
 export async function getEffectivenessReview(changeId: string): Promise<ChangeEffectivenessReview | null> {
-  const snap = await getDocs(query(collection(getFirebaseFirestore(), CC_COLLECTIONS.effectiveness), where('change_id', '==', changeId), limit(1)));
-  if (snap.empty) return null;
-  return { id: snap.docs[0].id, ...snap.docs[0].data() } as ChangeEffectivenessReview;
+  const { getCcEffectivenessReview } = await import('@/lib/cc-effectiveness-service');
+  return getCcEffectivenessReview(changeId);
 }
 
 export async function submitApproval(
@@ -449,14 +505,14 @@ export async function closeChange(changeId: string, actor: CcActor, qaRemarks?: 
   }, actor, true);
   await audit(actor, 'CLOSE', changeId, change, updated);
   if (change.pqr_id) {
-    await notify('Change Control Closed', `CC ${change.change_control_number} closed and linked to PQR review`, changeId, change.created_by);
+    await notify('Change Control Closed', `CC ${change.change_control_number} closed and linked to PQR review`, changeId, { userId: change.created_by });
   }
   return updated;
 }
 
 export async function getApprovals(changeId: string): Promise<ChangeApproval[]> {
-  const snap = await getDocs(query(collection(getFirebaseFirestore(), CC_COLLECTIONS.approvals), where('change_id', '==', changeId)));
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as ChangeApproval));
+  const { getCcApprovals } = await import('@/lib/cc-approval-service');
+  return getCcApprovals(changeId);
 }
 
 export async function getAttachments(changeId: string): Promise<ChangeAttachment[]> {
@@ -480,8 +536,8 @@ export async function uploadAttachment(changeId: string, file: File, actor: CcAc
 }
 
 export async function getAuditLogsForChange(changeId: string) {
-  const snap = await getDocs(query(collection(getFirebaseFirestore(), CC_COLLECTIONS.auditLogs), where('recordId', '==', changeId), limit(100)));
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  const { getAuditLogsForChange: fetchCcAuditLogs } = await import('@/lib/cc-audit-trail-service');
+  return fetchCcAuditLogs(changeId);
 }
 
 export function computeDashboardMetrics(records: ChangeControlRecord[]): CcDashboardMetrics {

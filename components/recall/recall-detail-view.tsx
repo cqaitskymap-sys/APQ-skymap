@@ -187,10 +187,29 @@ export function RecallDetailView({ record, onRefresh }: { record: RecallRecord; 
         </TabsContent>
 
         <TabsContent value="audit" className="mt-4">
-          <Card><CardContent className="p-0 overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Action</TableHead><TableHead>User</TableHead><TableHead>Date</TableHead></TableRow></TableHeader><TableBody>
-            {auditLogs.length === 0 ? <TableRow><TableCell colSpan={3} className="text-center py-6 text-muted-foreground">No audit entries</TableCell></TableRow>
-              : auditLogs.map((log, i) => <TableRow key={i}><TableCell>{String(log.action || '')}</TableCell><TableCell>{String(log.userName || '')}</TableCell><TableCell>{String(log.dateTime || '')}</TableCell></TableRow>)}
-          </TableBody></Table></CardContent></Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-base">Audit Trail</CardTitle>
+              <Link href={`/qms/recall/${record.id}/audit-trail`}>
+                <Button variant="outline" size="sm">Open Full Audit Trail</Button>
+              </Link>
+            </CardHeader>
+            <CardContent className="p-0 overflow-x-auto">
+              <Table>
+                <TableHeader><TableRow><TableHead>Action</TableHead><TableHead>User</TableHead><TableHead>Date</TableHead></TableRow></TableHeader>
+                <TableBody>
+                  {auditLogs.length === 0 ? <TableRow><TableCell colSpan={3} className="text-center py-6 text-muted-foreground">No audit entries</TableCell></TableRow>
+                    : auditLogs.slice(0, 10).map((log, i) => (
+                      <TableRow key={i}>
+                        <TableCell>{String(log.actionType || log.action || '')}</TableCell>
+                        <TableCell>{String(log.userName || '')}</TableCell>
+                        <TableCell>{String(log.dateTime || '')}</TableCell>
+                      </TableRow>
+                    ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
 

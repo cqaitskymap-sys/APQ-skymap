@@ -218,7 +218,10 @@ export function CcDetailView({ record, onRefresh, defaultTab = 'overview' }: CcD
                 ['Priority', record.change_priority],
                 ['Temporary/Permanent', record.temporary_permanent],
                 ['Planned Implementation', record.planned_implementation_date || '—'],
+                ['Target Closure', record.target_closure_date || '—'],
                 ['Actual Implementation', record.actual_implementation_date || '—'],
+                ['Assigned Owner', record.assigned_owner_name || record.assigned_owner || '—'],
+                ['QA Reviewer', record.qa_reviewer_name || record.qa_reviewer || '—'],
               ].map(([k, v]) => (
                 <div key={String(k)}><span className="text-muted-foreground">{k}: </span><strong>{v}</strong></div>
               ))}
@@ -226,6 +229,17 @@ export function CcDetailView({ record, onRefresh, defaultTab = 'overview' }: CcD
               <div className="md:col-span-3"><span className="text-muted-foreground">Current: </span>{record.current_system}</div>
               <div className="md:col-span-3"><span className="text-muted-foreground">Proposed: </span>{record.proposed_change}</div>
               <div className="md:col-span-3"><span className="text-muted-foreground">Reason: </span>{record.reason_for_change}</div>
+              {(record.pqr_id || record.cpv_id) && (
+                <div className="md:col-span-3 flex flex-wrap gap-3">
+                  {record.pqr_id && (
+                    <Link href={`/qms/pqr/${record.pqr_id}`} className="text-blue-600 hover:underline text-sm">Linked PQR</Link>
+                  )}
+                  {record.cpv_id && (
+                    <Link href={`/cpv/${record.cpv_id}`} className="text-blue-600 hover:underline text-sm">Linked CPV</Link>
+                  )}
+                </div>
+              )}
+              {record.remarks && <div className="md:col-span-3"><span className="text-muted-foreground">Remarks: </span>{record.remarks}</div>}
               {record.qa_remarks && <div className="md:col-span-3"><span className="text-muted-foreground">QA Remarks: </span>{record.qa_remarks}</div>}
             </CardContent>
           </Card>
@@ -233,7 +247,12 @@ export function CcDetailView({ record, onRefresh, defaultTab = 'overview' }: CcD
 
         <TabsContent value="impact" className="mt-4">
           <Card>
-            <CardHeader><CardTitle className="text-base">Impact Assessment</CardTitle></CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="text-base">Impact Assessment</CardTitle>
+              <Link href={`/qms/change-control/${record.id}/impact-assessment`}>
+                <Button variant="outline" size="sm">Open Full Assessment</Button>
+              </Link>
+            </CardHeader>
             <CardContent>
               {!readOnly ? (
                 <Form {...impactForm}>
@@ -290,7 +309,12 @@ export function CcDetailView({ record, onRefresh, defaultTab = 'overview' }: CcD
 
         <TabsContent value="risk" className="mt-4">
           <Card>
-            <CardHeader><CardTitle className="text-base">Risk Assessment (FMEA)</CardTitle></CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="text-base">Risk Assessment</CardTitle>
+              <Link href={`/qms/change-control/${record.id}/risk-assessment`}>
+                <Button variant="outline" size="sm">Open Full Assessment</Button>
+              </Link>
+            </CardHeader>
             <CardContent>
               {!readOnly && record.risk_assessment_required ? (
                 <Form {...riskForm}>
@@ -337,9 +361,20 @@ export function CcDetailView({ record, onRefresh, defaultTab = 'overview' }: CcD
         </TabsContent>
 
         <TabsContent value="implementation" className="mt-4 space-y-4">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="text-base">Implementation Plan</CardTitle>
+              <Link href={`/qms/change-control/${record.id}/implementation-plan`}>
+                <Button variant="outline" size="sm">Open Full Plan</Button>
+              </Link>
+            </CardHeader>
+            <CardContent className="text-sm text-muted-foreground">
+              Manage tasks, dependencies, milestones, and QA verification in the full implementation plan workspace.
+            </CardContent>
+          </Card>
           {!readOnly && (
             <Card>
-              <CardHeader><CardTitle className="text-base">Add Action Item</CardTitle></CardHeader>
+              <CardHeader><CardTitle className="text-base">Add Action Item (Legacy)</CardTitle></CardHeader>
               <CardContent>
                 <Form {...implForm}>
                   <form onSubmit={implForm.handleSubmit(async (data) => {
@@ -437,7 +472,12 @@ export function CcDetailView({ record, onRefresh, defaultTab = 'overview' }: CcD
 
         <TabsContent value="effectiveness" className="mt-4">
           <Card>
-            <CardHeader><CardTitle className="text-base">Effectiveness Review</CardTitle></CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="text-base">Effectiveness Review</CardTitle>
+              <Link href={`/qms/change-control/${record.id}/effectiveness-review`}>
+                <Button variant="outline" size="sm">Open Full Review</Button>
+              </Link>
+            </CardHeader>
             <CardContent>
               {effectiveness ? (
                 <div className="text-sm space-y-2">
@@ -538,7 +578,12 @@ export function CcDetailView({ record, onRefresh, defaultTab = 'overview' }: CcD
 
         <TabsContent value="approval" className="mt-4">
           <Card>
-            <CardHeader><CardTitle className="text-base">Approval Workflow</CardTitle></CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="text-base">Approval Workflow</CardTitle>
+              <Link href={`/qms/change-control/${record.id}/approval`}>
+                <Button variant="outline" size="sm">Open Full Workflow</Button>
+              </Link>
+            </CardHeader>
             <CardContent className="space-y-4">
               {requiresRegulatoryReview(record) && (
                 <p className="text-sm text-amber-600">Regulatory Affairs review is mandatory for this change.</p>
@@ -554,10 +599,10 @@ export function CcDetailView({ record, onRefresh, defaultTab = 'overview' }: CcD
                   <TableBody>
                     {approvals.map((a) => (
                       <TableRow key={a.id}>
-                        <TableCell>{a.approver_name}</TableCell>
-                        <TableCell>{a.approval_level.replace(/_/g, ' ')}</TableCell>
-                        <TableCell className="capitalize">{a.decision}</TableCell>
-                        <TableCell>{new Date(a.signed_at).toLocaleDateString()}</TableCell>
+                        <TableCell>{a.approver_name || '—'}</TableCell>
+                        <TableCell>{a.current_workflow_step || String(a.approval_level).replace(/_/g, ' ')}</TableCell>
+                        <TableCell className="capitalize">{a.approval_status || a.decision || '—'}</TableCell>
+                        <TableCell>{a.signed_at ? new Date(a.signed_at).toLocaleDateString() : '—'}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>

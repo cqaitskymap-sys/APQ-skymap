@@ -7,6 +7,15 @@ import { Badge } from '@/components/ui/badge';
 export function RiskMatrix({ matrix }: { matrix: RiskMatrixCell[] }) {
   const severities = [5, 4, 3, 2, 1];
   const occurrences = [1, 2, 3, 4, 5];
+  const hasData = matrix?.some((c) => c.count > 0);
+
+  if (!hasData) {
+    return (
+      <div className="flex h-[280px] items-center justify-center rounded-md border border-dashed bg-slate-50 text-sm text-muted-foreground">
+        No risk data to display on risk matrix
+      </div>
+    );
+  }
 
   return (
     <div className="overflow-x-auto">

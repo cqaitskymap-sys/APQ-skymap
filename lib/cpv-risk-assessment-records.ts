@@ -57,13 +57,17 @@ export const PARAMETER_TYPES = [
 ] as const;
 
 export const RISK_STATUSES = [
+  'Draft',
   'Open',
   'Under Review',
   'Mitigation In Progress',
+  'Pending Approval',
   'Effectiveness Check Pending',
+  'Approved',
   'Closed',
   'Accepted',
   'Rejected',
+  'Overdue',
 ] as const;
 
 export const WORKFLOW_STATUSES = [

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Plus, FileDown, Package, Truck, ShieldAlert, Lock, TrendingUp } from 'lucide-react';
+import { LayoutDashboard, Plus, FileDown, Package, Truck, ShieldAlert, Lock, TrendingUp, History } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const items = [
@@ -14,6 +14,7 @@ const items = [
   { label: 'Closure', href: '/qms/recall/closure', icon: Lock, match: ['/qms/recall/closure'] },
   { label: 'Trend Analysis', href: '/qms/recall/trend-analysis', icon: TrendingUp, match: ['/qms/recall/trend-analysis', '/qms/recall/trends'] },
   { label: 'Reports', href: '/qms/recall/reports', icon: FileDown, match: ['/qms/recall/reports', '/qms/recall/analytics'] },
+  { label: 'Audit Trail', href: '/qms/recall/audit-trail', icon: History, match: ['/qms/recall/audit-trail'] },
 ];
 
 export function RecallSubNav() {
@@ -31,6 +32,7 @@ export function RecallSubNav() {
               || (item.href.includes('/closure') && pathname.includes('/closure'))
               || (item.href.includes('/trend-analysis') && (pathname.includes('/trend-analysis') || pathname.includes('/trends')))
               || (item.href.includes('/reports') && (pathname.includes('/reports') || pathname.includes('/analytics')))
+              || (item.href.includes('/audit-trail') && pathname.includes('/audit-trail'))
             : pathname.startsWith(item.href) && pathname !== '/qms/recall';
           return (
             <Link key={item.href} href={item.href} className={cn('flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors', active ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300 font-medium' : 'text-muted-foreground hover:bg-muted hover:text-foreground')}>

@@ -66,9 +66,18 @@ service cloud.firestore {
           'cqa_parameters', 'cqa_results', 'risk_assessment',
           'pqr_records', 'pqr_documents', 'pqr_batches',
           'deviations', 'oos_records', 'oos', 'capa_records', 'capa',
-          'change_controls', 'change_control', 'stability_studies', 'stability',
-          'complaints', 'recalls', 'recall_records', 'documents', 'dms_documents',
-          'training_records', 'audits', 'audit_mgmt_records',
+          'change_controls', 'change_control', 'change_implementation_plans', 'change_implementation_tasks', 'change_implementation_actions',
+          'change_risk_assessments',
+          'change_impact_assessments',
+          'stability_studies', 'stability',
+          'complaints', 'recalls', 'recall_records', 'recall_reports', 'recall_distribution',
+          'recall_recovery', 'recall_regulatory_notifications', 'recall_closure', 'recall_trends',
+          'recall_approvals', 'recall_attachments', 'customers',
+          'documents', 'dms_documents',
+          'training_records', 'training_master', 'training_assignments', 'training_assessments',
+          'training_effectiveness', 'training_matrix', 'training_matrix_compliance', 'training_attendance', 'competency_records',
+          'document_training_links', 'sop_management', 'training_assignments_sessions',
+          'audits', 'audit_mgmt_records',
           'vendors', 'vendor_master', 'vendor_records',
           'validation_records', 'csv_systems',
           'equipment_master', 'equipment_records', 'calibration_records',
@@ -84,12 +93,12 @@ service cloud.firestore {
     function canWriteCollection(name) {
       return isSuperAdmin()
         || (isAdmin() && name in ['users', 'roles', 'permissions', 'products', 'batches', 'departments', 'designations'])
-        || (isQaRole() && name in ['pqr_records', 'pqr_documents', 'deviations', 'capa_records', 'capa', 'change_controls', 'change_control', 'complaints', 'recalls', 'recall_records', 'stability_studies', 'training_records', 'documents', 'dms_documents'])
+        || (isQaRole() && name in ['pqr_records', 'pqr_documents', 'deviations', 'capa_records', 'capa', 'change_controls', 'change_control', 'change_implementation_plans', 'change_implementation_tasks', 'change_implementation_actions', 'change_risk_assessments', 'change_impact_assessments', 'complaints', 'recalls', 'recall_records', 'recall_reports', 'recall_distribution', 'recall_recovery', 'recall_regulatory_notifications', 'recall_closure', 'recall_trends', 'recall_approvals', 'recall_attachments', 'stability_studies', 'training_records', 'training_master', 'training_assignments', 'training_assessments', 'training_effectiveness', 'training_matrix', 'training_matrix_compliance', 'training_attendance', 'competency_records', 'document_training_links', 'documents', 'dms_documents'])
         || (isQcRole() && name in ['oos_records', 'oos', 'cqa_parameters', 'cqa_results', 'stability_studies', 'stability'])
         || (isProductionRole() && name in ['batches', 'cpp_parameters', 'cpp_results', 'ebmr_records'])
         || (isEngineeringRole() && name in ['equipment_master', 'equipment_records', 'calibration_records', 'validation_records', 'csv_systems', 'monitoring_records'])
-        || (isWarehouseRole() && name in ['warehouse_materials', 'warehouse_records', 'material_master'])
-        || (isRegulatoryRole() && name in ['change_controls', 'change_control', 'recalls', 'recall_records', 'documents', 'dms_documents', 'pqr_records'])
+        || (isWarehouseRole() && name in ['warehouse_materials', 'warehouse_records', 'material_master', 'recall_distribution', 'recall_recovery'])
+        || (isRegulatoryRole() && name in ['change_controls', 'change_control', 'recalls', 'recall_records', 'recall_regulatory_notifications', 'documents', 'dms_documents', 'pqr_records'])
         || (isNotReadOnly() && name.matches('cpv_.*'));
     }
 

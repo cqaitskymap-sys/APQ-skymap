@@ -3,19 +3,23 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-  LayoutDashboard, Plus, ClipboardCheck, AlertTriangle, Wrench, CheckCircle2, ShieldCheck, FileDown,
+  LayoutDashboard, Plus, ClipboardCheck, AlertTriangle, Wrench, CheckCircle2, ShieldCheck, FileDown, History, Lock, FlaskConical,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const items = [
-  { label: 'Change Dashboard', href: '/qms/change-control', icon: LayoutDashboard, exact: true },
+  { label: 'Change Dashboard', href: '/qms/change-control', icon: LayoutDashboard, exact: true, alsoActive: '/qms/change-control/dashboard' },
   { label: 'Create Change', href: '/qms/change-control/create', icon: Plus },
   { label: 'Impact Assessment', href: '/qms/change-control/impact-assessment', icon: ClipboardCheck },
   { label: 'Risk Assessment', href: '/qms/change-control/risk-assessment', icon: AlertTriangle },
+  { label: 'Validation Assessment', href: '/qms/change-control/validation-assessment', icon: FlaskConical },
   { label: 'Implementation Plan', href: '/qms/change-control/implementation', icon: Wrench },
   { label: 'Effectiveness Review', href: '/qms/change-control/effectiveness', icon: CheckCircle2 },
   { label: 'Approval Workflow', href: '/qms/change-control/approval', icon: ShieldCheck },
+  { label: 'Closure', href: '/qms/change-control/closure', icon: Lock },
   { label: 'Reports', href: '/qms/change-control/reports', icon: FileDown },
+  { label: 'Analytics', href: '/qms/change-control/analytics', icon: FileDown },
+  { label: 'Audit Trail', href: '/qms/change-control/audit-trail', icon: History },
 ];
 
 export function CcSubNav() {
@@ -30,9 +34,10 @@ export function CcSubNav() {
         {items.map((item) => {
           const Icon = item.icon;
           const base = item.href.split('?')[0];
+          const alsoActive = 'alsoActive' in item ? item.alsoActive : undefined;
           const active = item.exact
-            ? pathname === base
-            : pathname.startsWith(base) && pathname !== '/qms/change-control';
+            ? pathname === base || pathname === alsoActive
+            : pathname.startsWith(base) && pathname !== '/qms/change-control' && pathname !== '/qms/change-control/dashboard';
           return (
             <Link
               key={item.href}

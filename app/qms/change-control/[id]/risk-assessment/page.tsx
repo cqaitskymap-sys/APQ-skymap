@@ -1,12 +1,10 @@
-'use client';
+import { CcRiskPage } from '@/components/change-control/risk-assessment/cc-risk-page';
 
-import { CcDetailView } from '@/components/change-control/cc-detail-view';
-import { LoadingSpinner } from '@/components/ui/loading-spinner';
-import { useChangeControl } from '@/hooks/use-change-control';
-
-export default function ChangeRiskPage({ params }: { params: { id: string } }) {
-  const { record, loading, refresh } = useChangeControl(params.id);
-  if (loading) return <LoadingSpinner />;
-  if (!record) return <p className="text-muted-foreground">Not found.</p>;
-  return <CcDetailView record={record} onRefresh={refresh} defaultTab="risk" />;
+export default async function ChangeRiskAssessmentDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  return <CcRiskPage changeId={id} />;
 }

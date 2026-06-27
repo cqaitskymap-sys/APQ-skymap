@@ -203,6 +203,10 @@ export async function logRecallReportDownloaded(actor: RecallReportActor, report
   await audit(actor, 'report exported', reportId, `Download placeholder — ${reportNumber}`);
 }
 
+export async function logRecallReportsModuleViewed(actor: RecallReportActor) {
+  await audit(actor, 'module viewed', 'recall-reports', 'Recall Reports & Analytics module opened');
+}
+
 export async function fetchRecallReportProductOptions(): Promise<string[]> {
   const ctx = await loadReportContext();
   return extractRecallReportProductOptions(ctx.records);

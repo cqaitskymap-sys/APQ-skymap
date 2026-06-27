@@ -347,8 +347,8 @@ export async function uploadAttachment(recallId: string, file: File, actor: Reca
 }
 
 export async function getAuditLogsForRecall(recallId: string) {
-  const snap = await getDocs(query(collection(getFirebaseFirestore(), RECALL_COLLECTIONS.auditLogs), where('recordId', '==', recallId), limit(100)));
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  const { getAuditLogsForRecall: fetchRecallAudit } = await import('@/lib/recall-audit-trail-service');
+  return fetchRecallAudit(recallId);
 }
 
 export function computeDashboardMetrics(records: RecallRecord[]): RecallDashboardMetrics {

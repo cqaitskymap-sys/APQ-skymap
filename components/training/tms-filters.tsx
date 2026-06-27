@@ -4,10 +4,17 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { X } from 'lucide-react';
-import { TMS_DEPARTMENTS, TRAINING_TYPES, ASSIGNMENT_STATUSES } from '@/lib/training-types';
+import { TMS_DEPARTMENTS, TRAINING_TYPES, ASSIGNMENT_STATUSES, MATRIX_STATUSES } from '@/lib/training-types';
 import type { TmsFilters } from '@/lib/training-types';
 
-export function TmsFiltersBar({ filters, onChange }: { filters: TmsFilters; onChange: (f: TmsFilters) => void }) {
+export function TmsFiltersBar({
+  filters, onChange, mode = 'assignments',
+}: {
+  filters: TmsFilters;
+  onChange: (f: TmsFilters) => void;
+  mode?: 'assignments' | 'matrix';
+}) {
+  const statuses = mode === 'matrix' ? MATRIX_STATUSES : ASSIGNMENT_STATUSES;
   const update = (key: keyof TmsFilters, value: string) => {
     onChange({ ...filters, [key]: value || undefined });
   };
@@ -19,7 +26,7 @@ export function TmsFiltersBar({ filters, onChange }: { filters: TmsFilters; onCh
         <SelectTrigger className="w-[150px]"><SelectValue placeholder="Status" /></SelectTrigger>
         <SelectContent>
           <SelectItem value="all">All Statuses</SelectItem>
-          {ASSIGNMENT_STATUSES.map((s) => <SelectItem key={s} value={s}>{s.replace(/_/g, ' ')}</SelectItem>)}
+          {statuses.map((s) => <SelectItem key={s} value={s}>{s.replace(/_/g, ' ')}</SelectItem>)}
         </SelectContent>
       </Select>
       <Select value={filters.department || 'all'} onValueChange={(v) => update('department', v === 'all' ? '' : v)}>

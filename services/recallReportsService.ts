@@ -12,6 +12,7 @@ export {
   logRecallReportDownloaded,
   logRecallReportPreviewed,
   logRecallReportPrinted,
+  logRecallReportsModuleViewed,
   previewRecallReport,
   summarizeRecallReportsDashboard,
   type RecallReportActor,

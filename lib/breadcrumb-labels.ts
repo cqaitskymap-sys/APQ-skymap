@@ -14,6 +14,12 @@ export const BREADCRUMB_LABELS: Record<string, string> = {
   recall: 'Product Recall',
   dms: 'Document Management',
   training: 'Training Management',
+  completion: 'Completion & Attendance',
+  attendance: 'Attendance',
+  scheduling: 'Assignment & Scheduling',
+  assignments: 'Assignment & Scheduling',
+  'training-matrix': 'Training Matrix',
+  matrix: 'Training Matrix',
   audit: 'Audit Management',
   vendors: 'Vendor Management',
   validation: 'Validation Management',
@@ -44,13 +50,26 @@ export const BREADCRUMB_LABELS: Record<string, string> = {
   'control-charts': 'Control Charts',
   'statistical-process-control': 'Statistical Process Control',
   'risk-assessment': 'Risk Assessment',
+  'impact-assessment': 'Impact Assessment',
+  'risk-management': 'Risk Management',
+  'audit-trail': 'Audit Trail',
+  reports: 'Reports & Analytics',
+  analytics: 'Reports & Analytics',
+  fmea: 'FMEA Assessment',
+  closure: 'Closure',
+  approval: 'Approval Workflow',
+  implementation: 'Implementation Plan',
+  'implementation-plan': 'Implementation Plan',
+  mitigation: 'Mitigation Plan',
+  'mitigation-plan': 'Mitigation Plan',
+  'review-monitoring': 'Review & Monitoring',
+  'risk-review': 'Review & Monitoring',
   'annual-review': 'Annual CPV Review',
   'ai-analytics': 'AI Analytics',
   'predictive-analytics': 'AI Analytics',
   configuration: 'CPV Configuration',
   settings: 'CPV Configuration',
   'reports-analytics': 'Reports & Analytics',
-  reports: 'Reports & Analytics',
   'alert-engine': 'Alert Engine',
   alerts: 'Alert Engine',
   master: 'Master Data',
@@ -60,6 +79,13 @@ export const BREADCRUMB_LABELS: Record<string, string> = {
   profile: 'Profile',
 };
 
-export function formatBreadcrumbLabel(segment: string): string {
+export function formatBreadcrumbLabel(segment: string, pathname?: string): string {
+  if (pathname && (segment === 'create' || segment === 'new')) {
+    if (pathname.includes('/change-control/')) return 'Create Change Control';
+    if (pathname.includes('/risk-management/')) return 'Create Risk Assessment';
+  }
+  if (pathname && segment === 'dashboard' && pathname.includes('/change-control/')) {
+    return 'Dashboard';
+  }
   return BREADCRUMB_LABELS[segment] ?? segment.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }

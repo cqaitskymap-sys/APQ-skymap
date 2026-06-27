@@ -32,6 +32,7 @@ import {
   logRecallReportDownloaded,
   logRecallReportPreviewed,
   logRecallReportPrinted,
+  logRecallReportsModuleViewed,
   previewRecallReport,
 } from '@/lib/recall-reports-service';
 import { downloadCsv, printPage } from '@/lib/export-utils';
@@ -73,7 +74,7 @@ function ReportStatusBadge({ status }: { status: string }) {
   );
 }
 
-export function RecallReportsAnalyticsPage() {
+export function RecallReportsAnalyticsPage({ defaultTab = 'generator' }: { defaultTab?: string }) {
   const { user, profile } = useAuth();
   const role = profile?.role;
   const canGenerate = useMemo(
@@ -168,6 +169,11 @@ export function RecallReportsAnalyticsPage() {
   }, []);
 
   useEffect(() => { void load(); }, [load]);
+
+  useEffect(() => {
+    if (!user?.uid) return;
+    void logRecallReportsModuleViewed(actor);
+  }, [user?.uid, actor]);
 
   const runPreview = async () => {
     if (!canGenerateRecallReportTypeModule(role, reportType)) {
@@ -341,7 +347,7 @@ export function RecallReportsAnalyticsPage() {
         {loading ? <LoadingSkeleton rows={3} /> : error ? (
           <ErrorCard title="Load error" message={error} onRetry={load} />
         ) : (
-          <Tabs defaultValue="generator">
+          <Tabs defaultValue={defaultTab}>
             <TabsList className="flex h-auto flex-wrap gap-1">
               <TabsTrigger value="generator">Report Generator</TabsTrigger>
               <TabsTrigger value="analytics">Analytics Dashboard</TabsTrigger>
@@ -475,7 +481,14 @@ export function RecallReportsAnalyticsPage() {
                 <div><Label>Date To *</Label><Input type="date" value={periodTo} onChange={(e) => setPeriodTo(e.target.value)} disabled={readOnly} /></div>
                 <DialogFooter className="sm:col-span-2">
                   <Button variant="outline" onClick={() => setStep(0)}>Back</Button>
-                  <Button onClick={() => setStep(2)}>Next</Button>
+                  <Button onClick={() => {
+                    const parsed = recallReportFormSchema.safeParse({ ...formData, report_type: reportType });
+                    if (!parsed.success) {
+                      toast.error(parsed.error.errors.find((e) => e.path.includes('review_period'))?.message || parsed.error.errors[0]?.message || 'Invalid date range');
+                      return;
+                    }
+                    setStep(2);
+                  }}>Next</Button>
                 </DialogFooter>
               </div>
             )}
@@ -545,6 +558,12 @@ export function RecallReportsAnalyticsPage() {
                   </CardContent>
                 </Card>
                 <RecallReportsAnalyticsKpis metrics={analytics.metrics} />
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <SummaryCard title="Distribution" data={analytics.distributionSummary} />
+                  <SummaryCard title="Recovery" data={analytics.recoverySummary} />
+                  <SummaryCard title="Regulatory" data={analytics.regulatorySummary} />
+                  <SummaryCard title="CAPA" data={analytics.capaSummary} />
+                </div>
                 {previewTableData.length ? (
                   <ResponsiveDataTable columns={previewTableColumns} data={previewTableData} mobileTitleKey="recall_number" mobileSubtitleKey="product_name" pageSize={8} />
                 ) : (
@@ -579,7 +598,7 @@ export function RecallReportsAnalyticsPage() {
         </Dialog>
 
         {showPdf && analytics && (
-          <div className="hidden print:block">
+          <div className="fixed inset-0 -z-10 opacity-0 pointer-events-none print:relative print:z-50 print:opacity-100 print:pointer-events-auto">
             <RecallAggregateReportPdf
               reportNumber={savedReport?.report_number || `PREVIEW-${Date.now()}`}
               reportType={reportType}
@@ -609,5 +628,19 @@ function MiniStat({ label, value }: { label: string; value: string | number }) {
       <p className="text-xs text-muted-foreground">{label}</p>
       <p className="text-lg font-semibold">{value}</p>
     </div>
+  );
+}
+
+function SummaryCard({ title, data }: { title: string; data: Record<string, unknown> }) {
+  const entries = Object.entries(data).filter(([, v]) => v !== undefined && v !== null);
+  return (
+    <Card>
+      <CardHeader className="pb-2"><CardTitle className="text-sm">{title} Summary</CardTitle></CardHeader>
+      <CardContent className="text-xs space-y-1 text-muted-foreground">
+        {entries.length ? entries.map(([k, v]) => (
+          <p key={k}><span className="font-medium text-foreground">{k.replace(/_/g, ' ')}:</span> {Array.isArray(v) ? v.join(', ') : String(v)}</p>
+        )) : <p>No data</p>}
+      </CardContent>
+    </Card>
   );
 }

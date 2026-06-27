@@ -128,7 +128,7 @@ export function RecallReportsAnalyticsKpis({ metrics }: { metrics: RecallReportA
       <MiniKpi label="Class I Recalls" value={metrics.classI} tone="red" />
       <MiniKpi label="Regulatory Pending" value={metrics.regulatoryPending} tone="red" />
       <MiniKpi label="Avg Recovery %" value={`${metrics.avgRecoveryPercent}%`} tone="green" />
-      <MiniKpi label="CAPA Linked" value={metrics.capaLinked} />
+      <MiniKpi label="CAPA Linked Recalls" value={metrics.capaLinked} />
       <MiniKpi label="Avg Closure Days" value={metrics.avgClosureDays} />
       <MiniKpi label="Overdue Recalls" value={metrics.overdue} tone="red" />
     </div>
