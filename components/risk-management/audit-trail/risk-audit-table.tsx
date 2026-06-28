@@ -24,6 +24,7 @@ export function RiskAuditTable({ entries, compact }: RiskAuditTableProps) {
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead>Audit ID</TableHead>
             <TableHead>Date Time</TableHead>
             {!compact && <TableHead>Risk No</TableHead>}
             <TableHead>Action</TableHead>
@@ -38,6 +39,7 @@ export function RiskAuditTable({ entries, compact }: RiskAuditTableProps) {
         <TableBody>
           {entries.map((e) => (
             <TableRow key={e.id || e.audit_id}>
+              <TableCell className="text-xs font-mono">{e.audit_id || e.id}</TableCell>
               <TableCell className="text-xs whitespace-nowrap" title={e.date_time}>
                 {formatAuditDateTimeLocal(e.date_time)}
               </TableCell>

@@ -1,7 +1,5 @@
-'use client';
+import { TrainingCompletionPage } from '@/components/training/completion/training-completion-page';
 
-import { TrainingCompletionAttendanceView } from '@/components/training/tms-completion-attendance-view';
-
-export default function TrainingCompletionPage() {
-  return <TrainingCompletionAttendanceView defaultTab="completion" />;
+export default function TrainingCompletionRoute() {
+  return <TrainingCompletionPage defaultTab="dashboard" />;
 }

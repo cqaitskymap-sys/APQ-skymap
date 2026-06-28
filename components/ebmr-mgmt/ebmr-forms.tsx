@@ -24,10 +24,14 @@ import {
   saveCppRecord, saveIpcCheck, saveEbmrReview, releaseEbmr,
 } from '@/lib/ebmr-mgmt-service';
 import {
-  PROCESS_STAGES, IPC_CHECK_NAMES, STEP_STATUSES, COMPLIANCE_STATUSES,
+  PROCESS_STAGES, IPC_CHECK_NAMES, STEP_STATUSES, COMPLIANCE_STATUSES, MATERIAL_TYPES,
   canVerifyLineClearance, canExecuteManufacturing, canEnterIpc, canReleaseBatch, isEbmrEditable,
 } from '@/lib/ebmr-mgmt-types';
 import type { EbmrRecord } from '@/lib/ebmr-mgmt-types';
+import {
+  getAllBmrCppParameters, getAllBmrIpcParameters, getCppDefaults, getIpcSpecification,
+  isOndansetronProduct, ONDANSETRON_DISPENSING_MATERIALS,
+} from '@/lib/ondansetron-bmr-spec';
 import { listSelectableEquipment } from '@/lib/equipment-mgmt-service';
 import type { EquipmentRecord } from '@/lib/equipment-mgmt-types';
 
@@ -101,27 +105,60 @@ export function LineClearanceForm({ ebmr, onSuccess }: { ebmr: EbmrRecord; onSuc
 export function DispensingForm({ ebmr, onSuccess }: { ebmr: EbmrRecord; onSuccess: () => void }) {
   const actor = useEbmrActor();
   const editable = isEbmrEditable(ebmr);
+  const ondansetron = isOndansetronProduct(ebmr.product_name);
   const form = useForm<EbmrDispensingInput>({
     resolver: zodResolver(ebmrDispensingSchema),
     defaultValues: {
-      ebmr_doc_id: ebmr.id, material_name: '', material_code: '', ar_number: '',
+      ebmr_doc_id: ebmr.id, material_type: 'API', material_name: '', material_code: '', ar_number: '',
+      material_mfg_date: '', material_exp_date: '', vendor_name: '',
       required_quantity: 0, dispensed_quantity: 0, unit: 'kg', checked_by_name: '',
       qa_verified_by_name: '', verified: false, remarks: '',
     },
   });
 
+  const applyMaterialPreset = (index: number) => {
+    const preset = ONDANSETRON_DISPENSING_MATERIALS[index];
+    if (!preset) return;
+    form.setValue('material_type', preset.materialType);
+    form.setValue('material_name', preset.materialName);
+    form.setValue('material_code', preset.materialCode);
+    form.setValue('unit', preset.unit);
+    if ('requiredQuantity' in preset) form.setValue('required_quantity', preset.requiredQuantity);
+    form.setValue('remarks', preset.remarks);
+  };
+
   return (
     <Card><CardHeader><CardTitle className="text-base">Dispensing Verification</CardTitle></CardHeader>
       <CardContent>
+        {ondansetron && editable && (
+          <div className="flex flex-wrap gap-2 mb-3">
+            {ONDANSETRON_DISPENSING_MATERIALS.map((m, i) => (
+              <Button key={m.materialCode} type="button" variant="outline" size="sm" onClick={() => applyMaterialPreset(i)}>
+                Use {m.materialType}: {m.materialCode}
+              </Button>
+            ))}
+          </div>
+        )}
         <Form {...form}><form onSubmit={form.handleSubmit(async (d) => {
           try {
             await saveEbmrDispensing(d, actor);
             toast.success('Dispensing record saved');
-            form.reset({ ...form.getValues(), material_name: '', material_code: '', ar_number: '', required_quantity: 0, dispensed_quantity: 0, remarks: '' });
+            form.reset({
+              ...form.getValues(), material_type: 'API', material_name: '', material_code: '', ar_number: '',
+              material_mfg_date: '', material_exp_date: '', vendor_name: '',
+              required_quantity: 0, dispensed_quantity: 0, remarks: '',
+            });
             onSuccess();
           } catch (e) { toast.error(e instanceof Error ? e.message : 'Failed'); }
         })} className="space-y-3">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <FormField control={form.control} name="material_type" render={({ field }) => (
+              <FormItem><FormLabel>Material Type</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value} disabled={!editable}>
+                  <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                  <SelectContent>{MATERIAL_TYPES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+                </Select></FormItem>
+            )} />
             <FormField control={form.control} name="material_name" render={({ field }) => (
               <FormItem><FormLabel>Material Name *</FormLabel><FormControl><Input {...field} disabled={!editable} /></FormControl></FormItem>
             )} />
@@ -130,6 +167,15 @@ export function DispensingForm({ ebmr, onSuccess }: { ebmr: EbmrRecord; onSucces
             )} />
             <FormField control={form.control} name="ar_number" render={({ field }) => (
               <FormItem><FormLabel>AR Number *</FormLabel><FormControl><Input {...field} disabled={!editable} /></FormControl></FormItem>
+            )} />
+            <FormField control={form.control} name="material_mfg_date" render={({ field }) => (
+              <FormItem><FormLabel>Material Mfg. Date</FormLabel><FormControl><Input type="date" {...field} disabled={!editable} /></FormControl></FormItem>
+            )} />
+            <FormField control={form.control} name="material_exp_date" render={({ field }) => (
+              <FormItem><FormLabel>Material Exp. Date</FormLabel><FormControl><Input type="date" {...field} disabled={!editable} /></FormControl></FormItem>
+            )} />
+            <FormField control={form.control} name="vendor_name" render={({ field }) => (
+              <FormItem><FormLabel>Vendor Name</FormLabel><FormControl><Input {...field} disabled={!editable} /></FormControl></FormItem>
             )} />
             <FormField control={form.control} name="required_quantity" render={({ field }) => (
               <FormItem><FormLabel>Required Qty *</FormLabel><FormControl><Input type="number" step="0.01" {...field} disabled={!editable} /></FormControl></FormItem>
@@ -305,6 +351,8 @@ export function EquipmentUsageForm({ ebmr, onSuccess }: { ebmr: EbmrRecord; onSu
 export function CppRecordForm({ ebmr, onSuccess }: { ebmr: EbmrRecord; onSuccess: () => void }) {
   const actor = useEbmrActor();
   const editable = isEbmrEditable(ebmr);
+  const ondansetron = isOndansetronProduct(ebmr.product_name);
+  const cppParams = ondansetron ? getAllBmrCppParameters() : [];
   const form = useForm<CppRecordInput>({
     resolver: zodResolver(cppRecordSchema),
     defaultValues: {
@@ -312,6 +360,17 @@ export function CppRecordForm({ ebmr, onSuccess }: { ebmr: EbmrRecord; onSuccess
       lsl: 0, usl: 0, observed_value: 0, unit: '', recorded_time: nowLocal(), remarks: '',
     },
   });
+
+  const applyCppPreset = (paramName: string) => {
+    const defaults = getCppDefaults(paramName);
+    form.setValue('parameter_name', paramName);
+    if (defaults) {
+      form.setValue('target', defaults.target);
+      form.setValue('lsl', defaults.lsl);
+      form.setValue('usl', defaults.usl);
+      form.setValue('unit', defaults.unit);
+    }
+  };
 
   return (
     <Card><CardHeader><CardTitle className="text-base">CPP Recording</CardTitle></CardHeader>
@@ -332,7 +391,16 @@ export function CppRecordForm({ ebmr, onSuccess }: { ebmr: EbmrRecord; onSuccess
                 </Select></FormItem>
             )} />
             <FormField control={form.control} name="parameter_name" render={({ field }) => (
-              <FormItem><FormLabel>Parameter *</FormLabel><FormControl><Input {...field} disabled={!editable} /></FormControl></FormItem>
+              <FormItem><FormLabel>Parameter *</FormLabel>
+                {ondansetron && cppParams.length > 0 ? (
+                  <Select onValueChange={(v) => { field.onChange(v); applyCppPreset(v); }} value={field.value} disabled={!editable}>
+                    <FormControl><SelectTrigger><SelectValue placeholder="Select parameter" /></SelectTrigger></FormControl>
+                    <SelectContent>{cppParams.map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent>
+                  </Select>
+                ) : (
+                  <FormControl><Input {...field} disabled={!editable} /></FormControl>
+                )}
+              </FormItem>
             )} />
             <FormField control={form.control} name="target" render={({ field }) => (
               <FormItem><FormLabel>Target</FormLabel><FormControl><Input type="number" step="0.01" {...field} disabled={!editable} /></FormControl></FormItem>
@@ -365,6 +433,10 @@ export function CppRecordForm({ ebmr, onSuccess }: { ebmr: EbmrRecord; onSuccess
 export function IpcCheckForm({ ebmr, onSuccess }: { ebmr: EbmrRecord; onSuccess: () => void }) {
   const actor = useEbmrActor();
   const editable = isEbmrEditable(ebmr) && canEnterIpc(actor.role);
+  const ondansetron = isOndansetronProduct(ebmr.product_name);
+  const ipcOptions = ondansetron
+    ? Array.from(new Set([...IPC_CHECK_NAMES, ...getAllBmrIpcParameters()]))
+    : [...IPC_CHECK_NAMES];
   const form = useForm<IpcCheckInput>({
     resolver: zodResolver(ipcCheckSchema),
     defaultValues: {
@@ -372,6 +444,12 @@ export function IpcCheckForm({ ebmr, onSuccess }: { ebmr: EbmrRecord; onSuccess:
       observed_result: '', unit: '', check_datetime: nowLocal(), remarks: '',
     },
   });
+
+  const applyIpcPreset = (checkName: string) => {
+    form.setValue('check_name', checkName as IpcCheckInput['check_name']);
+    const spec = getIpcSpecification(checkName);
+    if (spec) form.setValue('specification', spec);
+  };
 
   return (
     <Card><CardHeader><CardTitle className="text-base">IPC Check</CardTitle></CardHeader>
@@ -386,9 +464,9 @@ export function IpcCheckForm({ ebmr, onSuccess }: { ebmr: EbmrRecord; onSuccess:
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <FormField control={form.control} name="check_name" render={({ field }) => (
               <FormItem><FormLabel>Check Name</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value} disabled={!editable}>
+                <Select onValueChange={(v) => { field.onChange(v); applyIpcPreset(v); }} value={field.value} disabled={!editable}>
                   <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                  <SelectContent>{IPC_CHECK_NAMES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+                  <SelectContent>{ipcOptions.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
                 </Select></FormItem>
             )} />
             <FormField control={form.control} name="frequency" render={({ field }) => (

@@ -5,6 +5,9 @@ import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { createAuditLog } from '@/lib/audit-trail';
 import { getFirebaseAuth, getFirebaseFirestore, isFirebaseConfigured } from '@/lib/firebase';
 import { createRecord, getRecords } from '@/lib/firestore-service';
+import {
+  createSignatureSession, completeSignatureSession, persistEnterpriseSignature, getClientDeviceInfo,
+} from '@/lib/electronic-signatures-service';
 import { ADMIN_COLLECTIONS } from './constants';
 import {
   fetchActiveEsignSetting, fetchEsignSettings, normalizeEsignSetting,
@@ -40,8 +43,7 @@ function buildEsignRecordId(): string {
 }
 
 function getDeviceInfo(): string {
-  if (typeof navigator === 'undefined') return 'server';
-  return /Mobile|Android|iPhone/i.test(navigator.userAgent) ? 'Mobile' : 'Desktop';
+  return getClientDeviceInfo().device;
 }
 
 export async function fetchEsignRecords(): Promise<EsignRecord[]> {
@@ -136,6 +138,13 @@ export async function performEsign(input: PerformEsignInput): Promise<PerformEsi
     return { success: false, error: 'Electronic signature confirmation is required' };
   }
 
+  let sessionId = '';
+  try {
+    sessionId = await createSignatureSession(input.userId, input.moduleName, input.recordId, input.actionType);
+  } catch { /* session optional */ }
+
+  const clientInfo = getClientDeviceInfo();
+
   const meaning = input.signatureMeaning || normalized?.signatureMeaning || '';
   if (normalized?.requireCommentReason && !input.reasonComment?.trim()) {
     return { success: false, error: 'Reason or comment is required' };
@@ -178,8 +187,8 @@ export async function performEsign(input: PerformEsignInput): Promise<PerformEsi
         department: input.department || '',
         signedDateTime: new Date().toISOString(),
         reasonComment: input.reasonComment || '',
-        ipAddress: 'client',
-        deviceInfo: getDeviceInfo(),
+        ipAddress: clientInfo.ip,
+        deviceInfo: clientInfo.device,
         authenticationStatus: 'Failed',
         status: 'Failed',
         isTest: input.isTest ?? false,
@@ -236,12 +245,17 @@ export async function performEsign(input: PerformEsignInput): Promise<PerformEsi
     department: input.department || '',
     signedDateTime: new Date().toISOString(),
     reasonComment: input.reasonComment || '',
-    ipAddress: 'client',
-    deviceInfo: getDeviceInfo(),
+    ipAddress: clientInfo.ip,
+    deviceInfo: clientInfo.device,
     authenticationStatus: 'Success',
     status: input.isTest ? 'Test' : 'Signed',
     isTest: input.isTest ?? false,
   });
+
+  try {
+    await persistEnterpriseSignature(record, { sessionId });
+    await completeSignatureSession(sessionId, true);
+  } catch { /* enterprise store optional during migration */ }
 
   await createAuditLog({
     moduleName: input.moduleName,

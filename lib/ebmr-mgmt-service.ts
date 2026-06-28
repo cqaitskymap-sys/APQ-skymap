@@ -87,6 +87,9 @@ export async function createEbmr(input: EbmrCreateInput, actor: EbmrActor): Prom
     strength: input.strength,
     batch_number: input.batch_number,
     batch_size: input.batch_size,
+    batch_size_litres: input.batch_size_litres ?? null,
+    std_fill_volume_ml: input.std_fill_volume_ml ?? null,
+    batch_size_nos: input.batch_size_nos ?? null,
     mfg_date: input.mfg_date,
     exp_date: input.exp_date,
     mfr_number: input.mfr_number,
@@ -208,9 +211,13 @@ export async function saveEbmrDispensing(input: EbmrDispensingInput, actor: Ebmr
   const balance = input.required_quantity - input.dispensed_quantity;
   const record: Omit<EbmrDispensingRecord, 'id'> = {
     ebmr_doc_id: input.ebmr_doc_id,
+    material_type: input.material_type,
     material_name: input.material_name,
     material_code: input.material_code,
     ar_number: input.ar_number,
+    material_mfg_date: input.material_mfg_date,
+    material_exp_date: input.material_exp_date,
+    vendor_name: input.vendor_name,
     required_quantity: input.required_quantity,
     dispensed_quantity: input.dispensed_quantity,
     unit: input.unit,

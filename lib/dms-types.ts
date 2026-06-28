@@ -29,7 +29,7 @@ export const DMS_DEPARTMENTS = [
 
 export const DMS_STATUSES = [
   'draft', 'under_review', 'returned_for_correction', 'approved',
-  'effective', 'obsolete', 'archived',
+  'effective', 'obsolete', 'archived', 'retired', 'pending_approval', 'superseded',
 ] as const;
 
 export const APPROVAL_STAGES = ['department_review', 'qa_review', 'head_qa_approval'] as const;

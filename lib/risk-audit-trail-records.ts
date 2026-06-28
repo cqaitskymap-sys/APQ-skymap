@@ -1,12 +1,14 @@
-import { normalizeRole } from '@/lib/permissions';
 import { normalizeAuditTrailEntry } from '@/lib/admin/audit-trail-service';
 import type { AuditTrailEntry } from '@/lib/admin/schemas';
+import {
+  RISK_AUDIT_TRAIL_MODULE,
+} from '@/lib/risk-audit-trail-types';
 import {
   RISK_ASSESSMENT_COLLECTION,
   RISK_ASSESSMENT_MODULE,
 } from '@/lib/cpv-risk-assessment-records';
 
-export const AUDIT_TRAIL_MODULE = 'Risk Audit Trail';
+export const AUDIT_TRAIL_MODULE = RISK_AUDIT_TRAIL_MODULE;
 
 export const RISK_COLLECTIONS = {
   assessments: 'risk_assessment',
@@ -19,7 +21,11 @@ export const RISK_COLLECTIONS = {
   auditTrail: 'audit_trail',
 } as const;
 
-const RISK_COLLECTION_NAMES = new Set(Object.values(RISK_COLLECTIONS));
+const RISK_COLLECTION_NAMES = new Set([
+  ...Object.values(RISK_COLLECTIONS),
+  'risk_assessment',
+  'risk_assessments',
+]);
 
 export const RISK_AUDIT_ACTION_TYPES = [
   'Created',
@@ -306,29 +312,13 @@ export function filterRiskAuditByRole(
   entries: RiskAuditEntry[],
   role?: string | null,
 ): RiskAuditEntry[] {
-  const r = normalizeRole(role);
-  if (['super_admin', 'admin', 'head_qa', 'qa_manager', 'qa', 'qa_executive', 'risk_manager', 'auditor'].includes(r)) {
-    return entries;
-  }
+  void role;
   return entries;
 }
 
-export function canViewRiskAuditTrail(role?: string | null): boolean {
-  const r = normalizeRole(role);
-  return [
-    'super_admin', 'admin', 'head_qa', 'qa_manager', 'qa', 'qa_executive',
-    'risk_manager', 'auditor', 'viewer',
-  ].includes(r);
-}
-
-export function canExportRiskAuditTrail(role?: string | null): boolean {
-  const r = normalizeRole(role);
-  return ['super_admin', 'admin', 'head_qa', 'qa_manager', 'qa', 'qa_executive', 'risk_manager'].includes(r);
-}
-
-export function isRiskAuditReadOnly(role?: string | null): boolean {
-  return normalizeRole(role) === 'auditor';
-}
+export { canViewRiskAuditTrailModule as canViewRiskAuditTrail } from '@/lib/risk-audit-trail-types';
+export { canExportRiskAuditTrailModule as canExportRiskAuditTrail } from '@/lib/risk-audit-trail-types';
+export { isRiskAuditTrailReadOnly as isRiskAuditReadOnly } from '@/lib/risk-audit-trail-types';
 
 export function actionTypeColor(action: string): string {
   const map: Record<string, string> = {

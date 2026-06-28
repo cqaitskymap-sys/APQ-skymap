@@ -25,6 +25,8 @@ export const DEFAULT_CQA_PARAMETERS = [
   'Particulate Matter >=10µm', 'Particulate Matter >=25µm',
   'Methyl Paraben Assay', 'Propyl Paraben Assay', 'Preservative Content',
   'Visible Particles', 'Sub Visible Particles', 'Water Content', 'Appearance',
+  'Total Viable Count', 'Colour Index', 'Ondansetron Imp. D',
+  'Any Secondary Impurity', 'Sum of All Impurities',
 ] as const;
 
 export const MICROBIOLOGY_CQA_PARAMETERS = [
@@ -45,11 +47,14 @@ export const cqaResultFormSchema = z.object({
   productCode: requiredText,
   batchNumber: requiredText,
   manufacturingDate: requiredText,
+  expiryDate: z.string().trim().default(''),
   testStage: requiredText,
   parameterId: z.string().trim().default(''),
   parameterCode: requiredText,
   parameterName: requiredText,
   parameterCategory: z.string().trim().default(''),
+  responsibility: z.string().trim().default(''),
+  specificationText: z.string().trim().default(''),
   specificationNumber: z.string().trim().default(''),
   stpNumber: z.string().trim().default(''),
   observedResult: z.union([z.coerce.number(), z.string().trim().min(1, 'Required')]),

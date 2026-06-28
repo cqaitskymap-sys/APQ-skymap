@@ -324,6 +324,24 @@ export async function processApproval(
   return { ...existing, ...updates } as DocumentRecord;
 }
 
+async function ensureOnlyOneEffectiveVersion(documentNumber: string, effectiveId: string): Promise<void> {
+  const snap = await getDocs(query(
+    collection(getFirebaseFirestore(), DMS_COLLECTIONS.documents),
+    where('document_number', '==', documentNumber),
+    where('status', '==', 'effective'),
+  ));
+  for (const d of snap.docs) {
+    if (d.id !== effectiveId) {
+      await updateDoc(d.ref, {
+        status: 'obsolete',
+        is_latest: false,
+        lifecycle_stage: 'Superseded',
+        updated_at: now(),
+      });
+    }
+  }
+}
+
 export async function syncEffectiveDocuments(): Promise<number> {
   const today = new Date().toISOString().split('T')[0];
   const snap = await getDocs(query(
@@ -340,6 +358,8 @@ export async function syncEffectiveDocuments(): Promise<number> {
         { id: 'system', name: 'System', role: 'system' },
         'EFFECTIVE', d.id, data, { status: 'effective' },
       );
+
+      await ensureOnlyOneEffectiveVersion(data.document_number, d.id);
 
       if (data.supersedes_document_id) {
         await obsoletePreviousRevision(data.supersedes_document_id, d.id);
@@ -371,7 +391,7 @@ export async function createRevision(
 ): Promise<DocumentRecord> {
   const parent = await getDocumentById(parentId);
   if (!parent) throw new Error('Parent document not found');
-  if (!['effective', 'approved', 'obsolete'].includes(parent.status)) {
+  if (!['effective', 'approved'].includes(parent.status)) {
     throw new Error('Only effective or approved documents can be revised');
   }
 
@@ -672,6 +692,25 @@ export async function exportDocumentsCsv(records: DocumentRecord[]) {
       r.status, r.effective_date || '', r.next_review_date || '', r.prepared_by_name,
     ]),
   );
+}
+
+export async function retireDocument(documentId: string, actor: DmsActor): Promise<DocumentRecord> {
+  const existing = await getDocumentById(documentId);
+  if (!existing) throw new Error('Document not found');
+  if (!['archived', 'obsolete'].includes(existing.status)) {
+    throw new Error('Only archived or obsolete documents can be retired');
+  }
+
+  const updates = {
+    status: 'retired',
+    lifecycle_stage: 'Retired',
+    updated_by: actor.id,
+    updated_by_name: actor.name,
+    updated_at: now(),
+  };
+  await updateDoc(doc(getFirebaseFirestore(), DMS_COLLECTIONS.documents, documentId), updates);
+  await audit(actor, 'RETIRE', documentId, existing, updates);
+  return { ...existing, ...updates } as DocumentRecord;
 }
 
 export async function archiveDocument(documentId: string, actor: DmsActor): Promise<DocumentRecord> {

@@ -112,7 +112,7 @@ const navItems: NavItem[] = [
       { label: 'Stability Management', href: '/qms/stability', icon: LineChart },
       { label: 'Complaint Management', href: '/qms/complaints', icon: MessageSquare },
       { label: 'Product Recall', href: '/qms/recall', icon: RotateCcw },
-      { label: 'Document Management', href: '/qms/dms', icon: BookOpen },
+      { label: 'Document Management', href: '/qms/documents/master', icon: BookOpen },
       { label: 'Training Management', href: '/qms/training', icon: Users },
       { label: 'Audit Management', href: '/qms/audit', icon: ClipboardList },
       { label: 'Vendor Management', href: '/qms/vendors', icon: TruckIcon },
@@ -137,7 +137,7 @@ const navItems: NavItem[] = [
     icon: Award,
     children: [
       { label: 'Audit Trail', href: '/dashboard/audit-trail', icon: FileText },
-      { label: 'Document Management', href: '/qms/dms', icon: BookOpen },
+      { label: 'Document Management', href: '/qms/documents/master', icon: BookOpen },
       { label: 'Training Records', href: '/qms/training', icon: Users },
     ],
   },

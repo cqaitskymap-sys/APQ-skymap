@@ -292,18 +292,23 @@ export const CPP_PARAMETERS = [
 export const PROCESS_PARAMETERS_LEGACY = PROCESS_PARAMETERS;
 
 export const PARAMETER_SPECS: Record<string, { target: number; lsl: number; usl: number; unit: string }> = {
-  'Fill Volume': { target: 10, lsl: 9.8, usl: 10.2, unit: 'mL' },
-  'Mixing Time': { target: 30, lsl: 25, usl: 35, unit: 'min' },
-  'Mixing RPM': { target: 120, lsl: 110, usl: 130, unit: 'RPM' },
+  'Fill Volume': { target: 2.15, lsl: 2.1, usl: 2.2, unit: 'mL' },
+  'Mixing Time': { target: 15, lsl: 12, usl: 18, unit: 'min' },
+  'Mixing RPM': { target: 325, lsl: 250, usl: 400, unit: 'RPM' },
   'Mixing Temperature': { target: 25, lsl: 23, usl: 27, unit: '°C' },
-  'Sterilization Time': { target: 30, lsl: 28, usl: 32, unit: 'min' },
-  'Sterilization Temperature': { target: 121, lsl: 119, usl: 123, unit: '°C' },
-  'Filtration Pressure': { target: 2.5, lsl: 2.0, usl: 3.0, unit: 'bar' },
-  'Hold Time': { target: 24, lsl: 20, usl: 28, unit: 'hr' },
-  'Nitrogen Pressure': { target: 0.5, lsl: 0.4, usl: 0.6, unit: 'bar' },
-  'Bulk Yield': { target: 98, lsl: 95, usl: 100, unit: '%' },
-  'Filling Yield': { target: 99, lsl: 97, usl: 100, unit: '%' },
+  'Sterilization Time': { target: 30, lsl: 30, usl: 60, unit: 'min' },
+  'Sterilization Temperature': { target: 121, lsl: 121, usl: 130, unit: '°C' },
+  'Filtration Pressure': { target: 3.0, lsl: 2.0, usl: 4.0, unit: 'bar' },
+  'Hold Time': { target: 6, lsl: 0, usl: 12, unit: 'hr' },
+  'Bulk Hold Time': { target: 6, lsl: 0, usl: 12, unit: 'hr' },
+  'Nitrogen Pressure': { target: 2.75, lsl: 2.0, usl: 3.5, unit: 'kg/cm²' },
+  'Filling Speed': { target: 412.5, lsl: 275, usl: 550, unit: 'ampoules/min' },
+  'Filtration Yield': { target: 98, lsl: 96, usl: 100, unit: '%' },
+  'Bulk Yield': { target: 98, lsl: 96, usl: 100, unit: '%' },
+  'Filling Yield': { target: 98.5, lsl: 97, usl: 100, unit: '%' },
   'Packing Yield': { target: 99.5, lsl: 98, usl: 100, unit: '%' },
+  'Room Temperature': { target: 22, lsl: 0, usl: 25, unit: '°C' },
+  'Relative Humidity': { target: 40, lsl: 0, usl: 55, unit: '%' },
 };
 
 export function displayCpvStatus(status: CpvStatus | string): 'Pass' | 'OOT' | 'OOS' {
@@ -328,12 +333,17 @@ export const CQA_PARAMETERS = [
   'Extractable Volume',
   'Description',
   'Colour',
+  'Colour Index',
   'Sterility',
   'Bacterial Endotoxin',
+  'Total Viable Count',
   'Particles >=10µm',
   'Particles >=25µm',
   'Methyl Paraben',
   'Propyl Paraben',
+  'Ondansetron Imp. D',
+  'Any Secondary Impurity',
+  'Sum of All Impurities',
 ] as const;
 
 export type CqaParameterName = (typeof CQA_PARAMETERS)[number];
@@ -346,17 +356,22 @@ export const CQA_PARAMETER_SPECS: Record<CqaParameterName, {
   unit: string;
   type: CqaParameterType;
 }> = {
-  Assay: { target: 100, lsl: 98, usl: 102, unit: '%', type: 'numeric' },
-  pH: { target: 7.0, lsl: 6.8, usl: 7.2, unit: '', type: 'numeric' },
-  'Extractable Volume': { target: 2.0, lsl: 1.9, usl: 2.1, unit: 'mL', type: 'numeric' },
+  Assay: { target: 100, lsl: 95, usl: 105, unit: '%', type: 'numeric' },
+  pH: { target: 3.65, lsl: 3.3, usl: 4.0, unit: '', type: 'numeric' },
+  'Extractable Volume': { target: 2.1, lsl: 2.0, usl: 2.5, unit: 'mL', type: 'numeric' },
   Description: { target: 1, lsl: 1, usl: 1, unit: 'Pass/Fail', type: 'qualitative' },
   Colour: { target: 1, lsl: 1, usl: 1, unit: 'Pass/Fail', type: 'qualitative' },
+  'Colour Index': { target: 0.1, lsl: 0, usl: 0.2, unit: 'AU', type: 'limit' },
   Sterility: { target: 1, lsl: 1, usl: 1, unit: 'Pass/Fail', type: 'qualitative' },
-  'Bacterial Endotoxin': { target: 0.25, lsl: 0, usl: 0.5, unit: 'EU/mL', type: 'numeric' },
-  'Particles >=10µm': { target: 3000, lsl: 0, usl: 6000, unit: 'particles/container', type: 'limit' },
-  'Particles >=25µm': { target: 300, lsl: 0, usl: 600, unit: 'particles/container', type: 'limit' },
-  'Methyl Paraben': { target: 0.15, lsl: 0.12, usl: 0.18, unit: '%', type: 'numeric' },
-  'Propyl Paraben': { target: 0.02, lsl: 0.015, usl: 0.025, unit: '%', type: 'numeric' },
+  'Bacterial Endotoxin': { target: 4.95, lsl: 0, usl: 9.9, unit: 'EU/mg', type: 'numeric' },
+  'Total Viable Count': { target: 5, lsl: 0, usl: 10, unit: 'CFU/100 mL', type: 'limit' },
+  'Particles >=10µm': { target: 3000, lsl: 0, usl: 6000, unit: '/mL', type: 'limit' },
+  'Particles >=25µm': { target: 300, lsl: 0, usl: 600, unit: '/mL', type: 'limit' },
+  'Methyl Paraben': { target: 90, lsl: 80, usl: 100, unit: '%', type: 'numeric' },
+  'Propyl Paraben': { target: 90, lsl: 80, usl: 100, unit: '%', type: 'numeric' },
+  'Ondansetron Imp. D': { target: 0.06, lsl: 0, usl: 0.12, unit: '%', type: 'limit' },
+  'Any Secondary Impurity': { target: 0.1, lsl: 0, usl: 0.2, unit: '%', type: 'limit' },
+  'Sum of All Impurities': { target: 0.25, lsl: 0, usl: 0.5, unit: '%', type: 'limit' },
 };
 
 export function isQualitativeCqaParameter(parameter: string): boolean {

@@ -52,10 +52,16 @@ service cloud.firestore {
       return getProfileRole() in ['super_admin', 'admin', 'regulatory_affairs', 'regulatory'];
     }
 
+    function isTrainingCoordinator() {
+      return getProfileRole() in [
+        'super_admin', 'admin', 'head_qa', 'qa_manager', 'qa_executive', 'training_coordinator'
+      ];
+    }
+
     function isAuditCollection(name) {
       return name.matches('.*audit_trail.*')
         || name.matches('.*audit_logs.*')
-        || name in ['cpv_audit_trail', 'audit_logs', 'audit_trail', 'packaging_audit_trail', 'audit_logs_material'];
+        || name in ['cpv_audit_trail', 'audit_logs', 'audit_trail', 'packaging_audit_trail', 'audit_logs_material', 'integration_logs'];
     }
 
     function isRegisteredCollection(name) {
@@ -74,9 +80,40 @@ service cloud.firestore {
           'recall_recovery', 'recall_regulatory_notifications', 'recall_closure', 'recall_trends',
           'recall_approvals', 'recall_attachments', 'customers',
           'documents', 'dms_documents',
+          'document_revisions', 'document_versions', 'document_approvals',
+          'document_distribution', 'distribution_lists', 'distribution_groups',
+          'document_acknowledgements', 'read_confirmations',
+          'document_attachments', 'document_lifecycle',
+          'document_reviews', 'review_workflows', 'review_steps', 'review_comments', 'review_checklists',
+          'approval_delegations', 'approval_escalations', 'approval_comments', 'electronic_signatures',
+          'signature_meanings', 'signature_sessions', 'signature_settings',
+          'document_effective_dates', 'document_archives', 'document_archive',
+          'archive_jobs', 'archive_policies', 'archive_requests', 'archive_restoration_requests', 'archive_locations', 'retention_policies',
+          'retention_schedules', 'retention_reviews', 'retention_events', 'disposal_requests', 'disposal_approvals', 'disposal_certificates', 'legal_holds', 'regulatory_holds',
+          'external_documents', 'external_document_versions', 'external_document_reviews', 'external_document_distribution', 'external_document_sources', 'external_document_categories',
+          'supplier_documents', 'regulatory_documents', 'standards_documents', 'safety_documents', 'linked_internal_documents',
+          'print_requests', 'printed_documents', 'print_copies', 'print_locations', 'print_distribution', 'print_reconciliation', 'print_returns', 'print_destruction',
+          'watermark_templates', 'watermark_rules', 'watermark_history', 'document_watermarks',
+          'audit_events', 'audit_exports', 'audit_filters',
+          'periodic_reviews', 'review_schedules', 'review_decisions',
+          'document_obsolete',
+          'sop_master', 'sop_versions', 'sop_reviews', 'sop_approvals',
+          'sop_training_links', 'sop_distribution', 'sop_acknowledgements',
+          'sop_periodic_reviews', 'sop_archive',
+          'work_instructions', 'wi_versions', 'wi_reviews', 'wi_approvals',
+          'wi_training_links', 'wi_distribution', 'wi_acknowledgements',
+          'wi_periodic_reviews', 'wi_archive',
+          'forms_templates', 'form_versions', 'form_reviews', 'form_approvals',
+          'form_distribution', 'form_acknowledgements', 'form_periodic_reviews',
+          'form_archive', 'production_lines',
           'training_records', 'training_master', 'training_assignments', 'training_assessments',
           'training_effectiveness', 'training_matrix', 'training_matrix_compliance', 'training_attendance', 'competency_records',
           'document_training_links', 'sop_management', 'training_assignments_sessions',
+          'training_certificates',
+          'training_events', 'training_schedule', 'training_rooms', 'trainers', 'retraining_records',
+          'approval_workflows', 'approval_requests', 'approval_steps', 'approval_requests_history',
+          'lms_connections', 'lms_courses', 'lms_users', 'lms_training_records',
+          'lms_sync_jobs', 'integration_logs', 'integration_settings',
           'audits', 'audit_mgmt_records',
           'vendors', 'vendor_master', 'vendor_records',
           'validation_records', 'csv_systems',
@@ -93,12 +130,14 @@ service cloud.firestore {
     function canWriteCollection(name) {
       return isSuperAdmin()
         || (isAdmin() && name in ['users', 'roles', 'permissions', 'products', 'batches', 'departments', 'designations'])
-        || (isQaRole() && name in ['pqr_records', 'pqr_documents', 'deviations', 'capa_records', 'capa', 'change_controls', 'change_control', 'change_implementation_plans', 'change_implementation_tasks', 'change_implementation_actions', 'change_risk_assessments', 'change_impact_assessments', 'complaints', 'recalls', 'recall_records', 'recall_reports', 'recall_distribution', 'recall_recovery', 'recall_regulatory_notifications', 'recall_closure', 'recall_trends', 'recall_approvals', 'recall_attachments', 'stability_studies', 'training_records', 'training_master', 'training_assignments', 'training_assessments', 'training_effectiveness', 'training_matrix', 'training_matrix_compliance', 'training_attendance', 'competency_records', 'document_training_links', 'documents', 'dms_documents'])
+        || (isQaRole() && name in ['pqr_records', 'pqr_documents', 'deviations', 'capa_records', 'capa', 'change_controls', 'change_control', 'change_implementation_plans', 'change_implementation_tasks', 'change_implementation_actions', 'change_risk_assessments', 'change_impact_assessments', 'complaints', 'recalls', 'recall_records', 'recall_reports', 'recall_distribution', 'recall_recovery', 'recall_regulatory_notifications', 'recall_closure', 'recall_trends', 'recall_approvals', 'recall_attachments', 'stability_studies', 'training_records', 'training_master', 'training_assignments', 'training_assessments', 'training_effectiveness', 'training_matrix', 'training_matrix_compliance', 'training_attendance', 'competency_records', 'document_training_links', 'training_certificates', 'approval_workflows', 'approval_requests', 'approval_steps', 'approval_requests_history', 'approval_delegations', 'approval_escalations', 'approval_comments', 'electronic_signatures', 'signature_meanings', 'signature_sessions', 'signature_settings', 'documents', 'dms_documents', 'document_revisions', 'document_versions', 'document_approvals', 'document_distribution', 'distribution_lists', 'distribution_groups', 'document_acknowledgements', 'read_confirmations', 'document_attachments', 'document_lifecycle', 'document_reviews', 'review_workflows', 'review_steps', 'review_comments', 'review_checklists', 'document_effective_dates', 'periodic_reviews', 'review_schedules', 'review_decisions', 'document_archives', 'document_archive', 'archive_jobs', 'archive_policies', 'archive_requests', 'archive_restoration_requests', 'archive_locations', 'retention_policies', 'retention_schedules', 'retention_reviews', 'retention_events', 'disposal_requests', 'disposal_approvals', 'disposal_certificates', 'legal_holds', 'regulatory_holds', 'external_documents', 'external_document_versions', 'external_document_reviews', 'external_document_distribution', 'external_document_sources', 'external_document_categories', 'supplier_documents', 'regulatory_documents', 'standards_documents', 'safety_documents', 'linked_internal_documents', 'print_requests', 'printed_documents', 'print_copies', 'print_locations', 'print_distribution', 'print_reconciliation', 'print_returns', 'print_destruction', 'watermark_templates', 'watermark_rules', 'watermark_history', 'document_watermarks', 'audit_events', 'audit_exports', 'audit_filters', 'document_obsolete', 'sop_master', 'sop_versions', 'sop_reviews', 'sop_approvals', 'sop_training_links', 'sop_distribution', 'sop_acknowledgements', 'sop_periodic_reviews', 'sop_archive', 'sop_management', 'work_instructions', 'wi_versions', 'wi_reviews', 'wi_approvals', 'wi_training_links', 'wi_distribution', 'wi_acknowledgements', 'wi_periodic_reviews', 'wi_archive', 'forms_templates', 'form_versions', 'form_reviews', 'form_approvals', 'form_distribution', 'form_acknowledgements', 'form_periodic_reviews', 'form_archive', 'production_lines'])
+        || (isTrainingCoordinator() && name in ['lms_connections', 'lms_courses', 'lms_users', 'lms_training_records', 'lms_sync_jobs', 'integration_logs', 'integration_settings', 'training_records', 'training_assignments', 'training_certificates', 'training_events', 'training_schedule', 'training_rooms', 'trainers', 'retraining_records', 'training_assignments_sessions', 'approval_workflows', 'approval_requests', 'approval_steps', 'approval_requests_history'])
+        || (isAdmin() && name in ['lms_connections', 'lms_courses', 'lms_users', 'lms_training_records', 'lms_sync_jobs', 'integration_logs', 'integration_settings', 'training_certificates', 'training_events', 'training_schedule', 'training_rooms', 'trainers', 'retraining_records', 'approval_workflows', 'approval_requests', 'approval_steps', 'approval_requests_history'])
         || (isQcRole() && name in ['oos_records', 'oos', 'cqa_parameters', 'cqa_results', 'stability_studies', 'stability'])
         || (isProductionRole() && name in ['batches', 'cpp_parameters', 'cpp_results', 'ebmr_records'])
         || (isEngineeringRole() && name in ['equipment_master', 'equipment_records', 'calibration_records', 'validation_records', 'csv_systems', 'monitoring_records'])
         || (isWarehouseRole() && name in ['warehouse_materials', 'warehouse_records', 'material_master', 'recall_distribution', 'recall_recovery'])
-        || (isRegulatoryRole() && name in ['change_controls', 'change_control', 'recalls', 'recall_records', 'recall_regulatory_notifications', 'documents', 'dms_documents', 'pqr_records'])
+        || (isRegulatoryRole() && name in ['change_controls', 'change_control', 'recalls', 'recall_records', 'recall_regulatory_notifications', 'documents', 'dms_documents', 'document_revisions', 'document_versions', 'document_approvals', 'document_distribution', 'distribution_lists', 'distribution_groups', 'document_acknowledgements', 'read_confirmations', 'document_attachments', 'document_lifecycle', 'document_reviews', 'review_workflows', 'review_steps', 'review_comments', 'review_checklists', 'approval_delegations', 'approval_escalations', 'approval_comments', 'electronic_signatures', 'document_effective_dates', 'periodic_reviews', 'review_schedules', 'review_decisions', 'document_archives', 'document_archive', 'archive_jobs', 'archive_policies', 'archive_requests', 'archive_restoration_requests', 'archive_locations', 'retention_policies', 'retention_schedules', 'retention_reviews', 'retention_events', 'disposal_requests', 'disposal_approvals', 'disposal_certificates', 'legal_holds', 'regulatory_holds', 'external_documents', 'external_document_versions', 'external_document_reviews', 'external_document_distribution', 'external_document_sources', 'external_document_categories', 'supplier_documents', 'regulatory_documents', 'standards_documents', 'safety_documents', 'linked_internal_documents', 'print_requests', 'printed_documents', 'print_copies', 'print_locations', 'print_distribution', 'print_reconciliation', 'print_returns', 'print_destruction', 'watermark_templates', 'watermark_rules', 'watermark_history', 'document_watermarks', 'audit_events', 'audit_exports', 'audit_filters', 'document_obsolete', 'sop_master', 'sop_versions', 'sop_reviews', 'sop_approvals', 'sop_training_links', 'sop_distribution', 'sop_acknowledgements', 'sop_periodic_reviews', 'sop_archive', 'sop_management', 'work_instructions', 'wi_versions', 'wi_reviews', 'wi_approvals', 'wi_training_links', 'wi_distribution', 'wi_acknowledgements', 'wi_periodic_reviews', 'wi_archive', 'forms_templates', 'form_versions', 'form_reviews', 'form_approvals', 'form_distribution', 'form_acknowledgements', 'form_periodic_reviews', 'form_archive', 'production_lines', 'pqr_records'])
         || (isNotReadOnly() && name.matches('cpv_.*'));
     }
 
@@ -148,10 +187,49 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    match /audit_events/{eventId} {
+      allow read: if isAuthenticated();
+      allow create: if isNotReadOnly();
+      allow update, delete: if false;
+    }
+
+    match /audit_exports/{exportId} {
+      allow read: if isAuthenticated();
+      allow create: if isNotReadOnly();
+      allow update, delete: if false;
+    }
+
     match /esign_records/{recordId} {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated();
       allow update, delete: if false;
+    }
+
+    match /electronic_signatures/{recordId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isNotReadOnly();
+      allow update: if isAuthenticated() && isQaRole()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'verified_at', 'verified_by']);
+      allow delete: if false;
+    }
+
+    match /signature_meanings/{docId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isNotReadOnly() && (isSuperAdmin() || isQaRole());
+      allow delete: if isSuperAdmin();
+    }
+
+    match /signature_sessions/{docId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isNotReadOnly();
+      allow update: if isAuthenticated() && isNotReadOnly();
+      allow delete: if false;
+    }
+
+    match /signature_settings/{docId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isNotReadOnly() && (isSuperAdmin() || isAdmin() || isQaRole());
+      allow delete: if isSuperAdmin();
     }
 
     match /cpv_audit_trail/{logId} {
@@ -230,6 +308,62 @@ service cloud.firestore {
       allow read: if isAuthenticated();
       allow create, update: if isNotReadOnly();
       allow delete: if isSuperAdmin();
+    }
+
+    // ── Document Acknowledgements (employees may update own records) ──
+    match /document_acknowledgements/{docId} {
+      allow read: if isAuthenticated();
+      allow create: if isNotReadOnly() && canWriteCollection('document_acknowledgements');
+      allow update: if isAuthenticated() && isNotReadOnly() && (
+        canWriteCollection('document_acknowledgements')
+        || resource.data.employee_id == request.auth.uid
+      );
+      allow delete: if isSuperAdmin();
+    }
+
+    match /read_confirmations/{docId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isNotReadOnly();
+      allow update, delete: if false;
+    }
+
+    match /document_reviews/{docId} {
+      allow read: if isAuthenticated();
+      allow create: if isNotReadOnly() && canWriteCollection('document_reviews');
+      allow update: if isAuthenticated() && isNotReadOnly() && (
+        canWriteCollection('document_reviews')
+        || resource.data.reviewer_id == request.auth.uid
+      );
+      allow delete: if isSuperAdmin();
+    }
+
+    match /review_comments/{docId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isNotReadOnly();
+      allow update, delete: if isSuperAdmin();
+    }
+
+    match /document_approvals/{docId} {
+      allow read: if isAuthenticated();
+      allow create: if isNotReadOnly() && canWriteCollection('document_approvals');
+      allow update: if isAuthenticated() && isNotReadOnly() && (
+        canWriteCollection('document_approvals')
+        || resource.data.approver_id == request.auth.uid
+        || resource.data.delegated_to == request.auth.uid
+      );
+      allow delete: if isSuperAdmin();
+    }
+
+    match /approval_comments/{docId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isNotReadOnly();
+      allow update, delete: if isSuperAdmin();
+    }
+
+    match /approval_delegations/{docId} {
+      allow read: if isAuthenticated();
+      allow create: if isNotReadOnly() && canWriteCollection('approval_delegations');
+      allow update, delete: if isSuperAdmin();
     }
 
     // ── Default: registered collections ──

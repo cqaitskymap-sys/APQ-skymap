@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
 
 export default function DocumentsRedirectPage() {
-  redirect('/qms/dms');
+  redirect('/qms/documents/master');
 }

@@ -13,6 +13,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useAuth } from '@/contexts/auth-context';
 import { fetchActiveEsignSetting } from '@/lib/admin/esign-settings-service';
+import { fetchSignatureMeanings } from '@/lib/electronic-signatures-service';
 import { performEsign } from '@/lib/admin/esign-service';
 import type { EsignRecord } from '@/lib/admin/schemas';
 
@@ -43,11 +44,16 @@ export function ESignatureModal({
   const [requirePassword, setRequirePassword] = useState(true);
   const [requireComment, setRequireComment] = useState(true);
   const [meaning, setMeaning] = useState(signatureMeaning || '');
+  const [meanings, setMeanings] = useState<string[]>([]);
 
   useEffect(() => {
     if (!open) return;
     setSettingLoading(true);
-    fetchActiveEsignSetting(moduleName, actionType).then((s) => {
+    Promise.all([
+      fetchActiveEsignSetting(moduleName, actionType),
+      fetchSignatureMeanings(),
+    ]).then(([s, m]) => {
+      setMeanings(m);
       if (s) {
         setRequirePassword(s.requirePasswordReAuthentication);
         setRequireComment(s.requireCommentReason);
@@ -56,7 +62,7 @@ export function ESignatureModal({
           ? s.signatureStatementText || `By signing electronically, I confirm: ${s.signatureMeaning}`
           : '');
       } else {
-        setMeaning(signatureMeaning || 'I confirm this action');
+        setMeaning(signatureMeaning || m[0] || 'I confirm this action');
         setStatement('By signing electronically, I confirm this action is accurate and attributable to me.');
       }
       setSettingLoading(false);
@@ -125,7 +131,20 @@ export function ESignatureModal({
           <div className="space-y-4 py-2">
             <div className="rounded-md bg-slate-50 border p-3 text-xs text-slate-600">
               <p><strong>User:</strong> {profile?.full_name || user?.email}</p>
-              <p><strong>Meaning:</strong> {meaning}</p>
+              {!signatureMeaning && meanings.length > 0 ? (
+                <div className="mt-2">
+                  <Label className="text-xs">Signature Meaning *</Label>
+                  <select
+                    className="mt-1 w-full rounded-md border px-2 py-1.5 text-xs bg-white"
+                    value={meaning}
+                    onChange={(e) => setMeaning(e.target.value)}
+                  >
+                    {meanings.map((m) => <option key={m} value={m}>{m}</option>)}
+                  </select>
+                </div>
+              ) : (
+                <p><strong>Meaning:</strong> {meaning}</p>
+              )}
               {statement && <p className="mt-2 italic border-l-2 border-indigo-300 pl-2">{statement}</p>}
             </div>
 

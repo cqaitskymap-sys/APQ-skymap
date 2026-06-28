@@ -21,6 +21,13 @@ export const TMS_COLLECTIONS = {
   designations: 'designations',
   roles: 'roles',
   matrixCompliance: 'training_matrix_compliance',
+  events: 'training_events',
+  schedule: 'training_schedule',
+  rooms: 'training_rooms',
+  trainers: 'trainers',
+  retrainingRecords: 'retraining_records',
+  sessions: 'training_assignments_sessions',
+  certificates: 'training_certificates',
 } as const;
 
 export const TRAINING_TYPES = [

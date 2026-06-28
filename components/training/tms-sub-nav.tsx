@@ -4,18 +4,25 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, Grid3X3, ClipboardList, CheckCircle, Award, FileDown,
-  UserCheck,
+  UserCheck, Link2, CalendarDays, ShieldCheck, FileSearch, ScrollText, RefreshCw, History,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const items = [
-  { label: 'Dashboard', href: '/qms/training', icon: LayoutDashboard, matchPaths: ['/qms/training', '/qms/training/dashboard'] },
+  { label: 'Dashboard', href: '/qms/training', icon: LayoutDashboard, matchPaths: ['/qms/training', '/qms/training/dashboard', '/qms/training/analytics'] },
   { label: 'Training Matrix', href: '/qms/training/matrix', icon: Grid3X3, matchPaths: ['/qms/training/matrix', '/qms/training/training-matrix'] },
   { label: 'Assignment & Scheduling', href: '/qms/training/assignments', icon: ClipboardList, matchPaths: ['/qms/training/assignments', '/qms/training/scheduling', '/qms/training/schedule'] },
+  { label: 'Calendar & Scheduler', href: '/qms/training/calendar', icon: CalendarDays, matchPaths: ['/qms/training/calendar', '/qms/training/scheduler', '/qms/training/events'] },
   { label: 'Completion & Attendance', href: '/qms/training/completion', icon: UserCheck, matchPaths: ['/qms/training/completion', '/qms/training/attendance'] },
-  { label: 'Training Effectiveness', href: '/qms/training/effectiveness', icon: CheckCircle },
-  { label: 'Competency Assessment', href: '/qms/training/competency', icon: Award },
-  { label: 'Training Reports', href: '/qms/training/reports', icon: FileDown },
+  { label: 'Approval Workflow', href: '/qms/training/approval-workflow', icon: ShieldCheck, matchPaths: ['/qms/training/approval-workflow', '/qms/training/approvals', '/qms/training/workflows'] },
+  { label: 'Audit Trail', href: '/qms/training/audit-trail', icon: FileSearch, matchPaths: ['/qms/training/audit-trail', '/qms/training/audit', '/qms/training/activity-log'] },
+  { label: 'Training Effectiveness', href: '/qms/training/effectiveness', icon: CheckCircle, matchPaths: ['/qms/training/effectiveness'] },
+  { label: 'Competency Assessment', href: '/qms/training/competency', icon: Award, matchPaths: ['/qms/training/competency'] },
+  { label: 'Certificates', href: '/qms/training/certificates', icon: ScrollText, matchPaths: ['/qms/training/certificates', '/qms/training/certificate-management', '/qms/training/certificate-registry'] },
+  { label: 'Retraining', href: '/qms/training/retraining', icon: RefreshCw, matchPaths: ['/qms/training/retraining', '/qms/training/retraining-management', '/qms/training/retraining-schedule'] },
+  { label: 'Employee History', href: '/qms/training/history', icon: History, matchPaths: ['/qms/training/history', '/qms/training/employee-history', '/qms/training/records'] },
+  { label: 'Training Reports', href: '/qms/training/reports', icon: FileDown, matchPaths: ['/qms/training/reports', '/qms/training/analytics', '/qms/training/report-center'] },
+  { label: 'LMS Integration', href: '/qms/training/lms-integration', icon: Link2, matchPaths: ['/qms/training/lms-integration', '/qms/training/lms', '/qms/integrations/lms'] },
 ];
 
 export function TmsSubNav() {

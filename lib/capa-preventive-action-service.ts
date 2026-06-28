@@ -636,6 +636,11 @@ export async function fetchTrainingRecordOptions(max = 50): Promise<{ id: string
 }
 
 export async function fetchSopRecordOptions(max = 50): Promise<{ id: string; reference: string; title: string }[]> {
+  try {
+    const { fetchSopOptionsForCapa } = await import('@/lib/sop-service');
+    const options = await fetchSopOptionsForCapa(max);
+    if (options.length) return options;
+  } catch { /* fall through to legacy */ }
   if (!isFirebaseConfigured()) return [];
   try {
     const snap = await getDocs(query(

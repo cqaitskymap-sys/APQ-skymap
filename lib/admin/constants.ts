@@ -123,6 +123,8 @@ export const DEFAULT_CQA_PARAMETERS = [
   'Sterility', 'Bacterial Endotoxin', 'Particulate Matter >=10µm',
   'Particulate Matter >=25µm', 'Methyl Paraben Assay', 'Propyl Paraben Assay',
   'Related Substances', 'Identification',
+  'Total Viable Count', 'Colour Index', 'Ondansetron Imp. D',
+  'Any Secondary Impurity', 'Sum of All Impurities',
 ] as const;
 
 export const DEFAULT_UTILITY_PARAMETERS = [

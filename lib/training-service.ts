@@ -6,6 +6,7 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { z } from 'zod';
 import { getFirebaseFirestore, getFirebaseStorage } from '@/lib/firebase';
 import { logAuditEvent } from '@/lib/admin/admin-service';
+import { logTrainingAuditRecord } from '@/lib/training-audit-trail-service';
 import { downloadCsv } from '@/lib/export-utils';
 import {
   TMS_COLLECTIONS, type TrainingMaster, type TrainingAssignment, type AssessmentQuestion,
@@ -26,7 +27,7 @@ import type {
 
 function now() { return new Date().toISOString(); }
 
-async function audit(actor: TmsActor, action: string, recordId: string, oldValue: unknown, newValue: unknown, reason = '') {
+async function audit(actor: TmsActor, action: string, recordId: string, oldValue: unknown, newValue: unknown, reason = '', collectionName = TMS_COLLECTIONS.records) {
   await logAuditEvent({
     userId: actor.id, userName: actor.name, module: 'Training', recordId, action,
     oldValue: oldValue ? JSON.stringify(oldValue) : '',
@@ -34,6 +35,10 @@ async function audit(actor: TmsActor, action: string, recordId: string, oldValue
     reason, ipAddress: 'client', device: typeof navigator !== 'undefined' ? navigator.userAgent : 'server',
     status: 'Success',
   });
+  await logTrainingAuditRecord(
+    { id: actor.id, name: actor.name, role: actor.role },
+    action, recordId, collectionName, oldValue, newValue, { reason, moduleName: 'Training' },
+  ).catch(() => {});
 }
 
 async function notify(title: string, message: string, recordId: string, roles: string[]) {
@@ -134,6 +139,15 @@ async function fetchLinkedDocumentInfo(documentId: string | null): Promise<{ doc
         sop_version: (data.version as string) || (data.effective_version as string) || '',
       };
     }
+    const masterSnap = await getDoc(doc(getFirebaseFirestore(), 'sop_master', documentId));
+    if (masterSnap.exists()) {
+      const data = masterSnap.data();
+      return {
+        document_number: (data.sop_number as string) || '',
+        document_title: (data.sop_title as string) || '',
+        sop_version: (data.version as string) || '',
+      };
+    }
   } catch { /* optional */ }
   return { document_number: '', document_title: '', sop_version: '' };
 }
@@ -148,14 +162,19 @@ async function notifyCompletion(
     'Training Completion',
     `${assignment.employee_name}: ${assignment.training_title} ${outcome}`,
     recordId,
-    ['qa_manager', 'head_qa'],
+    ['qa_manager', 'head_qa', 'department_head', 'training_coordinator'],
   );
-  await notify(
-    'Your Training Update',
-    `Your training "${assignment.training_title}" has been ${outcome}.`,
-    recordId,
-    [],
-  );
+  try {
+    await addDoc(collection(getFirebaseFirestore(), TMS_COLLECTIONS.notifications), {
+      title: 'Your Training Update',
+      message: `Your training "${assignment.training_title}" has been ${outcome}.`,
+      module: 'Training',
+      record_id: recordId,
+      target_user_id: assignment.employee_id,
+      read: false,
+      created_at: now(),
+    });
+  } catch { /* optional */ }
 }
 
 async function scheduleEffectivenessTask(assignment: TrainingAssignment, actor: TmsActor) {
@@ -487,7 +506,7 @@ export async function scheduleTrainingSession(
   };
 
   const refDoc = await addDoc(
-    collection(getFirebaseFirestore(), `${TMS_COLLECTIONS.assignments}_sessions`),
+    collection(getFirebaseFirestore(), TMS_COLLECTIONS.sessions),
     session,
   );
   await audit(actor, 'SCHEDULE', refDoc.id, null, session);
@@ -499,7 +518,7 @@ export async function getTrainingCalendar(): Promise<TrainingCalendarEvent[]> {
   const events: TrainingCalendarEvent[] = [];
 
   for (const a of assignments) {
-    const eventDate = a.scheduled_date || a.due_date;
+    const eventDate = a.scheduled_date;
     if (!eventDate) continue;
     events.push({
       id: a.id,
@@ -608,7 +627,21 @@ async function createRetrainingTask(failed: TrainingAssignment, actor: TmsActor)
     due_date: dueDate.toISOString().split('T')[0],
     trainer_name: failed.trainer_name,
   }, actor, { source: 'retraining', retrainingOf: failed.id });
-  await notify('Retraining Required', `${failed.employee_name} failed ${failed.training_title} — retraining assigned`, failed.id, ['qa_manager', 'head_qa']);
+  try {
+    const { autoCreateFromFailedAssessment } = await import('./training-retraining-service');
+    await autoCreateFromFailedAssessment({
+      employee_id: failed.employee_id,
+      employee_name: failed.employee_name,
+      department: failed.department,
+      designation: failed.designation,
+      training_topic: failed.training_title,
+      training_type: failed.training_type || 'GMP Training',
+      original_training_id: failed.id,
+      trainer: failed.trainer_name,
+      reason: `Failed assessment on ${failed.training_title}`,
+    }, actor);
+  } catch { /* retraining record optional if service unavailable */ }
+  await notify('Retraining Required', `${failed.employee_name} failed ${failed.training_title} — retraining assigned`, failed.id, ['qa_manager', 'head_qa', 'training_coordinator', 'department_head']);
 }
 
 export async function syncOverdueAssignments(): Promise<number> {
@@ -807,11 +840,14 @@ export async function completeTraining(
 
   if (trainingResult === 'Pass' || trainingResult === 'Not Applicable') {
     assignmentUpdates.status = 'completed';
+    assignmentUpdates.training_status = 'Completed';
   } else if (trainingResult === 'Fail') {
     assignmentUpdates.status = 'failed';
+    assignmentUpdates.training_status = 'In Progress';
     await createRetrainingTask(assignment, actor);
   } else {
     assignmentUpdates.status = 'in_progress';
+    assignmentUpdates.training_status = 'In Progress';
   }
 
   await updateDoc(doc(getFirebaseFirestore(), TMS_COLLECTIONS.assignments, input.assignment_id), assignmentUpdates);

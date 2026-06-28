@@ -1,5 +1,35 @@
 import { z } from 'zod';
-import { normalizeRole } from '@/lib/permissions';
+import {
+  REPORTS_MODULE,
+  RISK_REPORT_TYPES,
+  type RiskReportType,
+  type RiskReportActor,
+  canGenerateRiskReportsModule as canGenerateRiskReports,
+  canExportRiskReportsModule as canExportRiskReports,
+  canViewRegulatoryRiskReportsModule as canViewRegulatoryRiskReports,
+  canViewCsvRiskReportsModule as canViewCsvRiskReports,
+  canViewManagementReviewModule as canViewManagementReview,
+  isRiskReportsReadOnlyModule as isRiskReportsReadOnly,
+  canGenerateRiskReportTypeModule as canGenerateRiskReportType,
+  canExportRiskReportTypeModule as canExportRiskReportType,
+  canViewRiskReportsModule as canViewRiskReports,
+} from '@/lib/risk-reports-types';
+
+export {
+  REPORTS_MODULE,
+  RISK_REPORT_TYPES,
+  type RiskReportType,
+  type RiskReportActor,
+  canGenerateRiskReports,
+  canExportRiskReports,
+  canViewRegulatoryRiskReports,
+  canViewCsvRiskReports,
+  canViewManagementReview,
+  isRiskReportsReadOnly,
+  canGenerateRiskReportType,
+  canExportRiskReportType,
+  canViewRiskReports,
+};
 import {
   RISK_CATEGORIES,
   RISK_LEVELS,
@@ -12,30 +42,7 @@ import {
 } from '@/lib/cpv-risk-assessment-records';
 import { TMS_DEPARTMENTS } from '@/lib/training-types';
 
-export const REPORTS_MODULE = 'Risk Reports & Analytics';
 export const RISK_REPORTS_COLLECTION = 'risk_reports';
-
-export const RISK_REPORT_TYPES = [
-  'Risk Register Report',
-  'Open Risk Report',
-  'Closed Risk Report',
-  'Critical Risk Report',
-  'Residual Risk Report',
-  'FMEA Report',
-  'Risk Mitigation Report',
-  'Overdue Risk Report',
-  'Department-wise Risk Report',
-  'Product-wise Risk Report',
-  'Regulatory Risk Report',
-  'CSV/Data Integrity Risk Report',
-  'Patient Safety Risk Report',
-  'Risk Trend Report',
-  'Management Review Report',
-] as const;
-
-export type RiskReportType = typeof RISK_REPORT_TYPES[number];
-
-export type RiskReportActor = { id: string; name: string; role?: string; department?: string };
 
 export interface RiskReportFilterInput {
   report_type: RiskReportType;
@@ -371,7 +378,7 @@ export function computeRiskReportMetrics(records: RiskAssessmentRecord[]): RiskR
     return residual >= 101;
   }).length;
   const avgRpn = total > 0
-    ? Math.round(records.reduce((s, r) => s + r.rpnScore, 0) / total)
+    ? Math.round(records.reduce((s, r) => s + getSafeRpnFromRecord(r), 0) / total)
     : 0;
   const reductions = records
     .filter((r) => r.rpnScore > 0)
@@ -639,44 +646,3 @@ export function reportStatusColor(status: string): string {
   return map[status] || 'bg-slate-100 text-slate-700';
 }
 
-export function canGenerateRiskReports(role?: string | null): boolean {
-  const r = normalizeRole(role);
-  return ['super_admin', 'admin', 'head_qa', 'qa_manager', 'qa', 'qa_executive', 'risk_manager'].includes(r);
-}
-
-export function canExportRiskReports(role?: string | null): boolean {
-  return canGenerateRiskReports(role);
-}
-
-export function canViewRegulatoryRiskReports(role?: string | null): boolean {
-  const r = normalizeRole(role);
-  return canGenerateRiskReports(role) || ['regulatory_affairs'].includes(r);
-}
-
-export function canViewCsvRiskReports(role?: string | null): boolean {
-  const r = normalizeRole(role);
-  return canGenerateRiskReports(role) || ['csv_manager', 'it_admin', 'validation_manager'].includes(r);
-}
-
-export function canViewManagementReview(role?: string | null): boolean {
-  const r = normalizeRole(role);
-  return ['super_admin', 'admin', 'head_qa', 'qa_manager', 'risk_manager'].includes(r);
-}
-
-export function isRiskReportsReadOnly(role?: string | null): boolean {
-  return normalizeRole(role) === 'auditor';
-}
-
-export function canGenerateRiskReportType(role: string | undefined | null, reportType: RiskReportType): boolean {
-  if (isRiskReportsReadOnly(role)) return false;
-  if (reportType === 'Management Review Report') return canViewManagementReview(role);
-  if (reportType === 'Regulatory Risk Report') return canViewRegulatoryRiskReports(role);
-  if (reportType === 'CSV/Data Integrity Risk Report') return canViewCsvRiskReports(role);
-  return canGenerateRiskReports(role);
-}
-
-export function canViewRiskReports(role?: string | null): boolean {
-  const r = normalizeRole(role);
-  return canGenerateRiskReports(role) || canViewRegulatoryRiskReports(role)
-    || canViewCsvRiskReports(role) || isRiskReportsReadOnly(role);
-}

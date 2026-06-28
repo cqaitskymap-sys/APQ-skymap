@@ -66,6 +66,9 @@ export function EbmrDetailView({ record, onRefresh }: { record: EbmrRecord; onRe
   const info = [
     ['Product', record.product_name], ['Generic', record.generic_name || '—'], ['Strength', record.strength || '—'],
     ['Batch No', record.batch_number], ['Batch Size', record.batch_size || '—'],
+    ['Batch Size (L)', record.batch_size_litres != null ? String(record.batch_size_litres) : '—'],
+    ['Std. Fill Vol. (mL)', record.std_fill_volume_ml != null ? String(record.std_fill_volume_ml) : '—'],
+    ['Batch Size (Nos.)', record.batch_size_nos != null ? String(record.batch_size_nos) : '—'],
     ['MFG Date', record.mfg_date], ['EXP Date', record.exp_date], ['MFR No', record.mfr_number || '—'],
     ['BMR Version', record.bmr_version], ['License No', record.manufacturing_license_no || '—'],
     ['Mfg Area', record.manufacturing_area || '—'], ['Market', record.market || '—'], ['Customer', record.customer || '—'],

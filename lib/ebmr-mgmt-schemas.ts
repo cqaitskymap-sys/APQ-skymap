@@ -7,6 +7,9 @@ export const ebmrCreateSchema = z.object({
   strength: z.string().default(''),
   batch_number: z.string().min(1, 'Batch number required'),
   batch_size: z.string().default(''),
+  batch_size_litres: z.coerce.number().positive().optional().nullable(),
+  std_fill_volume_ml: z.coerce.number().positive().optional().nullable(),
+  batch_size_nos: z.coerce.number().int().positive().optional().nullable(),
   mfg_date: z.string().min(1),
   exp_date: z.string().min(1),
   mfr_number: z.string().default(''),
@@ -37,9 +40,13 @@ export const lineClearanceSchema = z.object({
 
 export const ebmrDispensingSchema = z.object({
   ebmr_doc_id: z.string().min(1),
+  material_type: z.enum(['API', 'Excipient', 'Primary Packing', 'Secondary Packing', 'Other'] as const).default('API'),
   material_name: z.string().min(1),
   material_code: z.string().default(''),
   ar_number: z.string().min(1),
+  material_mfg_date: z.string().default(''),
+  material_exp_date: z.string().default(''),
+  vendor_name: z.string().default(''),
   required_quantity: z.coerce.number().positive(),
   dispensed_quantity: z.coerce.number().min(0),
   unit: z.string().default('kg'),

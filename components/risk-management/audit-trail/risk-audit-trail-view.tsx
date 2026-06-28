@@ -46,6 +46,7 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 const PAGE_SIZE = 20;
 
@@ -206,7 +207,7 @@ function AuditTabsContent({
         <TabsTrigger value="exports">Export History ({exportHistory.length})</TabsTrigger>
       </TabsList>
       <TabsContent value="timeline" className="mt-4">
-        <RiskAuditTimeline entries={paginatedItems} grouped />
+        <RiskAuditTimeline entries={entries} grouped />
       </TabsContent>
       <TabsContent value="table" className="mt-4">
         <RiskAuditTable entries={paginatedItems} compact={compact} />
@@ -354,7 +355,7 @@ export function RiskAuditTrailView({ riskId, compact, showHeader = true }: RiskA
           <span className="inline-flex items-center gap-1 text-xs text-muted-foreground border rounded-full px-2 py-0.5">
             <Lock className="h-3 w-3" /> Read-only · Immutable audit log
           </span>
-          <Link href={`/cpv/risk-assessment/${riskId}`} className="text-xs text-blue-600 hover:underline ml-auto">
+          <Link href={`/qms/risk-management/${riskId}/fmea`} className="text-xs text-blue-600 hover:underline ml-auto">
             View Risk Assessment →
           </Link>
         </div>
@@ -397,7 +398,12 @@ export function RiskAuditTrailView({ riskId, compact, showHeader = true }: RiskA
         </div>
       )}
 
-      {readOnly && <p className="text-xs text-muted-foreground text-center">Auditor access: read-only. Export not permitted.</p>}
+      {readOnly && (
+        <Alert>
+          <AlertTitle>Read-only access</AlertTitle>
+          <AlertDescription>Auditor view — audit records are immutable and cannot be edited or deleted. Export is not permitted.</AlertDescription>
+        </Alert>
+      )}
     </div>
   );
 
@@ -410,9 +416,8 @@ export function RiskAuditTrailView({ riskId, compact, showHeader = true }: RiskA
           title="Risk Audit Trail"
           description="Complete risk assessment activity history and GMP audit trail"
           trail={[
-            { label: 'Dashboard', href: '/dashboard' },
-            { label: 'QMS', href: '/qms/risk-management/audit-trail' },
-            { label: 'Risk Management', href: '/qms/risk-management/audit-trail' },
+            { label: 'QMS', href: '/qms/risk-management' },
+            { label: 'Risk Management', href: '/qms/risk-management' },
             { label: record?.riskNumber || 'Audit Trail' },
           ]}
         />
@@ -504,9 +509,8 @@ export function RiskAuditTrailListPage() {
           title="Risk Audit Trail"
           description="Complete risk assessment activity history and GMP audit trail"
           trail={[
-            { label: 'Dashboard', href: '/dashboard' },
-            { label: 'QMS', href: '/qms/risk-management/audit-trail' },
-            { label: 'Risk Management', href: '/qms/risk-management/audit-trail' },
+            { label: 'QMS', href: '/qms/risk-management' },
+            { label: 'Risk Management', href: '/qms/risk-management' },
             { label: 'Audit Trail' },
           ]}
         />
@@ -548,7 +552,12 @@ export function RiskAuditTrailListPage() {
           <EmptyState title="No audit entries" message="Risk audit activity will appear here as actions are performed across the module." />
         )}
 
-        {readOnly && <p className="text-xs text-muted-foreground text-center">Auditor access: read-only. Export not permitted.</p>}
+        {readOnly && (
+        <Alert>
+          <AlertTitle>Read-only access</AlertTitle>
+          <AlertDescription>Auditor view — audit records are immutable and cannot be edited or deleted. Export is not permitted.</AlertDescription>
+        </Alert>
+      )}
       </div>
     </RiskAuditTrailAccessGuard>
   );

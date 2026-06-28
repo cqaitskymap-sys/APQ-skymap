@@ -282,6 +282,7 @@ export async function fetchRiskExportHistory(max = 50): Promise<RiskReportRecord
 export function openRiskReportPdfHtml(
   report: RiskReportRecord,
   generatedBy: string,
+  filterSummary?: string,
 ): void {
   const rows = (report.preview_rows || []).slice(0, 50).map((r, i) => `
     <tr>
@@ -306,6 +307,7 @@ th{background:#f1f5f9}</style></head><body>
 <h1>${report.report_type}</h1>
 <p>ICH Q9 | GMP Risk Management | Report No: ${report.report_number}</p>
 <p>Review Period: ${report.review_period_from} — ${report.review_period_to}</p>
+${filterSummary ? `<p><strong>Filter Summary:</strong> ${filterSummary}</p>` : ''}
 <p>Prepared By: ${generatedBy} | Generated: ${new Date().toLocaleString()} | Page 1</p>
 </div>
 <h2>Risk Register Summary</h2>

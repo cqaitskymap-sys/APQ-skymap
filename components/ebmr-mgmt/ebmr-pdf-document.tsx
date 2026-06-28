@@ -33,6 +33,9 @@ export function EbmrFullPdfDocument({
           <tbody>{[
             ['eBMR Number', record.ebmr_number], ['Product', record.product_name], ['Generic', record.generic_name],
             ['Strength', record.strength], ['Batch No', record.batch_number], ['Batch Size', record.batch_size],
+            ['Batch Size (L)', record.batch_size_litres != null ? String(record.batch_size_litres) : '—'],
+            ['Std. Fill Vol. (mL)', record.std_fill_volume_ml != null ? String(record.std_fill_volume_ml) : '—'],
+            ['Batch Size (Nos.)', record.batch_size_nos != null ? String(record.batch_size_nos) : '—'],
             ['MFG Date', record.mfg_date], ['EXP Date', record.exp_date], ['BMR Version', record.bmr_version],
             ['Mfg Area', record.manufacturing_area], ['Status', record.batch_status],
             ['Created By', record.created_by_name], ['Reviewed By', record.reviewed_by_name || '—'],
@@ -55,9 +58,11 @@ export function EbmrFullPdfDocument({
       {dispensing.length > 0 && (
         <section><h2 className="font-semibold mb-2">Dispensing Verification</h2>
           <table className="w-full text-xs border"><thead><tr className="bg-gray-100">
-            <th className="p-1 border">Material</th><th className="p-1 border">AR No</th><th className="p-1 border">Required</th><th className="p-1 border">Dispensed</th><th className="p-1 border">Status</th>
+            <th className="p-1 border">Material</th><th className="p-1 border">Code</th><th className="p-1 border">AR No</th>
+            <th className="p-1 border">Mfg/Exp</th><th className="p-1 border">Required</th><th className="p-1 border">Dispensed</th><th className="p-1 border">Status</th>
           </tr></thead><tbody>{dispensing.map((r) => (
-            <tr key={r.id}><td className="p-1 border">{r.material_name}</td><td className="p-1 border">{r.ar_number}</td>
+            <tr key={r.id}><td className="p-1 border">{r.material_name}</td><td className="p-1 border">{r.material_code || '—'}</td><td className="p-1 border">{r.ar_number}</td>
+              <td className="p-1 border">{r.material_mfg_date || '—'} / {r.material_exp_date || '—'}</td>
               <td className="p-1 border">{r.required_quantity} {r.unit}</td><td className="p-1 border">{r.dispensed_quantity}</td><td className="p-1 border">{r.status}</td></tr>
           ))}</tbody></table>
         </section>

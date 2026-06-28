@@ -48,15 +48,19 @@ export function LineClearanceTable({ records }: { records: LineClearanceRecord[]
 export function DispensingTable({ records }: { records: EbmrDispensingRecord[] }) {
   return (
     <Table><TableHeader><TableRow>
-      <TableHead>Material</TableHead><TableHead>AR No</TableHead><TableHead>Required</TableHead>
-      <TableHead>Dispensed</TableHead><TableHead>Balance</TableHead><TableHead>Status</TableHead>
+      <TableHead>Type</TableHead><TableHead>Material</TableHead><TableHead>Code</TableHead><TableHead>AR No</TableHead>
+      <TableHead>Mfg / Exp</TableHead><TableHead>Required</TableHead>
+      <TableHead>Dispensed</TableHead><TableHead>Status</TableHead>
     </TableRow></TableHeader><TableBody>
       {records.map((r) => (
         <TableRow key={r.id}>
-          <TableCell>{r.material_name}</TableCell><TableCell>{r.ar_number}</TableCell>
+          <TableCell>{r.material_type || '—'}</TableCell>
+          <TableCell>{r.material_name}</TableCell>
+          <TableCell className="font-mono text-xs">{r.material_code || '—'}</TableCell>
+          <TableCell>{r.ar_number}</TableCell>
+          <TableCell className="text-xs">{r.material_mfg_date || '—'} / {r.material_exp_date || '—'}</TableCell>
           <TableCell>{r.required_quantity} {r.unit}</TableCell>
           <TableCell>{r.dispensed_quantity} {r.unit}</TableCell>
-          <TableCell>{r.balance_quantity}</TableCell>
           <TableCell><EbmrStatusBadge status={r.status} /></TableCell>
         </TableRow>
       ))}</TableBody></Table>

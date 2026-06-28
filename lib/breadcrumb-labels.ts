@@ -13,14 +13,105 @@ export const BREADCRUMB_LABELS: Record<string, string> = {
   complaints: 'Complaint Management',
   recall: 'Product Recall',
   dms: 'Document Management',
+  documents: 'Document Management',
+  'document-master': 'Document Master',
+  lifecycle: 'Document Lifecycle',
+  sop: 'SOP Management',
+  'sop-management': 'SOP Management',
+  'standard-operating-procedures': 'SOP Management',
+  'work-instructions': 'Work Instructions',
+  wi: 'Work Instructions',
+  'wi-management': 'Work Instructions',
+  'forms-templates': 'Forms & Templates',
+  forms: 'Forms & Templates',
+  templates: 'Forms & Templates',
+  'forms-management': 'Forms & Templates',
+  'template-library': 'Forms & Templates',
+  distribution: 'Controlled Document Distribution',
+  'document-distribution': 'Controlled Document Distribution',
+  'controlled-distribution': 'Controlled Document Distribution',
+  acknowledgements: 'Acknowledgements',
+  'document-acknowledgement': 'Acknowledgements',
+  'read-confirmation': 'Read Confirmation',
+  'document-read-confirmation': 'Read Confirmation',
+  'version-control': 'Version Control',
+  versioning: 'Version Control',
+  'document-versions': 'Version Control',
+  'review-workflow': 'Review Workflow',
+  'document-review': 'Review Workflow',
+  reviews: 'Review Workflow',
+  'approval-workflow': 'Approval Workflow',
+  'document-approval': 'Approval Workflow',
+  approvals: 'Approval Workflow',
+  'effective-date-management': 'Effective Date Management',
+  'effective-dates': 'Effective Date Management',
+  'document-effective-dates': 'Effective Date Management',
+  'effective-date': 'Effective Date Management',
+  'periodic-review': 'Periodic Review Management',
+  'document-review-schedule': 'Periodic Review Management',
+  'training-linkage': 'Document Training Linkage',
+  'document-training': 'Document Training Linkage',
+  'change-impact-assessment': 'Change Impact Assessment',
+  'change-impact': 'Change Impact Assessment',
+  'document-impact': 'Change Impact Assessment',
+  archive: 'Archive Management',
+  'document-archive': 'Archive Management',
+  'archive-management': 'Archive Management',
+  'retention-disposal': 'Retention & Disposal Management',
+  retention: 'Retention & Disposal Management',
+  disposal: 'Retention & Disposal Management',
+  'records-retention': 'Retention & Disposal Management',
+  'document-retention': 'Retention & Disposal Management',
+  external: 'External Document Management',
+  'external-documents': 'External Document Management',
+  'external-document-management': 'External Document Management',
+  'document-control': 'Document Control',
+  'print-control': 'Print Control Management',
+  'controlled-printing': 'Print Control Management',
+  'document-printing': 'Print Control Management',
+  watermarks: 'Watermark Management',
+  'document-watermarks': 'Watermark Management',
+  'watermark-management': 'Watermark Management',
+  'document-audit': 'Document Audit Trail',
+  'document-history': 'Document Audit Trail',
+  system: 'System',
+  'electronic-signatures': 'Electronic Signatures',
+  esignatures: 'Electronic Signatures',
+  'e-signatures': 'Electronic Signatures',
+  'part11-signatures': 'Electronic Signatures',
+  'document-management': 'Document Management',
   training: 'Training Management',
+  'lms-integration': 'LMS Integration',
+  lms: 'LMS Integration',
+  integrations: 'Integrations',
+  calendar: 'Calendar & Scheduler',
+  scheduler: 'Calendar & Scheduler',
+  events: 'Training Events',
+  workflows: 'Workflow Designer',
+  'audit-trail': 'Audit Trail',
+  audit: 'Audit Trail',
+  'activity-log': 'Activity Log',
+  analytics: 'Training Dashboard & Analytics',
+  'report-center': 'Report Center',
+  reports: 'Reports & Analytics',
+  certificates: 'Certificate Management',
+  'certificate-management': 'Certificate Management',
+  'certificate-registry': 'Certificate Registry',
+  retraining: 'Retraining Management',
+  'retraining-management': 'Retraining Management',
+  'retraining-schedule': 'Retraining Schedule',
+  effectiveness: 'Training Effectiveness',
+  competency: 'Competency Assessment',
+  history: 'Employee Training History',
+  'employee-history': 'Employee Training History',
+  records: 'Training Records',
   completion: 'Completion & Attendance',
   attendance: 'Attendance',
   scheduling: 'Assignment & Scheduling',
   assignments: 'Assignment & Scheduling',
   'training-matrix': 'Training Matrix',
   matrix: 'Training Matrix',
-  audit: 'Audit Management',
+  'audit-management': 'Audit Management',
   vendors: 'Vendor Management',
   validation: 'Validation Management',
   csv: 'CSV Management',
@@ -52,9 +143,6 @@ export const BREADCRUMB_LABELS: Record<string, string> = {
   'risk-assessment': 'Risk Assessment',
   'impact-assessment': 'Impact Assessment',
   'risk-management': 'Risk Management',
-  'audit-trail': 'Audit Trail',
-  reports: 'Reports & Analytics',
-  analytics: 'Reports & Analytics',
   fmea: 'FMEA Assessment',
   closure: 'Closure',
   approval: 'Approval Workflow',
@@ -80,6 +168,39 @@ export const BREADCRUMB_LABELS: Record<string, string> = {
 };
 
 export function formatBreadcrumbLabel(segment: string, pathname?: string): string {
+  if (pathname && segment === 'master' && pathname.includes('/documents/')) {
+    return 'Document Master';
+  }
+  if (pathname && segment === 'training' && pathname.includes('/dms/')) {
+    return 'Document Training Linkage';
+  }
+  if (pathname && segment === 'impact-assessment' && (pathname.includes('/documents/') || pathname === '/qms/impact-assessment')) {
+    return 'Change Impact Assessment';
+  }
+  if (pathname && segment === 'change-impact' && pathname.includes('/dms/')) {
+    return 'Change Impact Assessment';
+  }
+  if (pathname && segment === 'archive' && pathname.includes('/dms/')) {
+    return 'Archive Management';
+  }
+  if (pathname && segment === 'retention' && pathname.includes('/dms/')) {
+    return 'Retention & Disposal Management';
+  }
+  if (pathname && segment === 'external' && pathname.includes('/dms/')) {
+    return 'External Document Management';
+  }
+  if (pathname && segment === 'print-control' && pathname.includes('/dms/')) {
+    return 'Print Control Management';
+  }
+  if (pathname && segment === 'watermarks' && pathname.includes('/dms/')) {
+    return 'Watermark Management';
+  }
+  if (pathname && segment === 'audit' && pathname.includes('/dms/')) {
+    return 'Document Audit Trail';
+  }
+  if (pathname && segment === 'audit-trail' && pathname.includes('/documents/')) {
+    return 'Document Audit Trail';
+  }
   if (pathname && (segment === 'create' || segment === 'new')) {
     if (pathname.includes('/change-control/')) return 'Create Change Control';
     if (pathname.includes('/risk-management/')) return 'Create Risk Assessment';

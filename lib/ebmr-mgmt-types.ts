@@ -27,7 +27,20 @@ export const PROCESS_STAGES = [
 export const IPC_CHECK_NAMES = [
   'Description', 'pH', 'Fill Volume', 'Weight per ml', 'Colour', 'Clarity',
   'Sealing Quality', 'Visual Inspection', 'Leak Test',
+  // Bulk / in-process (Ondansetron BMR spec)
+  'Assay (%)', 'Total Viable Count (CFU/100 mL)', 'Colour Index (AU)',
+  'Integrity Test BPT (mbar)', 'Filtration Pressure (bar) — Min', 'Filtration Pressure (bar) — Max',
+  'Filtration Yield (%)', 'N₂ Pressure Pre-Fill (kg/cm²)', 'Machine Speed (ampoules/min)',
+  'NVPC — 0.5 µm (particles/m³)', 'NVPC — 5 µm (particles/m³)', 'Filling Time (hr)',
+  'Max Filled Nos. (calc.)', 'Filling Yield (%)',
+  // Finished product (QA release)
+  'Extractable Volume (mL)', 'Particulate Matter — Visible',
+  'Particulate Matter — ≥10 µm (/mL)', 'Particulate Matter — ≥25 µm (/mL)',
+  'Bacterial Endotoxin (EU/mg)', 'Ondansetron Imp. D (%)', 'Any Secondary Impurity (%)',
+  'Sum of All Impurities (%)', 'Preservative — Methyl Paraben (%)', 'Preservative — Propyl Paraben (%)',
 ] as const;
+
+export const MATERIAL_TYPES = ['API', 'Excipient', 'Primary Packing', 'Secondary Packing', 'Other'] as const;
 
 export const OOS_IPC_CHECKS = ['pH', 'Fill Volume', 'Weight per ml'] as const;
 
@@ -49,6 +62,9 @@ export interface EbmrRecord {
   strength: string;
   batch_number: string;
   batch_size: string;
+  batch_size_litres: number | null;
+  std_fill_volume_ml: number | null;
+  batch_size_nos: number | null;
   mfg_date: string;
   exp_date: string;
   mfr_number: string;
@@ -102,9 +118,13 @@ export interface LineClearanceRecord {
 export interface EbmrDispensingRecord {
   id: string;
   ebmr_doc_id: string;
+  material_type: string;
   material_name: string;
   material_code: string;
   ar_number: string;
+  material_mfg_date: string;
+  material_exp_date: string;
+  vendor_name: string;
   required_quantity: number;
   dispensed_quantity: number;
   unit: string;

@@ -1,7 +1,5 @@
-'use client';
+import { TrainingMatrixPage } from '@/components/training/matrix/training-matrix-page';
 
-import { TrainingMatrixManagementView } from '@/components/training/tms-matrix-management-view';
-
-export default function TrainingMatrixAliasPage() {
-  return <TrainingMatrixManagementView />;
+export default function TrainingMatrixAliasRoute() {
+  return <TrainingMatrixPage defaultTab="definitions" />;
 }

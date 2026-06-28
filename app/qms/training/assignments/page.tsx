@@ -1,7 +1,5 @@
-'use client';
+import { TrainingAssignmentPage } from '@/components/training/assignment/training-assignment-page';
 
-import { TrainingAssignmentSchedulingView } from '@/components/training/tms-assignment-scheduling-view';
-
-export default function TrainingAssignmentsPage() {
-  return <TrainingAssignmentSchedulingView defaultTab="assignments" />;
+export default function TrainingAssignmentsRoute() {
+  return <TrainingAssignmentPage defaultTab="assignments" />;
 }

@@ -21,6 +21,12 @@ import { fetchActiveCpvProductsForBatch as fetchProducts } from '@/lib/cpv-batch
 import type { CpvProductRecord } from '@/lib/cpv-product-master';
 import type { Parameter } from '@/lib/admin/schemas';
 import { normalizeParameter } from '@/lib/admin/parameter-service';
+import {
+  getOndansetronCqaOptionsForStage,
+  isOndansetronProduct,
+  resolveOndansetronCqaDefaults,
+  type OndansetronCqaOption,
+} from '@/lib/ondansetron-bmr-spec';
 import { downloadCsv } from '@/lib/export-utils';
 import { CpvPageHeader } from '@/components/cpv/product-master/cpv-page-header';
 import { ResponsiveDataTable } from '@/components/cpv/product-master/responsive-data-table';
@@ -45,6 +51,20 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import type { ColumnDef } from '@/components/admin/admin-data-table';
 
 const CHART_COLORS = ['#2563eb', '#059669', '#d97706', '#dc2626', '#7c3aed'];
+
+type CqaParamOption = Parameter | OndansetronCqaOption;
+
+function isBmrCqaOption(p: CqaParamOption): p is OndansetronCqaOption {
+  return 'specificationText' in p && String(p.id).startsWith('bmr-cqa-');
+}
+
+function paramOptionId(p: CqaParamOption): string {
+  return p.id || '';
+}
+
+function paramOptionName(p: CqaParamOption): string {
+  return p.parameterName || '';
+}
 
 function RiskBadge({ level }: { level: string }) {
   const cls = level === 'Critical' ? 'bg-red-900/10 text-red-900 border-red-300'
@@ -85,13 +105,14 @@ export function CqaMonitoringPage() {
 
   const [formProductId, setFormProductId] = useState('');
   const [formBatches, setFormBatches] = useState<Awaited<ReturnType<typeof fetchCqaBatchesForProduct>>>([]);
-  const [formParams, setFormParams] = useState<Parameter[]>([]);
+  const [formParams, setFormParams] = useState<CqaParamOption[]>([]);
+  const [formProductName, setFormProductName] = useState('');
   const [form, setForm] = useState<Partial<CqaResultFormData>>({});
 
   const [bulkProductId, setBulkProductId] = useState('');
   const [bulkBatchId, setBulkBatchId] = useState('');
   const [bulkStage, setBulkStage] = useState<string>(CQA_TEST_STAGES[0]);
-  const [bulkRows, setBulkRows] = useState<Array<{ param: Parameter; observed: string; remarks: string }>>([]);
+  const [bulkRows, setBulkRows] = useState<Array<{ param: CqaParamOption; observed: string; remarks: string }>>([]);
 
   const actor = { id: user?.uid || 'system', name: profile?.full_name || 'System', role: role || '' };
 
@@ -131,8 +152,25 @@ export function CqaMonitoringPage() {
   const paramNames = useMemo(() => Array.from(new Set(results.map((r) => r.parameterName))), [results]);
   const trendData = useMemo(() => trendParam !== 'all' ? parameterTrendData(filtered, trendParam) : [], [filtered, trendParam]);
 
+  const resolveFormParameters = useCallback(async (
+    productName: string,
+    productId: string,
+    testStage: string,
+  ): Promise<CqaParamOption[]> => {
+    const dbParams = await fetchCqaParametersForProduct(productName, productId, isMicroOnly);
+    if (isOndansetronProduct(productName)) {
+      const bmrOptions = getOndansetronCqaOptionsForStage(testStage);
+      if (!dbParams.length) return bmrOptions;
+      const dbNames = new Set(dbParams.map((p) => normalizeParameter(p).parameterName.toLowerCase()));
+      const extras = bmrOptions.filter((o) => !dbNames.has(o.parameterName.toLowerCase()));
+      return [...dbParams, ...extras];
+    }
+    return dbParams;
+  }, [isMicroOnly]);
+
   const openCreate = () => {
     setEditing(null);
+    setFormProductName('');
     setForm({
       testDate: new Date().toISOString(),
       analyst: profile?.full_name || '',
@@ -147,19 +185,31 @@ export function CqaMonitoringPage() {
     setFormProductId(productId);
     const p = products.find((x) => x.id === productId);
     if (!p) return;
+    setFormProductName(p.productName);
+    const stage = form.testStage || CQA_TEST_STAGES[0];
     setForm((f) => ({
       ...f,
       cpvProductId: productId,
       productName: p.productName,
       productCode: p.productCode,
+      specificationNumber: p.specificationNumber || f.specificationNumber || '',
+      stpNumber: p.stpNumber || f.stpNumber || '',
       manufacturingDate: f.manufacturingDate || new Date().toISOString().split('T')[0],
     }));
     const [batches, params] = await Promise.all([
       fetchCqaBatchesForProduct(p.productName),
-      fetchCqaParametersForProduct(p.productName, productId, isMicroOnly),
+      resolveFormParameters(p.productName, productId, stage),
     ]);
     setFormBatches(batches);
     setFormParams(params);
+  };
+
+  const onFormStageChange = async (testStage: string) => {
+    setForm((f) => ({ ...f, testStage, parameterId: '', parameterCode: '', parameterName: '' }));
+    if (formProductId && formProductName) {
+      const params = await resolveFormParameters(formProductName, formProductId, testStage);
+      setFormParams(params);
+    }
   };
 
   const onFormBatchChange = async (batchNumber: string) => {
@@ -168,27 +218,54 @@ export function CqaMonitoringPage() {
       ...f,
       batchNumber,
       manufacturingDate: batch?.manufacturingDate || f.manufacturingDate,
+      expiryDate: batch?.expiryDate || '',
     }));
   };
 
   const onFormParamChange = (paramId: string) => {
-    const p = formParams.find((x) => x.id === paramId);
+    const p = formParams.find((x) => paramOptionId(x) === paramId);
     if (!p) return;
+
+    if (isBmrCqaOption(p)) {
+      setForm((f) => ({
+        ...f,
+        parameterId: paramId,
+        parameterCode: p.parameterCode,
+        parameterName: p.parameterName,
+        parameterCategory: p.section,
+        responsibility: p.responsibility,
+        specificationText: p.specificationText,
+        specificationNumber: f.specificationNumber || '',
+        stpNumber: f.stpNumber || '',
+        lowerLimit: p.lsl,
+        upperLimit: p.usl,
+        targetValue: p.target,
+        unit: p.unit,
+        resultType: p.resultType,
+        criticality: p.criticality,
+      }));
+      return;
+    }
+
     const n = normalizeParameter(p);
+    const ond = isOndansetronProduct(formProductName)
+      ? resolveOndansetronCqaDefaults(n.parameterName) : null;
     setForm((f) => ({
       ...f,
       parameterId: paramId,
       parameterCode: n.parameterCode,
       parameterName: n.parameterName,
       parameterCategory: n.parameterCategory,
-      specificationNumber: n.specificationNo || '',
-      stpNumber: n.testMethodStp || '',
-      lowerLimit: Number(n.lsl || n.lowerLimit) || 0,
-      upperLimit: Number(n.usl || n.upperLimit) || 0,
-      targetValue: Number(n.target || n.targetValue) || 0,
-      unit: n.unit,
-      resultType: (n.resultType as CqaResultFormData['resultType']) || 'Numeric',
-      criticality: (n.criticality as CqaResultFormData['criticality']) || 'Major',
+      responsibility: ond?.responsibility || '',
+      specificationText: ond?.specificationText || '',
+      specificationNumber: n.specificationNo || f.specificationNumber || '',
+      stpNumber: n.testMethodStp || f.stpNumber || '',
+      lowerLimit: ond?.lsl ?? (Number(n.lsl || n.lowerLimit) || 0),
+      upperLimit: ond?.usl ?? (Number(n.usl || n.upperLimit) || 0),
+      targetValue: ond?.target ?? (Number(n.target || n.targetValue) || 0),
+      unit: ond?.unit || n.unit,
+      resultType: (ond?.resultType || n.resultType as CqaResultFormData['resultType']) || 'Numeric',
+      criticality: (ond?.criticality || n.criticality as CqaResultFormData['criticality']) || 'Major',
       alertLimitLow: n.alertLimitLow ? Number(n.alertLimitLow) : undefined,
       alertLimitHigh: n.alertLimitHigh ? Number(n.alertLimitHigh) : undefined,
       actionLimitLow: n.actionLimitLow ? Number(n.actionLimitLow) : undefined,
@@ -220,7 +297,7 @@ export function CqaMonitoringPage() {
     setBulkProductId(productId);
     const p = products.find((x) => x.id === productId);
     if (!p) return;
-    const params = await fetchCqaParametersForProduct(p.productName, productId, isMicroOnly);
+    const params = await resolveFormParameters(p.productName, productId, bulkStage);
     setBulkRows(params.map((param) => ({ param, observed: '', remarks: '' })));
     const batches = await fetchCqaBatchesForProduct(p.productName);
     setFormBatches(batches);
@@ -233,28 +310,66 @@ export function CqaMonitoringPage() {
     const batch = formBatches.find((b) => b.id === bulkBatchId);
     if (!batch) { toast.error('Invalid batch'); return; }
     const rows: CqaResultFormData[] = bulkRows.filter((r) => r.observed).map((row) => {
+      if (isBmrCqaOption(row.param)) {
+        const n = row.param;
+        const isQual = n.resultType === 'Pass/Fail' || n.resultType === 'Complies/Does Not Comply';
+        return {
+          cpvProductId: bulkProductId,
+          productName: p.productName,
+          productCode: p.productCode,
+          batchNumber: batch.batchNumber,
+          manufacturingDate: batch.manufacturingDate,
+          expiryDate: batch.expiryDate || '',
+          testStage: bulkStage,
+          parameterId: n.id || '',
+          parameterCode: n.parameterCode,
+          parameterName: n.parameterName,
+          parameterCategory: n.section,
+          responsibility: n.responsibility,
+          specificationText: n.specificationText,
+          specificationNumber: p.specificationNumber || '',
+          stpNumber: p.stpNumber || '',
+          observedResult: isQual ? row.observed : Number(row.observed),
+          targetValue: Number(n.target) || 0,
+          lowerLimit: Number(n.lsl) || 0,
+          upperLimit: Number(n.usl) || 0,
+          unit: n.unit,
+          resultType: (n.resultType || 'Numeric') as CqaResultFormData['resultType'],
+          criticality: (n.criticality || 'Major') as CqaResultFormData['criticality'],
+          testDate: new Date().toISOString(),
+          analyst: profile?.full_name || '',
+          reviewedBy: '',
+          reviewDate: '',
+          remarks: row.remarks,
+        };
+      }
       const n = normalizeParameter(row.param);
-      const isQual = (n.resultType === 'Pass/Fail' || n.resultType === 'Complies/Does Not Comply');
+      const ond = isOndansetronProduct(p.productName)
+        ? resolveOndansetronCqaDefaults(n.parameterName) : null;
+      const isQual = n.resultType === 'Pass/Fail' || n.resultType === 'Complies/Does Not Comply';
       return {
         cpvProductId: bulkProductId,
         productName: p.productName,
         productCode: p.productCode,
         batchNumber: batch.batchNumber,
         manufacturingDate: batch.manufacturingDate,
+        expiryDate: batch.expiryDate || '',
         testStage: bulkStage,
         parameterId: row.param.id || '',
         parameterCode: n.parameterCode,
         parameterName: n.parameterName,
         parameterCategory: n.parameterCategory,
+        responsibility: ond?.responsibility || '',
+        specificationText: ond?.specificationText || '',
         specificationNumber: n.specificationNo || '',
         stpNumber: n.testMethodStp || '',
         observedResult: isQual ? row.observed : Number(row.observed),
-        targetValue: Number(n.target || n.targetValue) || 0,
-        lowerLimit: Number(n.lsl) || 0,
-        upperLimit: Number(n.usl) || 0,
-        unit: n.unit,
-        resultType: (n.resultType as CqaResultFormData['resultType']) || 'Numeric',
-        criticality: (n.criticality as CqaResultFormData['criticality']) || 'Major',
+        targetValue: ond?.target ?? (Number(n.target || n.targetValue) || 0),
+        lowerLimit: ond?.lsl ?? (Number(n.lsl) || 0),
+        upperLimit: ond?.usl ?? (Number(n.usl) || 0),
+        unit: ond?.unit || n.unit,
+        resultType: ((ond?.resultType || n.resultType) || 'Numeric') as CqaResultFormData['resultType'],
+        criticality: ((ond?.criticality || n.criticality) || 'Major') as CqaResultFormData['criticality'],
         testDate: new Date().toISOString(),
         analyst: profile?.full_name || '',
         reviewedBy: '',
@@ -429,6 +544,7 @@ export function CqaMonitoringPage() {
                       setEditing(row);
                       setForm(row);
                       setFormProductId(row.cpvProductId);
+                      setFormProductName(row.productName);
                       void onFormProductChange(row.cpvProductId);
                       setFormOpen(true);
                     }}><Pencil className="h-4 w-4" /></Button>
@@ -464,8 +580,12 @@ export function CqaMonitoringPage() {
                 <SelectContent>{formBatches.map((b) => <SelectItem key={b.id} value={b.batchNumber}>{b.batchNumber}</SelectItem>)}</SelectContent>
               </Select>
             </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label>Mfg. Date</Label><Input className="mt-1" type="date" value={form.manufacturingDate?.slice(0, 10) || ''} readOnly /></div>
+              <div><Label>Exp. Date</Label><Input className="mt-1" type="date" value={form.expiryDate?.slice(0, 10) || ''} readOnly /></div>
+            </div>
             <div><Label>Test Stage *</Label>
-              <Select value={form.testStage || ''} onValueChange={(v) => setForm((f) => ({ ...f, testStage: v }))}>
+              <Select value={form.testStage || ''} onValueChange={(v) => void onFormStageChange(v)}>
                 <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
                 <SelectContent>{CQA_TEST_STAGES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
               </Select>
@@ -473,12 +593,38 @@ export function CqaMonitoringPage() {
             <div><Label>Parameter *</Label>
               <Select value={form.parameterId || ''} onValueChange={onFormParamChange} disabled={Boolean(editing)}>
                 <SelectTrigger className="mt-1"><SelectValue placeholder="Parameter" /></SelectTrigger>
-                <SelectContent>{formParams.map((p) => <SelectItem key={p.id} value={p.id || ''}>{p.parameterName}</SelectItem>)}</SelectContent>
+                <SelectContent>{formParams.map((p) => (
+                  <SelectItem key={paramOptionId(p)} value={paramOptionId(p)}>{paramOptionName(p)}</SelectItem>
+                ))}</SelectContent>
               </Select>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <div><Label>Spec No</Label><Input className="mt-1" value={form.specificationNumber || ''} readOnly /></div>
-              <div><Label>STP No</Label><Input className="mt-1" value={form.stpNumber || ''} readOnly /></div>
+              <div><Label>Parameter Category</Label><Input className="mt-1" value={form.parameterCategory || ''} readOnly placeholder="—" /></div>
+              <div><Label>Responsibility</Label><Input className="mt-1" value={form.responsibility || ''} readOnly placeholder="IPQA / QA / QC" /></div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label>Spec No</Label><Input className="mt-1" value={form.specificationNumber || ''} onChange={(e) => setForm((f) => ({ ...f, specificationNumber: e.target.value }))} /></div>
+              <div><Label>STP No</Label><Input className="mt-1" value={form.stpNumber || ''} onChange={(e) => setForm((f) => ({ ...f, stpNumber: e.target.value }))} /></div>
+            </div>
+            {form.specificationText && (
+              <div><Label>Specification Limit</Label><Input className="mt-1" value={form.specificationText} readOnly /></div>
+            )}
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label>Target Value</Label><Input className="mt-1" type="number" value={form.targetValue ?? ''} readOnly /></div>
+              <div><Label>Criticality</Label>
+                <Select value={form.criticality || 'Major'} onValueChange={(v) => setForm((f) => ({ ...f, criticality: v as CqaResultFormData['criticality'] }))}>
+                  <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Critical">Critical</SelectItem>
+                    <SelectItem value="Major">Major</SelectItem>
+                    <SelectItem value="Minor">Minor</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label>LSL</Label><Input className="mt-1" type="number" value={form.lowerLimit ?? ''} readOnly /></div>
+              <div><Label>USL</Label><Input className="mt-1" type="number" value={form.upperLimit ?? ''} readOnly /></div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               {form.resultType === 'Pass/Fail' || form.resultType === 'Complies/Does Not Comply' ? (
@@ -498,10 +644,11 @@ export function CqaMonitoringPage() {
                 <div><Label>Observed Result *</Label><Input className="mt-1" value={String(form.observedResult ?? '')} onChange={(e) => setForm((f) => ({ ...f, observedResult: e.target.value }))} /></div>
               )}
               <div><Label>Unit</Label><Input className="mt-1" value={form.unit || ''} readOnly /></div>
-              <div><Label>LSL</Label><Input className="mt-1" type="number" value={form.lowerLimit ?? ''} readOnly /></div>
-              <div><Label>USL</Label><Input className="mt-1" type="number" value={form.upperLimit ?? ''} readOnly /></div>
             </div>
-            <div><Label>Test Date *</Label><Input className="mt-1" type="datetime-local" value={form.testDate?.slice(0, 16) || ''} onChange={(e) => setForm((f) => ({ ...f, testDate: e.target.value }))} /></div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label>Result Type</Label><Input className="mt-1" value={form.resultType || 'Numeric'} readOnly /></div>
+              <div><Label>Test Date *</Label><Input className="mt-1" type="datetime-local" value={form.testDate?.slice(0, 16) || ''} onChange={(e) => setForm((f) => ({ ...f, testDate: e.target.value }))} /></div>
+            </div>
             <div><Label>Analyst *</Label><Input className="mt-1" value={form.analyst || ''} onChange={(e) => setForm((f) => ({ ...f, analyst: e.target.value }))} /></div>
             <div><Label>Remarks</Label><Textarea className="mt-1" value={form.remarks || ''} onChange={(e) => setForm((f) => ({ ...f, remarks: e.target.value }))} /></div>
             <div className="flex justify-end gap-2 pt-2">
@@ -523,7 +670,7 @@ export function CqaMonitoringPage() {
                 if (p) {
                   const batches = await fetchCqaBatchesForProduct(p.productName);
                   setFormBatches(batches);
-                  const params = await fetchCqaParametersForProduct(p.productName, v, isMicroOnly);
+                  const params = await resolveFormParameters(p.productName, v, bulkStage);
                   setBulkRows(params.map((param) => ({ param, observed: '', remarks: '' })));
                 }
               }}>
@@ -538,7 +685,14 @@ export function CqaMonitoringPage() {
               </Select>
             </div>
             <div><Label>Test Stage</Label>
-              <Select value={bulkStage} onValueChange={setBulkStage}>
+              <Select value={bulkStage} onValueChange={async (v) => {
+                setBulkStage(v);
+                const p = products.find((x) => x.id === bulkProductId);
+                if (p) {
+                  const params = await resolveFormParameters(p.productName, bulkProductId, v);
+                  setBulkRows(params.map((param) => ({ param, observed: '', remarks: '' })));
+                }
+              }}>
                 <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
                 <SelectContent>{CQA_TEST_STAGES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
               </Select>
@@ -551,14 +705,43 @@ export function CqaMonitoringPage() {
             </TableRow></TableHeader>
             <TableBody>
               {bulkRows.map((row, i) => {
+                if (isBmrCqaOption(row.param)) {
+                  const n = row.param;
+                  const isQual = n.resultType === 'Pass/Fail' || n.resultType === 'Complies/Does Not Comply';
+                  return (
+                    <TableRow key={paramOptionId(row.param) || i}>
+                      <TableCell>{paramOptionName(row.param)}</TableCell>
+                      <TableCell className="text-xs">{n.specificationText}</TableCell>
+                      <TableCell>{n.target}</TableCell>
+                      <TableCell>{`${n.lsl}/${n.usl}`}</TableCell>
+                      <TableCell>
+                        {isQual ? (
+                          <Select value={row.observed} onValueChange={(v) => setBulkRows((rows) => rows.map((r, j) => j === i ? { ...r, observed: v } : r))}>
+                            <SelectTrigger className="h-8"><SelectValue placeholder="Select" /></SelectTrigger>
+                            <SelectContent>
+                              {n.resultType === 'Pass/Fail' ? (
+                                <><SelectItem value="Pass">Pass</SelectItem><SelectItem value="Fail">Fail</SelectItem></>
+                              ) : (
+                                <><SelectItem value="Complies">Complies</SelectItem><SelectItem value="Does Not Comply">Does Not Comply</SelectItem></>
+                              )}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <Input value={row.observed} onChange={(e) => setBulkRows((rows) => rows.map((r, j) => j === i ? { ...r, observed: e.target.value } : r))} />
+                        )}
+                      </TableCell>
+                      <TableCell><Input value={row.remarks} onChange={(e) => setBulkRows((rows) => rows.map((r, j) => j === i ? { ...r, remarks: e.target.value } : r))} /></TableCell>
+                    </TableRow>
+                  );
+                }
                 const n = normalizeParameter(row.param);
                 const isQual = n.resultType === 'Pass/Fail' || n.resultType === 'Complies/Does Not Comply';
                 return (
-                  <TableRow key={row.param.id || i}>
-                    <TableCell>{n.parameterName}</TableCell>
-                    <TableCell className="text-xs">{n.specificationNo}/{n.testMethodStp}</TableCell>
+                  <TableRow key={paramOptionId(row.param) || i}>
+                    <TableCell>{paramOptionName(row.param)}</TableCell>
+                    <TableCell className="text-xs">{`${n.specificationNo}/${n.testMethodStp}`}</TableCell>
                     <TableCell>{n.target || n.targetValue}</TableCell>
-                    <TableCell>{n.lsl}/{n.usl}</TableCell>
+                    <TableCell>{`${n.lsl}/${n.usl}`}</TableCell>
                     <TableCell>
                       {isQual ? (
                         <Select value={row.observed} onValueChange={(v) => setBulkRows((rows) => rows.map((r, j) => j === i ? { ...r, observed: v } : r))}>

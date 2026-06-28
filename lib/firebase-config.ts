@@ -8,7 +8,7 @@ const REQUIRED_ENV_KEYS = [
 ] as const;
 
 export class FirebaseNotConfiguredError extends Error {
-  constructor(message = 'Firebase is not configured. Copy .env.local.example to .env.local and add your project credentials.') {
+  constructor(message = 'Firebase is not configured. Copy .env.example to .env.local and add your project credentials.') {
     super(message);
     this.name = 'FirebaseNotConfiguredError';
   }
@@ -47,5 +47,5 @@ export function getFirebaseSetupMessage(): string {
         return true;
     }
   });
-  return `Firebase environment variables are missing: ${missing.join(', ')}. Copy .env.local.example to .env.local and add your project credentials.`;
+  return `Firebase environment variables are missing: ${missing.join(', ')}. Copy .env.example to .env.local and add your project credentials.`;
 }

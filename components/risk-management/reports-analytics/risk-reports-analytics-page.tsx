@@ -1,21 +1,18 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   ChevronRight, Download, FileSpreadsheet, FileText, Printer, RefreshCw, Save, Calendar,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { useAuth } from '@/contexts/auth-context';
+import { useRiskReports } from '@/hooks/use-risk-reports';
 import {
   RISK_PREVIEW_COLUMNS,
   RISK_REPORT_FILTER_OPTIONS,
   RISK_REPORT_TYPES,
-  canExportRiskReports,
+  canExportRiskReportType,
   canGenerateRiskReportType,
-  canGenerateRiskReports,
-  canViewManagementReview,
   exportRiskReportCsv,
-  isRiskReportsReadOnly,
   reportStatusColor,
   riskReportFormSchema,
   type RiskReportAnalyticsResult,
@@ -25,11 +22,6 @@ import {
 } from '@/lib/risk-reports-records';
 import {
   exportRiskReport,
-  fetchRiskDashboardAnalytics,
-  fetchRiskExportHistory,
-  fetchRiskReportOwnerOptions,
-  fetchRiskReportProductOptions,
-  fetchRiskReportRecords,
   generateRiskReport,
   logManagementReportViewed,
   logRiskReportPreviewed,
@@ -55,8 +47,30 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { cn } from '@/lib/utils';
-import type { RiskManagementReviewSummary, RiskReportAnalyticsMetrics, RiskReportChartData } from '@/lib/risk-reports-records';
+import type {
+  RiskManagementReviewSummary,
+  RiskReportAnalyticsMetrics,
+  RiskReportChartData,
+} from '@/lib/risk-reports-records';
+
+interface RiskReportsAnalyticsPageProps {
+  defaultTab?: 'generator' | 'dashboard' | 'saved' | 'management' | 'exports';
+}
+
+function buildFilterSummary(form: RiskReportFormData): string {
+  const parts = [
+    form.department !== 'All' ? `Dept: ${form.department}` : null,
+    form.product !== 'All' ? `Product: ${form.product}` : null,
+    form.risk_category !== 'All' ? `Category: ${form.risk_category}` : null,
+    form.risk_level !== 'All' ? `Level: ${form.risk_level}` : null,
+    form.risk_owner !== 'All' ? `Owner: ${form.risk_owner}` : null,
+    form.status !== 'All' ? `Status: ${form.status}` : null,
+    form.risk_number?.trim() ? `Risk: ${form.risk_number}` : null,
+  ].filter(Boolean);
+  return parts.length ? parts.join(' | ') : 'All filters (default)';
+}
 
 const WIZARD_STEPS = ['Report Type', 'Date Range', 'Filters', 'Preview & Analytics', 'Export & Save'];
 const defaultFrom = () => `${new Date().getFullYear()}-01-01`;
@@ -70,23 +84,14 @@ function ReportStatusBadge({ status }: { status: string }) {
   );
 }
 
-export function RiskReportsAnalyticsPage() {
-  const { user, profile } = useAuth();
-  const role = profile?.role;
-  const canGenerate = canGenerateRiskReports(role);
-  const canExport = canExportRiskReports(role);
-  const canManagement = canViewManagementReview(role);
-  const readOnly = isRiskReportsReadOnly(role);
+export function RiskReportsAnalyticsPage({ defaultTab = 'generator' }: RiskReportsAnalyticsPageProps) {
+  const {
+    loading, error, history, exportHistory, products, owners,
+    dashboardMetrics, dashboardCharts, managementReview, refresh,
+    actor, role, canGenerate, canManagement, isReadOnly,
+  } = useRiskReports();
 
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [history, setHistory] = useState<RiskReportRecord[]>([]);
-  const [exportHistory, setExportHistory] = useState<RiskReportRecord[]>([]);
-  const [products, setProducts] = useState<string[]>(['All']);
-  const [owners, setOwners] = useState<string[]>(['All']);
-  const [dashboardMetrics, setDashboardMetrics] = useState<RiskReportAnalyticsMetrics | null>(null);
-  const [dashboardCharts, setDashboardCharts] = useState<RiskReportChartData | null>(null);
-  const [managementReview, setManagementReview] = useState<RiskManagementReviewSummary | null>(null);
+  const [activeTab, setActiveTab] = useState(defaultTab);
 
   const [wizardOpen, setWizardOpen] = useState(false);
   const [step, setStep] = useState(0);
@@ -111,12 +116,8 @@ export function RiskReportsAnalyticsPage() {
   const [analytics, setAnalytics] = useState<RiskReportAnalyticsResult | null>(null);
   const [savedReport, setSavedReport] = useState<RiskReportRecord | null>(null);
 
-  const actor = useMemo(() => ({
-    id: user?.uid || 'system',
-    name: profile?.full_name || 'System',
-    role: role || '',
-    department: profile?.department || '',
-  }), [user?.uid, profile?.full_name, profile?.department, role]);
+  const readOnly = isReadOnly;
+  const canExportCurrent = canExportRiskReportType(role, reportType);
 
   const allowedReportTypes = useMemo(
     () => RISK_REPORT_TYPES.filter((t) => canGenerateRiskReportType(role, t)),
@@ -137,33 +138,6 @@ export function RiskReportsAnalyticsPage() {
     mitigation_status: mitigationStatus,
     review_status: reviewStatus,
   }), [reportType, periodFrom, periodTo, riskNumber, department, product, riskCategory, riskLevel, riskOwner, statusFilter, mitigationStatus, reviewStatus]);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const [rows, prods, ownerOpts, dash, exports] = await Promise.all([
-        fetchRiskReportRecords(),
-        fetchRiskReportProductOptions(),
-        fetchRiskReportOwnerOptions(),
-        fetchRiskDashboardAnalytics(),
-        fetchRiskExportHistory(),
-      ]);
-      setHistory(rows);
-      setProducts(prods);
-      setOwners(ownerOpts);
-      setDashboardMetrics(dash.metrics);
-      setDashboardCharts(dash.charts);
-      setManagementReview(dash.managementReview);
-      setExportHistory(exports);
-    } catch {
-      setError('Failed to load risk reports and analytics.');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { void load(); }, [load]);
 
   const runPreview = async () => {
     if (!canGenerateRiskReportType(role, reportType)) {
@@ -224,7 +198,7 @@ export function RiskReportsAnalyticsPage() {
       setSavedReport(record);
       setStep(4);
       toast.success(`Report ${record.report_number} saved`);
-      await load();
+      await refresh();
     }
   };
 
@@ -238,7 +212,7 @@ export function RiskReportsAnalyticsPage() {
     if (err) toast.error(err);
     else {
       toast.success('Report scheduled — owner notified');
-      await load();
+      await refresh();
     }
   };
 
@@ -276,21 +250,34 @@ export function RiskReportsAnalyticsPage() {
     is_deleted: false,
   };
 
+  const validateDates = (): boolean => {
+    const parsed = riskReportFormSchema.safeParse(formData);
+    if (!parsed.success) {
+      toast.error(parsed.error.errors[0]?.message || 'Invalid date range');
+      return false;
+    }
+    return true;
+  };
+
   const handleExport = async (type: 'PDF' | 'Excel' | 'CSV') => {
-    if (!canExport) return toast.error('No export permission');
+    if (!canExportRiskReportType(role, reportType)) return toast.error('No export permission for this report type');
     if (!analytics && !savedReport) return toast.error('Generate or preview a report first');
     const report = buildPreviewReport();
-    const { headers, rows } = exportRiskReportCsv(analytics?.previewRows ?? report.preview_rows ?? []);
-    downloadCsv(`${report.report_number.replace(/\//g, '-')}.${type === 'Excel' ? 'csv' : 'csv'}`, headers, rows);
-    await exportRiskReport(report, type, actor);
+    const filterSummary = buildFilterSummary(formData);
+
     if (type === 'PDF') {
-      openRiskReportPdfHtml(report, actor.name);
+      openRiskReportPdfHtml(report, actor.name, filterSummary);
+      await exportRiskReport(report, type, actor);
       await logRiskReportPrinted(actor, report.id || 'preview', report.report_number);
       toast.success('PDF export — print dialog opened');
     } else {
+      const { headers, rows } = exportRiskReportCsv(analytics?.previewRows ?? report.preview_rows ?? []);
+      const ext = type === 'Excel' ? 'csv' : 'csv';
+      downloadCsv(`${report.report_number.replace(/\//g, '-')}.${ext}`, headers, rows);
+      await exportRiskReport(report, type, actor);
       toast.success(`${type} export downloaded (audit logged)`);
     }
-    await load();
+    await refresh();
   };
 
   const previewColumns = useMemo(() => RISK_PREVIEW_COLUMNS.map((c) => ({
@@ -327,14 +314,13 @@ export function RiskReportsAnalyticsPage() {
           title="Risk Reports & Analytics"
           description="Generate risk intelligence, trends and management insights"
           trail={[
-            { label: 'Dashboard', href: '/dashboard' },
-            { label: 'QMS', href: '/qms/risk-management/reports' },
-            { label: 'Risk Management', href: '/qms/risk-management/reports' },
+            { label: 'QMS', href: '/qms/risk-management' },
+            { label: 'Risk Management', href: '/qms/risk-management' },
             { label: 'Reports & Analytics' },
           ]}
           actions={(
             <div className="flex flex-wrap gap-2">
-              <Button variant="outline" onClick={() => void load()} disabled={loading}>
+              <Button variant="outline" onClick={() => void refresh()} disabled={loading}>
                 <RefreshCw className={`h-4 w-4 mr-1 ${loading ? 'animate-spin' : ''}`} />Refresh
               </Button>
               {canGenerate && !readOnly && (
@@ -347,15 +333,16 @@ export function RiskReportsAnalyticsPage() {
         />
 
         {readOnly && (
-          <p className="text-xs text-muted-foreground border rounded-md p-2 bg-slate-50">
-            Auditor access: read-only. Report generation and export are disabled.
-          </p>
+          <Alert>
+            <AlertTitle>Read-only access</AlertTitle>
+            <AlertDescription>Auditor view — report generation and export are disabled.</AlertDescription>
+          </Alert>
         )}
 
         {loading ? <LoadingSkeleton rows={3} /> : error ? (
-          <ErrorCard title="Load error" message={error} onRetry={load} />
+          <ErrorCard title="Load error" message={error} onRetry={refresh} />
         ) : (
-          <Tabs defaultValue="dashboard">
+          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)}>
             <TabsList className="flex h-auto flex-wrap gap-1">
               <TabsTrigger value="generator">Report Generator</TabsTrigger>
               <TabsTrigger value="dashboard">Analytics Dashboard</TabsTrigger>
@@ -539,12 +526,12 @@ export function RiskReportsAnalyticsPage() {
               <div className="space-y-3">
                 <p className="text-sm font-medium text-green-700">Report {savedReport.report_number} saved to history.</p>
                 <div className="flex flex-wrap gap-2">
-                  {canExport && (
+                  {canExportCurrent && (
                     <>
                       <Button variant="outline" size="sm" onClick={() => void handleExport('PDF')}><FileText className="h-4 w-4 mr-1" />PDF</Button>
                       <Button variant="outline" size="sm" onClick={() => void handleExport('Excel')}><FileSpreadsheet className="h-4 w-4 mr-1" />Excel</Button>
                       <Button variant="outline" size="sm" onClick={() => void handleExport('CSV')}><Download className="h-4 w-4 mr-1" />CSV</Button>
-                      <Button variant="outline" size="sm" onClick={() => { openRiskReportPdfHtml(savedReport, actor.name); printPage(); }}><Printer className="h-4 w-4 mr-1" />Print</Button>
+                      <Button variant="outline" size="sm" onClick={() => { openRiskReportPdfHtml(savedReport, actor.name, buildFilterSummary(formData)); printPage(); void logRiskReportPrinted(actor, savedReport.id || 'preview', savedReport.report_number); }}><Printer className="h-4 w-4 mr-1" />Print</Button>
                     </>
                   )}
                 </div>
@@ -569,7 +556,12 @@ export function RiskReportsAnalyticsPage() {
 
             <DialogFooter className="flex-wrap gap-2">
               {step > 0 && <Button variant="outline" onClick={() => setStep((s) => s - 1)}>Back</Button>}
-              {step < 2 && <Button onClick={() => setStep((s) => s + 1)}>Next<ChevronRight className="h-4 w-4 ml-1" /></Button>}
+              {step < 1 && <Button onClick={() => setStep((s) => s + 1)}>Next<ChevronRight className="h-4 w-4 ml-1" /></Button>}
+              {step === 1 && (
+                <Button onClick={() => { if (validateDates()) setStep((s) => s + 1); }}>
+                  Next<ChevronRight className="h-4 w-4 ml-1" />
+                </Button>
+              )}
               {step === 2 && (
                 <Button onClick={() => void runPreview()} disabled={previewing}>
                   {previewing ? 'Previewing…' : 'Preview Report'}
