@@ -33,6 +33,15 @@ export function BatchForm({
   initial, products, readOnly, releasedLocked, canQaOverride,
   onSubmit, onCancel, submitting,
 }: BatchFormProps) {
+  const normalizedInitial = useMemo(() => {
+    if (!initial) return undefined;
+    return {
+      ...initial,
+      manufacturingDate: (initial.manufacturingDate || '').slice(0, 7),
+      expiryDate: (initial.expiryDate || '').slice(0, 7),
+    };
+  }, [initial]);
+
   const form = useForm<BatchFormData>({
     resolver: zodResolver(batchFormSchema),
     defaultValues: {
@@ -65,13 +74,13 @@ export function BatchForm({
       statusChangeReason: '',
       remarks: '',
       qaOverride: false,
-      ...initial,
+      ...normalizedInitial,
     },
   });
 
   useEffect(() => {
-    if (initial) form.reset({ ...form.getValues(), ...initial });
-  }, [initial, form]);
+    if (normalizedInitial) form.reset({ ...form.getValues(), ...normalizedInitial });
+  }, [normalizedInitial, form]);
 
   const batchStatus = form.watch('batchStatus');
   const productCode = form.watch('productCode');
@@ -191,12 +200,12 @@ export function BatchForm({
           </div>
           <div className="space-y-2">
             <Label>Manufacturing Date *</Label>
-            <Input type="date" {...form.register('manufacturingDate')} disabled={locked} />
+            <Input type="month" {...form.register('manufacturingDate')} disabled={locked} />
             {form.formState.errors.manufacturingDate && <p className="text-xs text-red-500">{form.formState.errors.manufacturingDate.message}</p>}
           </div>
           <div className="space-y-2">
             <Label>Expiry Date *</Label>
-            <Input type="date" {...form.register('expiryDate')} disabled={locked} />
+            <Input type="month" {...form.register('expiryDate')} disabled={locked} />
             {form.formState.errors.expiryDate && <p className="text-xs text-red-500">{form.formState.errors.expiryDate.message}</p>}
           </div>
           <div className="space-y-2">

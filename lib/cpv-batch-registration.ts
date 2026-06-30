@@ -14,6 +14,54 @@ export const CPV_RELEASE_STATUSES = RELEASE_STATUSES;
 
 const requiredText = z.string().trim().min(1, 'Required');
 
+/** Normalizes stored date to YYYY-MM for month inputs (legacy YYYY-MM-DD supported). */
+export function toMonthYearValue(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+  if (/^\d{4}-\d{2}$/.test(trimmed)) return trimmed;
+  if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) return trimmed.slice(0, 7);
+  return trimmed;
+}
+
+/** @deprecated Use toMonthYearValue */
+export const toExpiryMonthValue = toMonthYearValue;
+
+/** First day of month for comparisons. */
+export function monthYearComparableStart(value: string): Date | null {
+  const monthValue = toMonthYearValue(value);
+  if (/^\d{4}-\d{2}$/.test(monthValue)) {
+    const [y, m] = monthValue.split('-').map(Number);
+    return new Date(y, m - 1, 1);
+  }
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/** Last day of month for comparisons (handles YYYY-MM and full dates). */
+export function monthYearComparableEnd(value: string): Date | null {
+  const monthValue = toMonthYearValue(value);
+  if (/^\d{4}-\d{2}$/.test(monthValue)) {
+    const [y, m] = monthValue.split('-').map(Number);
+    return new Date(y, m, 0);
+  }
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/** @deprecated Use monthYearComparableEnd */
+export const expiryComparableEnd = monthYearComparableEnd;
+
+/** Display month-year as MM-YYYY. */
+export function formatMonthYear(value: string): string {
+  const ym = toMonthYearValue(value);
+  if (!/^\d{4}-\d{2}$/.test(ym)) return value;
+  const [y, m] = ym.split('-');
+  return `${m}-${y}`;
+}
+
+/** @deprecated Use formatMonthYear */
+export const formatExpiryMonthYear = formatMonthYear;
+
 export const cpvBatchFormSchema = z.object({
   cpvProductId: requiredText,
   batchNumber: requiredText,
@@ -47,12 +95,12 @@ export const cpvBatchFormSchema = z.object({
   statusChangeReason: z.string().trim().default(''),
   remarks: z.string().trim().default(''),
 }).superRefine((data, ctx) => {
-  const mfg = new Date(data.manufacturingDate);
-  const exp = new Date(data.expiryDate);
-  if (!Number.isNaN(mfg.getTime()) && !Number.isNaN(exp.getTime()) && exp <= mfg) {
+  const mfgYm = toMonthYearValue(data.manufacturingDate);
+  const expYm = toMonthYearValue(data.expiryDate);
+  if (/^\d{4}-\d{2}$/.test(mfgYm) && /^\d{4}-\d{2}$/.test(expYm) && expYm <= mfgYm) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
-      message: 'Expiry date must be after manufacturing date',
+      message: 'Expiry month must be after manufacturing month',
       path: ['expiryDate'],
     });
   }
@@ -122,7 +170,8 @@ export function summarizeCpvBatches(batches: CpvBatchRecord[]): CpvBatchSummary 
     hold: batches.filter((b) => b.batchStatus === 'Hold').length,
     dueForReview: batches.filter((b) => {
       if (b.batchStatus === 'Cancelled') return false;
-      const due = b.qaReleaseDate || b.expiryDate;
+      const expiryEnd = monthYearComparableEnd(b.expiryDate);
+      const due = b.qaReleaseDate || (expiryEnd ? expiryEnd.toISOString().slice(0, 10) : b.expiryDate);
       return due && due <= today && b.batchStatus !== 'Released';
     }).length,
   };

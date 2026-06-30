@@ -87,10 +87,10 @@ export function ReceiptForm({ onSuccess }: { onSuccess: () => void; onClose: () 
       )} />
       <div className="grid grid-cols-3 gap-3">
         <FormField control={form.control} name="mfg_date" render={({ field }) => (
-          <FormItem><FormLabel>MFG Date</FormLabel><FormControl><Input type="date" {...field} value={field.value || ''} /></FormControl></FormItem>
+          <FormItem><FormLabel>MFG Date</FormLabel><FormControl><Input type="month" {...field} value={(field.value || '').slice(0, 7)} /></FormControl></FormItem>
         )} />
         <FormField control={form.control} name="exp_date" render={({ field }) => (
-          <FormItem><FormLabel>EXP Date</FormLabel><FormControl><Input type="date" {...field} value={field.value || ''} /></FormControl></FormItem>
+          <FormItem><FormLabel>EXP Date</FormLabel><FormControl><Input type="month" {...field} value={(field.value || '').slice(0, 7)} /></FormControl></FormItem>
         )} />
         <FormField control={form.control} name="retest_date" render={({ field }) => (
           <FormItem><FormLabel>Retest Date</FormLabel><FormControl><Input type="date" {...field} value={field.value || ''} /></FormControl></FormItem>
@@ -275,10 +275,10 @@ export function FinishedGoodsForm({ onSuccess }: { onSuccess: () => void; onClos
       </div>
       <div className="grid grid-cols-3 gap-3">
         <FormField control={form.control} name="mfg_date" render={({ field }) => (
-          <FormItem><FormLabel>MFG Date</FormLabel><FormControl><Input type="date" {...field} /></FormControl></FormItem>
+          <FormItem><FormLabel>MFG Date</FormLabel><FormControl><Input type="month" {...field} value={(field.value || '').slice(0, 7)} /></FormControl></FormItem>
         )} />
         <FormField control={form.control} name="exp_date" render={({ field }) => (
-          <FormItem><FormLabel>EXP Date</FormLabel><FormControl><Input type="date" {...field} /></FormControl></FormItem>
+          <FormItem><FormLabel>EXP Date</FormLabel><FormControl><Input type="month" {...field} value={(field.value || '').slice(0, 7)} /></FormControl></FormItem>
         )} />
         <FormField control={form.control} name="packed_quantity" render={({ field }) => (
           <FormItem><FormLabel>Packed Qty</FormLabel><FormControl><Input type="number" {...field} /></FormControl></FormItem>

@@ -49,3 +49,12 @@ export function getFirebaseSetupMessage(): string {
   });
   return `Firebase environment variables are missing: ${missing.join(', ')}. Copy .env.example to .env.local and add your project credentials.`;
 }
+
+export type FirebaseServiceStatus = 'Connected' | 'Degraded' | 'Not Configured';
+
+/** Storage health from env/SDK only — avoids client getMetadata probes that CORS-fail when the bucket or object is missing. */
+export function getFirebaseStorageHealthStatus(): FirebaseServiceStatus {
+  if (!isFirebaseConfigured()) return 'Not Configured';
+  if (!process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET?.trim()) return 'Not Configured';
+  return 'Connected';
+}

@@ -153,7 +153,7 @@ export function CppMonitoringPage() {
                   <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                     <TextField form={form} name="productName" label="Product Name" />
                     <TextField form={form} name="batchNo" label="Batch No" />
-                    <TextField form={form} name="manufacturingDate" label="Manufacturing Date" type="date" />
+                    <TextField form={form} name="manufacturingDate" label="Manufacturing Date" type="month" />
                     <TextField form={form} name="processStage" label="Process Stage" />
                     <div className="sm:col-span-2"><ParameterField form={form} name="parameterName" label="Parameter" options={CPP_PARAMETERS} /></div>
                     <TextField form={form} name="unit" label="Unit" />

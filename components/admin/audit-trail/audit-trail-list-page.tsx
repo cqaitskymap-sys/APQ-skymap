@@ -81,7 +81,11 @@ export function AuditTrailListPage() {
       ]);
       const scoped = filterAuditTrailByRole(list, role, user?.uid);
       setEntries(scoped);
-      setDepartments(depts.map((d) => d.departmentName).filter(Boolean));
+      setDepartments(
+        [...new Set(depts.map((d) => d.departmentName.trim()).filter(Boolean))].sort((a, b) =>
+          a.localeCompare(b),
+        ),
+      );
     } catch (e) {
       setError((e as Error).message);
     } finally {

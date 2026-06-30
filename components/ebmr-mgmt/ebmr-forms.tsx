@@ -169,10 +169,10 @@ export function DispensingForm({ ebmr, onSuccess }: { ebmr: EbmrRecord; onSucces
               <FormItem><FormLabel>AR Number *</FormLabel><FormControl><Input {...field} disabled={!editable} /></FormControl></FormItem>
             )} />
             <FormField control={form.control} name="material_mfg_date" render={({ field }) => (
-              <FormItem><FormLabel>Material Mfg. Date</FormLabel><FormControl><Input type="date" {...field} disabled={!editable} /></FormControl></FormItem>
+              <FormItem><FormLabel>Material Mfg. Date</FormLabel><FormControl><Input type="month" {...field} value={(field.value || '').slice(0, 7)} disabled={!editable} /></FormControl></FormItem>
             )} />
             <FormField control={form.control} name="material_exp_date" render={({ field }) => (
-              <FormItem><FormLabel>Material Exp. Date</FormLabel><FormControl><Input type="date" {...field} disabled={!editable} /></FormControl></FormItem>
+              <FormItem><FormLabel>Material Exp. Date</FormLabel><FormControl><Input type="month" {...field} value={(field.value || '').slice(0, 7)} disabled={!editable} /></FormControl></FormItem>
             )} />
             <FormField control={form.control} name="vendor_name" render={({ field }) => (
               <FormItem><FormLabel>Vendor Name</FormLabel><FormControl><Input {...field} disabled={!editable} /></FormControl></FormItem>

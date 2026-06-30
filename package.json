@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit",
     "type-check": "tsc --noEmit",
     "emulators": "npx firebase emulators:start --only auth,firestore",
+    "deploy:storage": "firebase deploy --only storage",
     "setup:admin": "node scripts/setup-default-admin.mjs"
   },
   "dependencies": {

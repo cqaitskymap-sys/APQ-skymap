@@ -488,7 +488,7 @@ export async function createCpvReview(
         name: i === 0 ? actor.name : '',
         signatureText: i === 0 ? actor.name : '',
         signedAt: i === 0 ? new Date().toISOString() : null,
-        userId: i === 0 ? actor.id : undefined,
+        ...(i === 0 ? { userId: actor.id } : {}),
       })),
       createdByName: actor.name,
       updatedByName: actor.name,

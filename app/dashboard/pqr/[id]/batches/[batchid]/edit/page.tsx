@@ -265,8 +265,8 @@ export default function EditBatchPage() {
               </Label>
               <Input
                 id="mfg_date"
-                type="date"
-                value={batch.mfg_date}
+                type="month"
+                value={(batch.mfg_date || '').slice(0, 7)}
                 onChange={(e) => setBatch({ ...batch, mfg_date: e.target.value })}
               />
             </div>
@@ -276,8 +276,8 @@ export default function EditBatchPage() {
               </Label>
               <Input
                 id="exp_date"
-                type="date"
-                value={batch.exp_date}
+                type="month"
+                value={(batch.exp_date || '').slice(0, 7)}
                 onChange={(e) => setBatch({ ...batch, exp_date: e.target.value })}
               />
             </div>

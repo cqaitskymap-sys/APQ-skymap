@@ -1,5 +1,5 @@
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { getFirebaseStorage, isFirebaseConfigured } from '@/lib/firebase';
+import { uploadFile } from '@/lib/storage';
+import { getFirebaseAuth, isFirebaseConfigured } from '@/lib/firebase';
 import { writeAuditTrail } from '@/lib/audit-trail';
 import {
   getAdminRecords, createAdminRecord, updateAdminRecord,
@@ -146,11 +146,25 @@ export async function uploadCompanyLogo(
     return { url: null, error: 'Firebase Storage is not configured' };
   }
 
+  const authUser = getFirebaseAuth().currentUser;
+  if (!authUser) {
+    return { url: null, error: 'You must be signed in to upload a logo.' };
+  }
+
   try {
-    const path = `company-sites/${siteId}/logo/${Date.now()}_${file.name}`;
-    const storageRef = ref(getFirebaseStorage(), path);
-    await uploadBytes(storageRef, file);
-    const url = await getDownloadURL(storageRef);
+    await authUser.getIdToken(true);
+    const safeName = `${Date.now()}_logo_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+    const uploaded = await uploadFile({
+      moduleName: 'company-sites',
+      documentId: siteId,
+      file,
+      fileName: safeName,
+      uploadedBy: meta.userId,
+    });
+    if (!uploaded?.fileUrl) {
+      return { url: null, error: 'Logo upload failed. Deploy storage rules: npm run deploy:storage' };
+    }
+    const url = uploaded.fileUrl;
     await logCompanySiteAudit(
       existingLogo ? 'LOGO_CHANGE' : 'LOGO_UPLOAD',
       siteId,

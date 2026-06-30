@@ -581,8 +581,8 @@ export function CqaMonitoringPage() {
               </Select>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <div><Label>Mfg. Date</Label><Input className="mt-1" type="date" value={form.manufacturingDate?.slice(0, 10) || ''} readOnly /></div>
-              <div><Label>Exp. Date</Label><Input className="mt-1" type="date" value={form.expiryDate?.slice(0, 10) || ''} readOnly /></div>
+              <div><Label>Mfg. Date</Label><Input className="mt-1" type="month" value={form.manufacturingDate?.slice(0, 7) || ''} readOnly /></div>
+              <div><Label>Exp. Date</Label><Input className="mt-1" type="month" value={form.expiryDate?.slice(0, 7) || ''} readOnly /></div>
             </div>
             <div><Label>Test Stage *</Label>
               <Select value={form.testStage || ''} onValueChange={(v) => void onFormStageChange(v)}>
@@ -597,6 +597,14 @@ export function CqaMonitoringPage() {
                   <SelectItem key={paramOptionId(p)} value={paramOptionId(p)}>{paramOptionName(p)}</SelectItem>
                 ))}</SelectContent>
               </Select>
+            </div>
+            <div><Label>Sub Parameter</Label>
+              <Input
+                className="mt-1"
+                value={form.subParameter || ''}
+                onChange={(e) => setForm((f) => ({ ...f, subParameter: e.target.value }))}
+                placeholder="Enter sub parameter"
+              />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div><Label>Parameter Category</Label><Input className="mt-1" value={form.parameterCategory || ''} readOnly placeholder="—" /></div>

@@ -104,10 +104,10 @@ export function EbmrForm({
             <FormItem><FormLabel>Customer</FormLabel><FormControl><Input {...field} disabled={disabled} /></FormControl></FormItem>
           )} />
           <FormField control={form.control} name="mfg_date" render={({ field }) => (
-            <FormItem><FormLabel>MFG Date *</FormLabel><FormControl><Input type="date" {...field} disabled={disabled} /></FormControl></FormItem>
+            <FormItem><FormLabel>MFG Date *</FormLabel><FormControl><Input type="month" {...field} value={(field.value || '').slice(0, 7)} disabled={disabled} /></FormControl></FormItem>
           )} />
           <FormField control={form.control} name="exp_date" render={({ field }) => (
-            <FormItem><FormLabel>EXP Date *</FormLabel><FormControl><Input type="date" {...field} disabled={disabled} /></FormControl></FormItem>
+            <FormItem><FormLabel>EXP Date *</FormLabel><FormControl><Input type="month" {...field} value={(field.value || '').slice(0, 7)} disabled={disabled} /></FormControl></FormItem>
           )} />
         </div>
         <FormField control={form.control} name="remarks" render={({ field }) => (

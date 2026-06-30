@@ -13,8 +13,8 @@ export const metadata: Metadata = {
   title: 'Skymap QMS — Enterprise Quality Management System',
   description: 'Skymap Pharmaceuticals QMS — GMP, FDA, WHO compliant. Built by Satyajit Patri.',
   icons: {
-    icon: '/favicon.ico',
-    apple: '/favicon.ico',
+    icon: '/icon.svg',
+    apple: '/apple-icon.png',
   },
 };
 

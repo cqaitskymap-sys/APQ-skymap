@@ -395,9 +395,9 @@ export default function CreateBatchPage() {
               </Label>
               <Input
                 id="mfg_date"
-                type="date"
+                type="month"
                 className="mt-2"
-                value={formData.mfg_date}
+                value={(formData.mfg_date || '').slice(0, 7)}
                 onChange={e =>
                   setFormData(prev => ({ ...prev, mfg_date: e.target.value }))
                 }
@@ -413,9 +413,9 @@ export default function CreateBatchPage() {
               </Label>
               <Input
                 id="exp_date"
-                type="date"
+                type="month"
                 className="mt-2"
-                value={formData.exp_date}
+                value={(formData.exp_date || '').slice(0, 7)}
                 onChange={e =>
                   setFormData(prev => ({ ...prev, exp_date: e.target.value }))
                 }

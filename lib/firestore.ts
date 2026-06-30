@@ -56,6 +56,20 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+/** Firestore rejects `undefined` field values — omit them before write (recursive). */
+function stripUndefined<T>(value: T): T {
+  if (value === undefined) return value;
+  if (value === null || typeof value !== 'object') return value;
+  if (Array.isArray(value)) {
+    return value.map((item) => stripUndefined(item)) as T;
+  }
+  const out: Record<string, unknown> = {};
+  for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
+    if (val !== undefined) out[key] = stripUndefined(val);
+  }
+  return out as T;
+}
+
 function getDb() {
   if (!isFirebaseConfigured()) {
     throw new FirebaseNotConfiguredError();
@@ -89,7 +103,11 @@ export async function createDocument<T extends BaseRecord>(
 ): Promise<T> {
   try {
     const db = getDb();
-    const payload = withAuditFields(data as Record<string, unknown>, audit?.actor, true);
+    const payload = withAuditFields(
+      stripUndefined(data as Record<string, unknown>),
+      audit?.actor,
+      true,
+    );
     const docRef = await addDoc(collection(db, collectionName), payload);
 
     if (audit) {
@@ -192,11 +210,11 @@ export async function updateDocument<T extends BaseRecord>(
     if (!existing) return null;
 
     const now = nowIso();
-    const payload = {
+    const payload = stripUndefined({
       ...updates,
       updatedAt: now,
       ...(audit?.actor?.id && { updatedBy: audit.actor.id }),
-    };
+    } as Record<string, unknown>);
 
     await updateDoc(doc(db, collectionName, documentId), payload);
 

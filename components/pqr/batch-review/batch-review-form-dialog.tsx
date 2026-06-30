@@ -146,10 +146,10 @@ export function BatchReviewFormDialog({
                 <FormItem><FormLabel>Batch Size *</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
               )} />
               <FormField control={form.control} name="manufacturingDate" render={({ field }) => (
-                <FormItem><FormLabel>MFG Date *</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem>
+                <FormItem><FormLabel>MFG Date *</FormLabel><FormControl><Input type="month" {...field} value={(field.value || '').slice(0, 7)} /></FormControl><FormMessage /></FormItem>
               )} />
               <FormField control={form.control} name="expiryDate" render={({ field }) => (
-                <FormItem><FormLabel>EXP Date *</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem>
+                <FormItem><FormLabel>EXP Date *</FormLabel><FormControl><Input type="month" {...field} value={(field.value || '').slice(0, 7)} /></FormControl><FormMessage /></FormItem>
               )} />
               <FormField control={form.control} name="semiFinishedBatchNumber" render={({ field }) => (
                 <FormItem><FormLabel>Semi Finish Batch No.</FormLabel><FormControl><Input {...field} /></FormControl></FormItem>

@@ -315,7 +315,7 @@ export const AUDIT_ACTION_TYPES = [
   'Review', 'Submit', 'Close', 'Reopen', 'Login', 'Logout', 'Failed Login',
   'Password Reset', 'Role Change', 'Permission Change', 'File Upload', 'File Delete',
   'Export', 'Import', 'Print', 'Status Change', 'E-Signature', 'Override',
-  'System Setting Change', 'Backup', 'Restore',
+  'System Setting Change', 'Backup',
 ] as const;
 
 export const AUDIT_LOG_STATUSES = ['Success', 'Failed', 'Pending', 'System Generated'] as const;

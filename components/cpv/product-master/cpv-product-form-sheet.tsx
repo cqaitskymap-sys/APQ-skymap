@@ -223,9 +223,6 @@ export function CpvProductFormSheet({
                   <FormMessage />
                 </FormItem>
               )} />
-              <FormField control={form.control} name="routeOfAdministration" render={({ field }) => (
-                <FormItem><FormLabel>Route of Administration</FormLabel><FormControl><Input {...field} /></FormControl></FormItem>
-              )} />
               <FormField control={form.control} name="packSize" render={({ field }) => (
                 <FormItem><FormLabel>Pack Size</FormLabel><FormControl><Input {...field} /></FormControl></FormItem>
               )} />

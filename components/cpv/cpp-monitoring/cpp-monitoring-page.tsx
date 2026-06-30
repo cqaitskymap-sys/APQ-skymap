@@ -20,7 +20,7 @@ import {
 import { fetchActiveCpvProductsForBatch as fetchProducts } from '@/lib/cpv-batch-registration-service';
 import type { CpvProductRecord } from '@/lib/cpv-product-master';
 import type { Parameter } from '@/lib/admin/schemas';
-import { normalizeParameter } from '@/lib/admin/parameter-service';
+import { buildParameterId, normalizeParameter } from '@/lib/admin/parameter-service';
 import { downloadCsv } from '@/lib/export-utils';
 import { CpvPageHeader } from '@/components/cpv/product-master/cpv-page-header';
 import { ResponsiveDataTable } from '@/components/cpv/product-master/responsive-data-table';
@@ -45,6 +45,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import type { ColumnDef } from '@/components/admin/admin-data-table';
 
 const CHART_COLORS = ['#2563eb', '#059669', '#d97706', '#dc2626', '#7c3aed'];
+
+function paramOptionId(p: Parameter): string {
+  return p.id || p.parameterId || buildParameterId(p.parameterCode);
+}
 
 function RiskBadge({ level }: { level: string }) {
   const cls = level === 'Critical' ? 'bg-red-900/10 text-red-900 border-red-300'
@@ -129,8 +133,18 @@ export function CppMonitoringPage() {
   const paramNames = useMemo(() => Array.from(new Set(results.map((r) => r.parameterName))), [results]);
   const trendData = useMemo(() => trendParam !== 'all' ? parameterTrendData(filtered, trendParam) : [], [filtered, trendParam]);
 
+  const filteredFormParams = useMemo(() => {
+    const stage = form.processStage;
+    if (!stage || !formParams.length) return formParams;
+    const forStage = formParams.filter((p) => !p.processStage || p.processStage === stage);
+    return forStage.length ? forStage : formParams;
+  }, [formParams, form.processStage]);
+
   const openCreate = () => {
     setEditing(null);
+    setFormProductId('');
+    setFormBatches([]);
+    setFormParams([]);
     setForm({
       observationDateTime: new Date().toISOString(),
       recordedBy: profile?.full_name || '',
@@ -172,8 +186,23 @@ export function CppMonitoringPage() {
     }));
   };
 
+  const onFormStageChange = (stage: string) => {
+    setForm((f) => ({
+      ...f,
+      processStage: stage,
+      parameterId: '',
+      parameterCode: '',
+      parameterName: '',
+      parameterCategory: '',
+      unit: '',
+      lowerLimit: undefined,
+      upperLimit: undefined,
+      targetValue: undefined,
+    }));
+  };
+
   const onFormParamChange = (paramId: string) => {
-    const p = formParams.find((x) => x.id === paramId);
+    const p = formParams.find((x) => paramOptionId(x) === paramId);
     if (!p) return;
     const n = normalizeParameter(p);
     setForm((f) => ({
@@ -437,22 +466,39 @@ export function CppMonitoringPage() {
               </Select>
             </div>
             <div><Label>Process Stage *</Label>
-              <Select value={form.processStage || ''} onValueChange={(v) => setForm((f) => ({ ...f, processStage: v }))}>
+              <Select value={form.processStage || ''} onValueChange={onFormStageChange}>
                 <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
                 <SelectContent>{CPP_PROCESS_STAGES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div><Label>Parameter *</Label>
-              <Select value={form.parameterId || ''} onValueChange={onFormParamChange} disabled={Boolean(editing)}>
-                <SelectTrigger className="mt-1"><SelectValue placeholder="Parameter" /></SelectTrigger>
-                <SelectContent>{formParams.map((p) => <SelectItem key={p.id} value={p.id || ''}>{p.parameterName}</SelectItem>)}</SelectContent>
+              <Select
+                value={form.parameterId || ''}
+                onValueChange={onFormParamChange}
+                disabled={Boolean(editing) || !formProductId}
+              >
+                <SelectTrigger className="mt-1"><SelectValue placeholder={formProductId ? 'Parameter' : 'Select product first'} /></SelectTrigger>
+                <SelectContent>
+                  {filteredFormParams.map((p) => (
+                    <SelectItem key={paramOptionId(p)} value={paramOptionId(p)}>{p.parameterName}</SelectItem>
+                  ))}
+                </SelectContent>
               </Select>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div><Label>Observed Value *</Label><Input className="mt-1" value={String(form.observedValue ?? '')} onChange={(e) => setForm((f) => ({ ...f, observedValue: e.target.value }))} /></div>
-              <div><Label>Unit</Label><Input className="mt-1" value={form.unit || ''} readOnly /></div>
-              <div><Label>LSL</Label><Input className="mt-1" type="number" value={form.lowerLimit ?? ''} readOnly /></div>
-              <div><Label>USL</Label><Input className="mt-1" type="number" value={form.upperLimit ?? ''} readOnly /></div>
+              <div>
+                <Label>Unit</Label>
+                <Input className="mt-1 bg-muted" value={form.unit || ''} readOnly placeholder="Auto-filled from parameter" />
+              </div>
+              <div>
+                <Label>LSL (Lower Specification Limit)</Label>
+                <Input className="mt-1 bg-muted" type="number" value={form.lowerLimit ?? ''} readOnly placeholder="Auto-filled from parameter" />
+              </div>
+              <div>
+                <Label>USL (Upper Specification Limit)</Label>
+                <Input className="mt-1 bg-muted" type="number" value={form.upperLimit ?? ''} readOnly placeholder="Auto-filled from parameter" />
+              </div>
             </div>
             <div><Label>Observation Date Time *</Label><Input className="mt-1" type="datetime-local" value={form.observationDateTime?.slice(0, 16) || ''} onChange={(e) => setForm((f) => ({ ...f, observationDateTime: e.target.value }))} /></div>
             <div><Label>Remarks</Label><Textarea className="mt-1" value={form.remarks || ''} onChange={(e) => setForm((f) => ({ ...f, remarks: e.target.value }))} /></div>

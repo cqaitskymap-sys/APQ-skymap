@@ -19,13 +19,13 @@ import {
   CPV_BATCH_STATUSES,
   CPV_RELEASE_STATUSES,
   isBatchFieldLocked,
+  toMonthYearValue,
   type CpvBatchFormData,
   type CpvBatchRecord,
 } from '@/lib/cpv-batch-registration';
 import { cpvProductToBatchAutofill } from '@/lib/cpv-batch-registration-service';
 import type { CpvProductRecord } from '@/lib/cpv-product-master';
 import { CPV_REVIEW_FREQUENCIES } from '@/lib/cpv-product-master';
-import { BATCH_SIZE_UNITS } from '@/lib/admin/constants';
 
 interface CpvBatchFormSheetProps {
   open: boolean;
@@ -60,7 +60,7 @@ export function CpvBatchFormSheet({
       market: '',
       batchSize: 1,
       batchSizeUnit: 'Vials',
-      manufacturingDate: new Date().toISOString().split('T')[0],
+      manufacturingDate: new Date().toISOString().slice(0, 7),
       expiryDate: '',
       manufacturingSite: '',
       manufacturingLine: '',
@@ -100,8 +100,8 @@ export function CpvBatchFormSheet({
         market: editing.market,
         batchSize: editing.batchSize,
         batchSizeUnit: editing.batchSizeUnit,
-        manufacturingDate: editing.manufacturingDate,
-        expiryDate: editing.expiryDate,
+        manufacturingDate: toMonthYearValue(editing.manufacturingDate),
+        expiryDate: toMonthYearValue(editing.expiryDate),
         manufacturingSite: editing.manufacturingSite,
         manufacturingLine: editing.manufacturingLine,
         shift: editing.shift,
@@ -187,20 +187,33 @@ export function CpvBatchFormSheet({
               <FormField control={form.control} name="batchSize" render={({ field }) => (
                 <FormItem><FormLabel>Batch Size *</FormLabel><FormControl><Input type="number" {...field} readOnly={locked} onChange={(e) => field.onChange(Number(e.target.value))} /></FormControl><FormMessage /></FormItem>
               )} />
-              <FormField control={form.control} name="batchSizeUnit" render={({ field }) => (
+              <FormField control={form.control} name="manufacturingDate" render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Unit</FormLabel>
-                  <Select value={field.value} onValueChange={field.onChange}>
-                    <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                    <SelectContent>{BATCH_SIZE_UNITS.map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
-                  </Select>
+                  <FormLabel>Mfg Date *</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="month"
+                      value={toMonthYearValue(field.value)}
+                      onChange={(e) => field.onChange(e.target.value)}
+                      readOnly={locked}
+                    />
+                  </FormControl>
+                  <FormMessage />
                 </FormItem>
               )} />
-              <FormField control={form.control} name="manufacturingDate" render={({ field }) => (
-                <FormItem><FormLabel>Mfg Date *</FormLabel><FormControl><Input type="date" {...field} readOnly={locked} /></FormControl><FormMessage /></FormItem>
-              )} />
               <FormField control={form.control} name="expiryDate" render={({ field }) => (
-                <FormItem><FormLabel>Expiry Date *</FormLabel><FormControl><Input type="date" {...field} readOnly={locked} /></FormControl><FormMessage /></FormItem>
+                <FormItem>
+                  <FormLabel>Expiry Date *</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="month"
+                      value={toMonthYearValue(field.value)}
+                      onChange={(e) => field.onChange(e.target.value)}
+                      readOnly={locked}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
               )} />
               <FormField control={form.control} name="manufacturingSite" render={({ field }) => (
                 <FormItem><FormLabel>Manufacturing Site *</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>

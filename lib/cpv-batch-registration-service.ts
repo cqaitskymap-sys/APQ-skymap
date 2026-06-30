@@ -23,6 +23,7 @@ import {
   CPV_BATCH_COLLECTION,
   CPV_BATCH_MODULE,
   buildCpvBatchId,
+  toMonthYearValue,
   type CpvBatchFormData,
   type CpvBatchRecord,
 } from '@/lib/cpv-batch-registration';
@@ -164,8 +165,8 @@ export function adminBatchToCpvForm(batch: AdminBatch, cpvProductId = ''): Parti
     market: b.market || '',
     batchSize: Number(b.batchSize) || undefined,
     batchSizeUnit: (b.batchSizeUnit || 'Vials') as CpvBatchFormData['batchSizeUnit'],
-    manufacturingDate: b.manufacturingDate || '',
-    expiryDate: b.expiryDate || '',
+    manufacturingDate: toMonthYearValue(b.manufacturingDate || ''),
+    expiryDate: toMonthYearValue(b.expiryDate || ''),
     manufacturingSite: b.manufacturingSite || '',
     manufacturingLine: b.manufacturingLine || '',
     shift: b.shift || 'A',
@@ -357,6 +358,8 @@ export async function createCpvBatch(
     }
     const payload = {
       ...data,
+      manufacturingDate: toMonthYearValue(data.manufacturingDate),
+      expiryDate: toMonthYearValue(data.expiryDate),
       cpvBatchId: buildCpvBatchId(data.batchNumber),
       status: data.batchStatus,
       createdByName: actor.name,
@@ -400,6 +403,8 @@ export async function updateCpvBatch(
     }
     const updates = {
       ...data,
+      ...(data.manufacturingDate !== undefined && { manufacturingDate: toMonthYearValue(data.manufacturingDate) }),
+      ...(data.expiryDate !== undefined && { expiryDate: toMonthYearValue(data.expiryDate) }),
       status: data.batchStatus ?? existing.batchStatus,
       updatedByName: actor.name,
       ...(data.batchNumber && { batch_number: data.batchNumber }),

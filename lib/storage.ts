@@ -14,7 +14,7 @@ export const ALLOWED_FILE_TYPES = {
     'application/msword',
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   ],
-  image: ['image/jpeg', 'image/png', 'image/gif', 'image/webp'],
+  image: ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'],
 } as const;
 
 export type FileCategory = keyof typeof ALLOWED_FILE_TYPES;
@@ -47,7 +47,7 @@ function getStoragePath(moduleName: string, documentId: string, fileName: string
   const safeModule = moduleName.replace(/[^a-zA-Z0-9_-]/g, '_');
   const safeDocId = documentId.replace(/[^a-zA-Z0-9_-]/g, '_');
   const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
-  return `/${safeModule}/${safeDocId}/${safeName}`;
+  return `/${safeModule}/${safeDocId}/${safeName}`.replace(/^\/+/, '');
 }
 
 export function getFileCategory(mimeType: string): FileCategory | null {

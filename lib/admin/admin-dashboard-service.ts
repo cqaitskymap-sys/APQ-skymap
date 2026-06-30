@@ -1,8 +1,8 @@
 import { collection, getDocs, limit, orderBy, query } from 'firebase/firestore';
-import { ref, getMetadata } from 'firebase/storage';
 import {
-  getFirebaseFirestore, getFirebaseStorage, isFirebaseConfigured, getFirebaseAuth,
+  getFirebaseFirestore, isFirebaseConfigured, getFirebaseAuth,
 } from '@/lib/firebase';
+import { getFirebaseStorageHealthStatus } from '@/lib/firebase-config';
 import { ADMIN_COLLECTIONS, ADMIN_ROLES } from './constants';
 import { isDemoAuthEnabled } from '@/lib/demo-auth-config';
 import {
@@ -173,13 +173,17 @@ export async function getExtendedSystemHealth(): Promise<{
       checks.push({ name: 'Firestore Read', status: 'Down', detail: (e as Error).message });
     }
 
-    try {
-      const testRef = ref(getFirebaseStorage(), '.healthcheck');
-      await getMetadata(testRef).catch(() => null);
-      checks.push({ name: 'Storage', status: 'Healthy', detail: 'Storage bucket reachable' });
-    } catch {
-      checks.push({ name: 'Storage', status: 'Degraded', detail: 'Storage check inconclusive' });
-    }
+    const storageHealth = getFirebaseStorageHealthStatus();
+    checks.push({
+      name: 'Storage',
+      status: storageHealth === 'Connected' ? 'Healthy' : storageHealth === 'Degraded' ? 'Degraded' : 'Down',
+      detail:
+        storageHealth === 'Connected'
+          ? `Bucket configured (${process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET})`
+          : storageHealth === 'Degraded'
+            ? 'Storage configured but Firebase connection degraded'
+            : 'Storage bucket not configured',
+    });
 
     try {
       const auth = getFirebaseAuth();

@@ -63,7 +63,7 @@ export function DesignationsListPage() {
     try {
       setDesignations(await fetchDesignations());
       const depts = await fetchDepartments();
-      setDepartments(depts.map((d) => d.departmentName));
+      setDepartments(Array.from(new Set(depts.map((d) => d.departmentName))).sort());
     } catch (e) {
       setError((e as Error).message);
     } finally {

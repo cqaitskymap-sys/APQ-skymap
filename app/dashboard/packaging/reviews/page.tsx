@@ -507,8 +507,8 @@ export default function PackagingReviewPage() {
                       MFG Date
                     </label>
                     <Input
-                      type="date"
-                      value={formData.mfgDate}
+                      type="month"
+                      value={(formData.mfgDate || '').slice(0, 7)}
                       onChange={(e) =>
                         setFormData({ ...formData, mfgDate: e.target.value })
                       }
@@ -519,8 +519,8 @@ export default function PackagingReviewPage() {
                       EXP Date
                     </label>
                     <Input
-                      type="date"
-                      value={formData.expDate}
+                      type="month"
+                      value={(formData.expDate || '').slice(0, 7)}
                       onChange={(e) =>
                         setFormData({ ...formData, expDate: e.target.value })
                       }

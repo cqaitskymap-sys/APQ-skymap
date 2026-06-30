@@ -79,6 +79,12 @@ function observedVal(v: unknown): string | number {
   return String(v);
 }
 
+function removeUndefined<T extends Record<string, unknown>>(obj: T): T {
+  return Object.fromEntries(
+    Object.entries(obj).filter(([, value]) => value !== undefined),
+  ) as T;
+}
+
 function normalizeCppResult(raw: Record<string, unknown>): CppResultRecord {
   const batchNumber = str(raw.batchNumber || raw.batchNo || raw.batch_number);
   const parameterCode = str(raw.parameterCode || raw.parameter_code, 'PARAM');
@@ -179,7 +185,10 @@ export async function fetchCppParametersForProduct(
       const product = await fetchCpvProductById(cpvProductId);
       const linked = product?.linkedCppParameterIds || [];
       if (linked.length) {
-        cpp = cpp.filter((p) => linked.includes(p.id || ''));
+        const linkedParams = cpp.filter((p) =>
+          linked.includes(p.id || '') || linked.includes(p.parameterId || ''),
+        );
+        if (linkedParams.length) cpp = linkedParams;
       }
     }
     const byProduct = cpp.filter((p) => {
@@ -283,7 +292,7 @@ export async function createCppResult(
     const riskLevel = evaluateCppRiskLevel(status, data.criticality, failures);
     const capaRequired = failures >= 3;
 
-    const payload = {
+    const payload = removeUndefined({
       ...data,
       cppResultId: buildCppResultId(data.batchNumber, data.parameterCode),
       status,
@@ -301,7 +310,7 @@ export async function createCppResult(
       lsl: data.lowerLimit,
       usl: data.upperLimit,
       target_value: data.targetValue,
-    };
+    });
 
     const created = await createRecord(
       CPP_RESULTS_COLLECTION,
@@ -357,13 +366,13 @@ export async function updateCppResult(
     );
     const failures = await countParameterFailures(merged.batchNumber, merged.parameterCode);
     const riskLevel = evaluateCppRiskLevel(status, merged.criticality, failures);
-    const updates = {
+    const updates = removeUndefined({
       ...data,
       status,
       riskLevel,
       capaRequired: failures >= 3,
       updatedByName: actor.name,
-    };
+    });
     const updated = await updateRecord(CPP_RESULTS_COLLECTION, id, updates as Partial<CppResultRecord>, actorCtx(actor));
     if (!updated) return { result: null, error: 'Not found.' };
     const result = normalizeCppResult(updated as unknown as Record<string, unknown>);

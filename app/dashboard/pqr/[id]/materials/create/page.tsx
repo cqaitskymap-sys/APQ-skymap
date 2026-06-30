@@ -593,8 +593,8 @@ export default function CreateMaterialPage() {
               <Input
                 id="mfg_date"
                 name="mfg_date"
-                type="date"
-                value={formData.mfg_date}
+                type="month"
+                value={(formData.mfg_date || '').slice(0, 7)}
                 onChange={handleInputChange}
                 className="text-sm"
               />
@@ -605,8 +605,8 @@ export default function CreateMaterialPage() {
               <Input
                 id="exp_date"
                 name="exp_date"
-                type="date"
-                value={formData.exp_date}
+                type="month"
+                value={(formData.exp_date || '').slice(0, 7)}
                 onChange={handleInputChange}
                 className="text-sm"
               />

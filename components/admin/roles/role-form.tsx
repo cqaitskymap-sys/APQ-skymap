@@ -63,7 +63,13 @@ export function RoleForm({
   useEffect(() => {
     fetchRoles().then((r) => setAllRoles(r.map((x) => ({ roleId: x.roleId, roleName: x.roleName }))));
     getAdminRecords<{ departmentName: string }>(ADMIN_COLLECTIONS.departments)
-      .then((d) => setDepartments(d.map((x) => x.departmentName)))
+      .then((d) =>
+        setDepartments(
+          [...new Set(d.map((x) => x.departmentName.trim()).filter(Boolean))].sort((a, b) =>
+            a.localeCompare(b),
+          ),
+        ),
+      )
       .catch(() => setDepartments(['QA', 'QC', 'Production']));
   }, []);
 

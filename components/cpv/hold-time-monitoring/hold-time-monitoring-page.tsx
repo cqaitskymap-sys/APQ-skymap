@@ -609,7 +609,7 @@ export function HoldTimeMonitoringPage() {
               <div className="rounded-md border bg-slate-50 p-3 text-sm space-y-1">
                 <p>Actual: {computedPreview.actual}</p>
                 <p>Difference: {computedPreview.diff}</p>
-                <p>Status: <StatusBadge status={computedPreview.status} /></p>
+                <div>Status: <StatusBadge status={computedPreview.status} /></div>
               </div>
             )}
             <div>

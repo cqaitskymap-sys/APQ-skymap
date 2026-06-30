@@ -69,8 +69,14 @@ export async function fetchDesignationById(id: string): Promise<Designation | nu
 
 export async function fetchActiveDepartmentsForDesignation(): Promise<{ departmentName: string; departmentCode: string }[]> {
   const departments = await fetchDepartments();
+  const seen = new Set<string>();
   return departments
     .filter((d) => d.status === 'Active')
+    .filter((d) => {
+      if (seen.has(d.departmentName)) return false;
+      seen.add(d.departmentName);
+      return true;
+    })
     .map((d) => ({ departmentName: d.departmentName, departmentCode: d.departmentCode }));
 }
 

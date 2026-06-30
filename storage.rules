@@ -6,8 +6,14 @@ service firebase.storage {
       return request.auth != null;
     }
 
+    function profileExists() {
+      return firestore.exists(/databases/(default)/documents/profiles/$(request.auth.uid));
+    }
+
     function getProfileRole() {
-      return firestore.get(/databases/(default)/documents/profiles/$(request.auth.uid)).data.role;
+      return profileExists()
+        ? firestore.get(/databases/(default)/documents/profiles/$(request.auth.uid)).data.role
+        : '';
     }
 
     function isSuperAdmin() {
@@ -26,16 +32,31 @@ service firebase.storage {
       return request.resource.contentType.matches('application/pdf')
         || request.resource.contentType.matches('application/vnd.*')
         || request.resource.contentType.matches('application/msword')
-        || request.resource.contentType.matches('image/.*');
+        || request.resource.contentType.matches('image/.*')
+        || request.resource.contentType.matches('text/html')
+        || request.resource.contentType.matches('text/csv');
     }
 
-    // Path: /moduleName/documentId/fileName
-    match /{moduleName}/{documentId}/{fileName} {
-      allow read: if isAuthenticated();
-      allow create, update: if isAuthenticated()
+    function canWriteModuleFile() {
+      return isAuthenticated()
         && !isReadOnly()
         && isAllowedMime()
         && request.resource.size < 25 * 1024 * 1024;
+    }
+
+    // Company site logos — authenticated users only; no profile role lookup (avoids rule failures)
+    match /company-sites/{siteId}/{fileName} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated()
+        && request.resource.size < 2 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+      allow delete: if isAdmin() || isSuperAdmin();
+    }
+
+    // Path: /moduleName/documentId/.../fileName (supports nested folders e.g. attachments/)
+    match /{moduleName}/{documentId}/{allPaths=**} {
+      allow read: if isAuthenticated();
+      allow create, update: if canWriteModuleFile();
       allow delete: if isAdmin() || isSuperAdmin();
     }
 

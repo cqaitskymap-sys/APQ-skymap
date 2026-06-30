@@ -113,7 +113,7 @@ export function DesignationForm({
               <SelectTrigger><SelectValue placeholder="Select active department" /></SelectTrigger>
               <SelectContent>
                 {departments.map((d) => (
-                  <SelectItem key={d.departmentName} value={d.departmentName}>{d.departmentName}</SelectItem>
+                  <SelectItem key={d.departmentCode} value={d.departmentName}>{d.departmentName}</SelectItem>
                 ))}
               </SelectContent>
             </Select>

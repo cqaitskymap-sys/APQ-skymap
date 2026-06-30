@@ -77,6 +77,12 @@ function observedVal(v: unknown): string | number {
   return String(v);
 }
 
+function removeUndefined<T extends Record<string, unknown>>(obj: T): T {
+  return Object.fromEntries(
+    Object.entries(obj).filter(([, value]) => value !== undefined),
+  ) as T;
+}
+
 function normalizeCqaResult(raw: Record<string, unknown>): CqaResultRecord {
   const batchNumber = str(raw.batchNumber || raw.batchNo || raw.batch_number);
   const parameterCode = str(raw.parameterCode || raw.parameter_code, 'PARAM');
@@ -93,6 +99,7 @@ function normalizeCqaResult(raw: Record<string, unknown>): CqaResultRecord {
     parameterId: str(raw.parameterId || raw.parameter_id),
     parameterCode,
     parameterName: str(raw.parameterName || raw.parameter_name || raw.testParameter),
+    subParameter: str(raw.subParameter || raw.sub_parameter || raw.subparameter),
     parameterCategory: str(raw.parameterCategory || raw.parameter_category),
     responsibility: str(raw.responsibility),
     specificationText: str(raw.specificationText || raw.specification_text),
@@ -324,7 +331,7 @@ export async function createCqaResult(
     const riskLevel = evaluateCqaRiskLevel(status, data.criticality, oosCount, alertCount);
     const capaRequired = oosCount >= 2 || alertCount >= 3;
 
-    const payload = {
+    const payload = removeUndefined({
       ...data,
       cqaResultId: buildCqaResultId(data.batchNumber, data.parameterCode),
       status,
@@ -347,7 +354,7 @@ export async function createCqaResult(
       target: data.targetValue,
       observedValue: data.observedResult,
       recordedBy: data.analyst,
-    };
+    });
 
     const created = await createRecord(
       CQA_RESULTS_COLLECTION,
@@ -414,13 +421,13 @@ export async function updateCqaResult(
     const oosCount = await countParameterStatuses(merged.batchNumber, merged.parameterCode, 'OOS');
     const alertCount = await countParameterStatuses(merged.batchNumber, merged.parameterCode, 'Alert');
     const riskLevel = evaluateCqaRiskLevel(status, merged.criticality, oosCount, alertCount);
-    const updates = {
+    const updates = removeUndefined({
       ...data,
       status,
       riskLevel,
       capaRequired: oosCount >= 2 || alertCount >= 3,
       updatedByName: actor.name,
-    };
+    });
     const updated = await updateRecord(CQA_RESULTS_COLLECTION, id, updates as Partial<CqaResultRecord>, actorCtx(actor));
     if (!updated) return { result: null, error: 'Not found.' };
     const result = normalizeCqaResult(updated as unknown as Record<string, unknown>);

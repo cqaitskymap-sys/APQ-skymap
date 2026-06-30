@@ -52,6 +52,7 @@ export const cqaResultFormSchema = z.object({
   parameterId: z.string().trim().default(''),
   parameterCode: requiredText,
   parameterName: requiredText,
+  subParameter: z.string().trim().default(''),
   parameterCategory: z.string().trim().default(''),
   responsibility: z.string().trim().default(''),
   specificationText: z.string().trim().default(''),

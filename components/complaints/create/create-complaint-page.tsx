@@ -390,10 +390,10 @@ function CreateComplaintInner() {
                       <FormMessage /></FormItem>
                   )} />
                   <FormField control={form.control} name="mfg_date" render={({ field }) => (
-                    <FormItem><FormLabel>Manufacturing Date</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem>
+                    <FormItem><FormLabel>Manufacturing Date</FormLabel><FormControl><Input type="month" {...field} value={(field.value || '').slice(0, 7)} /></FormControl><FormMessage /></FormItem>
                   )} />
                   <FormField control={form.control} name="exp_date" render={({ field }) => (
-                    <FormItem><FormLabel>Expiry Date</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem>
+                    <FormItem><FormLabel>Expiry Date</FormLabel><FormControl><Input type="month" {...field} value={(field.value || '').slice(0, 7)} /></FormControl><FormMessage /></FormItem>
                   )} />
                 </CardContent>
               </Card>

@@ -487,7 +487,7 @@ export async function exportCpvReport(
     let fileUrl = '';
 
     if (isFirebaseConfigured()) {
-      const path = `cpv/reports/${report.id}/${fileName}`;
+      const path = `cpv-reports/${report.id}/${fileName}`;
       const fileRef = ref(getFirebaseStorage(), path);
       await uploadString(fileRef, content, 'raw', {
         contentType: exportType === 'PDF' ? 'text/html' : 'text/csv',

@@ -1,4 +1,3 @@
-import { ref, getMetadata } from 'firebase/storage';
 import { writeAuditTrail, createAuditLog } from '@/lib/audit-trail';
 import {
   getAdminRecords, createAdminRecord, updateAdminRecord, logAuditEvent,
@@ -6,7 +5,8 @@ import {
 } from './admin-service';
 import { ADMIN_COLLECTIONS } from './constants';
 import type { SystemSettings } from './schemas';
-import { getFirebaseStorage, isFirebaseConfigured, getFirebaseAuth } from '@/lib/firebase';
+import { isFirebaseConfigured, getFirebaseAuth } from '@/lib/firebase';
+import { getFirebaseStorageHealthStatus } from '@/lib/firebase-config';
 import { isDemoAuthEnabled } from '@/lib/demo-auth-config';
 
 export interface SystemSettingsAuditMeta {
@@ -334,11 +334,9 @@ export async function checkFirebaseHealth(): Promise<FirebaseHealthStatus> {
     authStatus = 'Degraded';
   }
 
-  let storageStatus: FirebaseHealthStatus['storageStatus'] = 'Connected';
-  try {
-    await getMetadata(ref(getFirebaseStorage(), '.healthcheck'));
-  } catch {
-    storageStatus = base.connected ? 'Degraded' : 'Not Configured';
+  let storageStatus = getFirebaseStorageHealthStatus();
+  if (storageStatus === 'Connected' && !base.connected) {
+    storageStatus = 'Degraded';
   }
 
   return {

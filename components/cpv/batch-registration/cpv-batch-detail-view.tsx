@@ -7,7 +7,7 @@ import { toast } from 'sonner';
 import { useAuth } from '@/contexts/auth-context';
 import { cpvPermissions } from '@/lib/cpv';
 import type { CpvBatchRecord } from '@/lib/cpv-batch-registration';
-import type { CpvBatchFormData } from '@/lib/cpv-batch-registration';
+import { formatMonthYear, type CpvBatchFormData } from '@/lib/cpv-batch-registration';
 import {
   fetchCpvBatchById,
   fetchActiveCpvProductsForBatch,
@@ -154,8 +154,8 @@ export function CpvBatchDetailView({ id }: { id: string }) {
                 ['Pack Size', batch.packSize],
                 ['Market', batch.market],
                 ['Batch Size', `${batch.batchSize} ${batch.batchSizeUnit}`],
-                ['Mfg Date', batch.manufacturingDate],
-                ['Expiry', batch.expiryDate],
+                ['Mfg Date', formatMonthYear(batch.manufacturingDate)],
+                ['Expiry', formatMonthYear(batch.expiryDate)],
                 ['Site / Line', `${batch.manufacturingSite} / ${batch.manufacturingLine}`],
                 ['Shift', batch.shift],
                 ['MFR / BMR / BPR', `${batch.mfrNumber} / ${batch.bmrNumber} / ${batch.bprNumber}`],

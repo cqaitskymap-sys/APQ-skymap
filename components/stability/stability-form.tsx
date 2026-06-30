@@ -71,10 +71,10 @@ export function StabilityForm({
             <FormItem><FormLabel>Batch Size</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
           )} />
           <FormField control={form.control} name="manufacturing_date" render={({ field }) => (
-            <FormItem><FormLabel>Manufacturing Date *</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem>
+            <FormItem><FormLabel>Manufacturing Date *</FormLabel><FormControl><Input type="month" {...field} value={(field.value || '').slice(0, 7)} /></FormControl><FormMessage /></FormItem>
           )} />
           <FormField control={form.control} name="expiry_date" render={({ field }) => (
-            <FormItem><FormLabel>Expiry Date *</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem>
+            <FormItem><FormLabel>Expiry Date *</FormLabel><FormControl><Input type="month" {...field} value={(field.value || '').slice(0, 7)} /></FormControl><FormMessage /></FormItem>
           )} />
           <FormField control={form.control} name="study_type" render={({ field }) => (
             <FormItem><FormLabel>Study Type *</FormLabel>

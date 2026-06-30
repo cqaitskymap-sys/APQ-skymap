@@ -9,7 +9,9 @@ import { cpvPermissions } from '@/lib/cpv';
 import {
   CPV_BATCH_STATUSES,
   CPV_RELEASE_STATUSES,
+  formatMonthYear,
   summarizeCpvBatches,
+  toMonthYearValue,
   type CpvBatchFormData,
   type CpvBatchRecord,
 } from '@/lib/cpv-batch-registration';
@@ -114,8 +116,8 @@ export function CpvBatchListPage() {
       if (statusFilter !== 'all' && b.batchStatus !== statusFilter) return false;
       if (releaseFilter !== 'all' && b.releaseStatus !== releaseFilter) return false;
       if (periodFilter !== 'all' && b.cpvReviewPeriod !== periodFilter) return false;
-      if (dateFrom && b.manufacturingDate < dateFrom) return false;
-      if (dateTo && b.manufacturingDate > dateTo) return false;
+      if (dateFrom && toMonthYearValue(b.manufacturingDate) < dateFrom) return false;
+      if (dateTo && toMonthYearValue(b.manufacturingDate) > dateTo) return false;
       if (!q) return true;
       return (
         b.batchNumber.toLowerCase().includes(q)
@@ -187,7 +189,7 @@ export function CpvBatchListPage() {
   const handleExport = async () => {
     const headers = ['CPV Batch ID', 'Batch Number', 'Product', 'Mfg Date', 'Expiry', 'Batch Status', 'Release Status'];
     const rows = filtered.map((b) => [
-      b.cpvBatchId, b.batchNumber, b.productName, b.manufacturingDate, b.expiryDate, b.batchStatus, b.releaseStatus,
+      b.cpvBatchId, b.batchNumber, b.productName, formatMonthYear(b.manufacturingDate), formatMonthYear(b.expiryDate), b.batchStatus, b.releaseStatus,
     ]);
     downloadCsv(`cpv-batches-${Date.now()}.csv`, headers, rows);
     await logCpvBatchExport(actor, filtered.length);
@@ -198,8 +200,8 @@ export function CpvBatchListPage() {
     { key: 'cpvBatchId', header: 'CPV Batch ID' },
     { key: 'batchNumber', header: 'Batch No' },
     { key: 'productName', header: 'Product' },
-    { key: 'manufacturingDate', header: 'Mfg Date' },
-    { key: 'expiryDate', header: 'Expiry' },
+    { key: 'manufacturingDate', header: 'Mfg Date', render: (r) => formatMonthYear(r.manufacturingDate) },
+    { key: 'expiryDate', header: 'Expiry', render: (r) => formatMonthYear(r.expiryDate) },
     { key: 'batchStatus', header: 'Status', render: (r) => <StatusBadge status={r.batchStatus} /> },
     { key: 'releaseStatus', header: 'Release', render: (r) => <ReleaseBadge status={r.releaseStatus} /> },
     { key: 'cpvReviewPeriod', header: 'Review Period' },
@@ -300,11 +302,11 @@ export function CpvBatchListPage() {
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <Label className="text-xs text-muted-foreground">Mfg From</Label>
-                <Input type="date" className="mt-1 h-9" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+                <Input type="month" className="mt-1 h-9" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
               </div>
               <div>
                 <Label className="text-xs text-muted-foreground">Mfg To</Label>
-                <Input type="date" className="mt-1 h-9" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+                <Input type="month" className="mt-1 h-9" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
               </div>
             </div>
           </div>

@@ -133,10 +133,10 @@ export function MaterialReviewFormDialog({
                 </FormItem>
               )} />
               <FormField control={form.control} name="mfgDate" render={({ field }) => (
-                <FormItem><FormLabel>MFG Date</FormLabel><FormControl><Input type="date" {...field} /></FormControl></FormItem>
+                <FormItem><FormLabel>MFG Date</FormLabel><FormControl><Input type="month" {...field} value={(field.value || '').slice(0, 7)} /></FormControl></FormItem>
               )} />
               <FormField control={form.control} name="expDate" render={({ field }) => (
-                <FormItem><FormLabel>EXP Date</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem>
+                <FormItem><FormLabel>EXP Date</FormLabel><FormControl><Input type="month" {...field} value={(field.value || '').slice(0, 7)} /></FormControl><FormMessage /></FormItem>
               )} />
               <FormField control={form.control} name="retestDate" render={({ field }) => (
                 <FormItem><FormLabel>Retest Date</FormLabel><FormControl><Input type="date" {...field} /></FormControl></FormItem>
