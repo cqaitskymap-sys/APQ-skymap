@@ -65,7 +65,7 @@ export function RoleForm({
     getAdminRecords<{ departmentName: string }>(ADMIN_COLLECTIONS.departments)
       .then((d) =>
         setDepartments(
-          [...new Set(d.map((x) => x.departmentName.trim()).filter(Boolean))].sort((a, b) =>
+          Array.from(new Set(d.map((x) => x.departmentName.trim()).filter(Boolean))).sort((a, b) =>
             a.localeCompare(b),
           ),
         ),

@@ -12,6 +12,7 @@ import {
   startAfter,
   type QueryConstraint,
   type DocumentSnapshot,
+  type DocumentData,
 } from 'firebase/firestore';
 import { getFirebaseFirestore, isFirebaseConfigured, FirebaseNotConfiguredError } from './firebase';
 import { auditCreate, auditUpdate, auditDelete, type AuditActor } from './audit-trail';
@@ -216,7 +217,7 @@ export async function updateDocument<T extends BaseRecord>(
       ...(audit?.actor?.id && { updatedBy: audit.actor.id }),
     } as Record<string, unknown>);
 
-    await updateDoc(doc(db, collectionName, documentId), payload);
+    await updateDoc(doc(db, collectionName, documentId), payload as DocumentData);
 
     if (audit) {
       const action = updates.status && updates.status !== existing.status ? 'STATUS_CHANGE' : 'UPDATE';

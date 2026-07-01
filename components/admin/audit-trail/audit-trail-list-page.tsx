@@ -82,7 +82,7 @@ export function AuditTrailListPage() {
       const scoped = filterAuditTrailByRole(list, role, user?.uid);
       setEntries(scoped);
       setDepartments(
-        [...new Set(depts.map((d) => d.departmentName.trim()).filter(Boolean))].sort((a, b) =>
+        Array.from(new Set(depts.map((d) => d.departmentName.trim()).filter(Boolean))).sort((a, b) =>
           a.localeCompare(b),
         ),
       );

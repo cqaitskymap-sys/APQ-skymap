@@ -47,7 +47,7 @@ export function DesignationForm({
     },
   });
 
-  const [departments, setDepartments] = useState<{ departmentName: string }[]>([]);
+  const [departments, setDepartments] = useState<{ departmentName: string; departmentCode: string }[]>([]);
 
   useEffect(() => {
     fetchActiveDepartmentsForDesignation().then(setDepartments);
