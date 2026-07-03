@@ -1,6 +1,11 @@
 import { initializeApp, getApps, type FirebaseApp, type FirebaseOptions } from 'firebase/app';
 import { getAuth, connectAuthEmulator, type Auth } from 'firebase/auth';
-import { getFirestore, connectFirestoreEmulator, type Firestore } from 'firebase/firestore';
+import {
+  getFirestore,
+  initializeFirestore,
+  connectFirestoreEmulator,
+  type Firestore,
+} from 'firebase/firestore';
 import { getStorage, type FirebaseStorage } from 'firebase/storage';
 import {
   FirebaseNotConfiguredError,
@@ -41,6 +46,32 @@ export function isFirebaseEmulatorEnabled(): boolean {
   return process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATOR === 'true';
 }
 
+/** Use HTTP long-polling instead of WebChannel/QUIC when firewalls block HTTP/3 (ERR_QUIC_PROTOCOL_ERROR). */
+export function isFirestoreLongPollingEnabled(): boolean {
+  return process.env.NEXT_PUBLIC_FIREBASE_FORCE_LONG_POLLING === 'true';
+}
+
+function createFirestoreInstance(): Firestore {
+  const firebaseApp = getFirebaseApp();
+
+  // Server: default Firestore instance is fine for one-off reads.
+  if (typeof window === 'undefined') {
+    return getFirestore(firebaseApp);
+  }
+
+  // Client: prefer initializeFirestore so we can auto-detect long-polling.
+  // Fixes Listen/channel 400 errors on networks that block WebChannel/QUIC.
+  try {
+    return initializeFirestore(firebaseApp, {
+      experimentalAutoDetectLongPolling: true,
+      ...(isFirestoreLongPollingEnabled() ? { experimentalForceLongPolling: true } : {}),
+    });
+  } catch {
+    // Firestore already initialized (e.g. hot reload) — reuse existing instance.
+    return getFirestore(firebaseApp);
+  }
+}
+
 function connectEmulators(auth: Auth, db: Firestore) {
   if (emulatorsConnected || typeof window === 'undefined') return;
   if (!isFirebaseEmulatorEnabled()) return;
@@ -74,7 +105,7 @@ export function getFirebaseAuth(): Auth {
 
 export function getFirebaseFirestore(): Firestore {
   if (!firestoreInstance) {
-    firestoreInstance = getFirestore(getFirebaseApp());
+    firestoreInstance = createFirestoreInstance();
     if (authInstance) connectEmulators(authInstance, firestoreInstance);
   }
   return firestoreInstance;

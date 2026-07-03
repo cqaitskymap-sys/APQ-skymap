@@ -3,20 +3,27 @@
 import { memo, ReactNode } from 'react';
 import { BarChart3 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { ChartSkeleton } from '@/components/loading';
 
 function ChartContainerInner({
   children,
   height = 280,
   empty = false,
+  loading = false,
   emptyText = 'Not enough data to render this chart.',
   className,
 }: {
   children: ReactNode;
   height?: number;
   empty?: boolean;
+  loading?: boolean;
   emptyText?: string;
   className?: string;
 }) {
+  if (loading) {
+    return <ChartSkeleton height={height} className={className} />;
+  }
+
   if (empty) {
     return (
       <div
@@ -29,7 +36,7 @@ function ChartContainerInner({
     );
   }
   return (
-    <div className={cn('w-full', className)} style={{ height }}>
+    <div className={cn('w-full animate-in', className)} style={{ height }}>
       {children}
     </div>
   );

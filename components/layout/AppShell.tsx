@@ -1,8 +1,10 @@
 'use client';
 
 import { ReactNode, useState } from 'react';
+import { usePathname } from 'next/navigation';
 import { Sidebar } from '@/components/layout/sidebar';
 import { Header } from '@/components/layout/header';
+import { PageTransition } from '@/components/loading/page-transition';
 import { cn } from '@/lib/utils';
 
 interface AppShellProps {
@@ -11,6 +13,7 @@ interface AppShellProps {
 }
 
 export function AppShell({ children, className }: AppShellProps) {
+  const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
 
   return (
@@ -20,7 +23,9 @@ export function AppShell({ children, className }: AppShellProps) {
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
           <Header />
           <main className={cn('flex-1 overflow-y-auto', className)}>
-            <div className="min-h-full p-4 md:p-6">{children}</div>
+            <PageTransition routeKey={pathname ?? 'app'} variant="fade" className="min-h-full p-4 md:p-6">
+              {children}
+            </PageTransition>
           </main>
         </div>
       </div>

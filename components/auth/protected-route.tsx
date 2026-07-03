@@ -5,7 +5,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
 import { canAccessModule } from '@/lib/permissions';
 import { resolveModuleFromPath } from '@/lib/nav-permissions';
-import { LoadingSpinner } from '@/components/ui/loading-spinner';
+import { PremiumFullScreenLoader } from '@/components/loading';
 import { ShieldX } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -33,8 +33,8 @@ export function ProtectedRoute({ children, module, requireEdit = false }: Protec
 
   if (loading) {
     return (
-      <div className="flex min-h-[50vh] items-center justify-center">
-        <LoadingSpinner label="Authenticating..." />
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <PremiumFullScreenLoader message="Authenticating..." compact />
       </div>
     );
   }

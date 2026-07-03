@@ -281,30 +281,92 @@ export function subscribeToNotifications(
     onData([]);
     return () => undefined;
   }
-  try {
+
+  let active = true;
+  let unsubscribe: Unsubscribe | undefined;
+  let pollTimer: ReturnType<typeof setInterval> | undefined;
+  let retryTimer: ReturnType<typeof setTimeout> | undefined;
+  let retryAttempt = 0;
+
+  const notificationQuery = () => {
     const db = getFirebaseFirestore();
-    const q = query(
+    return query(
       collection(db, NOTIFICATIONS_COLLECTION),
       where('userId', '==', userId),
       orderBy('createdAt', 'desc'),
       limit(max),
     );
-    return onSnapshot(
-      q,
-      (snap) => {
-        onData(snap.docs.map((d) => normalizeNotification({ id: d.id, ...d.data() })));
-      },
-      (error) => {
-        console.error('Notification listener error:', error);
-        onError?.(error);
-        onData([]);
-      },
-    );
-  } catch (error) {
-    console.error('Failed to subscribe to notifications:', error);
-    onData([]);
-    return () => undefined;
-  }
+  };
+
+  const fetchOnce = async () => {
+    try {
+      const snap = await getDocs(notificationQuery());
+      if (!active) return;
+      onData(snap.docs.map((d) => normalizeNotification({ id: d.id, ...d.data() })));
+    } catch (error) {
+      console.error('Notification poll error:', error);
+      onError?.(error as Error);
+    }
+  };
+
+  const startPolling = () => {
+    if (pollTimer) return;
+    void fetchOnce();
+    pollTimer = setInterval(() => {
+      void fetchOnce();
+    }, 30_000);
+  };
+
+  const stopPolling = () => {
+    if (pollTimer) {
+      clearInterval(pollTimer);
+      pollTimer = undefined;
+    }
+  };
+
+  const attachListener = () => {
+    if (!active) return;
+    try {
+      unsubscribe?.();
+      unsubscribe = onSnapshot(
+        notificationQuery(),
+        (snap) => {
+          retryAttempt = 0;
+          stopPolling();
+          onData(snap.docs.map((d) => normalizeNotification({ id: d.id, ...d.data() })));
+        },
+        (error) => {
+          console.warn('Notification listener error (will retry):', error);
+          onError?.(error);
+          unsubscribe?.();
+          unsubscribe = undefined;
+
+          // Fall back to polling while the realtime channel recovers.
+          startPolling();
+
+          if (!active) return;
+          const delay = Math.min(30_000, 2_000 * 2 ** retryAttempt);
+          retryAttempt += 1;
+          retryTimer = setTimeout(() => {
+            if (active) attachListener();
+          }, delay);
+        },
+      );
+    } catch (error) {
+      console.error('Failed to subscribe to notifications:', error);
+      onError?.(error as Error);
+      startPolling();
+    }
+  };
+
+  attachListener();
+
+  return () => {
+    active = false;
+    unsubscribe?.();
+    stopPolling();
+    if (retryTimer) clearTimeout(retryTimer);
+  };
 }
 
 export async function notifyApprovalPending(

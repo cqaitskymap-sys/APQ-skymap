@@ -1,5 +1,6 @@
 import * as React from 'react';
 import { Slot } from '@radix-ui/react-slot';
+import { Loader2, Check, X } from 'lucide-react';
 import { cva, type VariantProps } from 'class-variance-authority';
 
 import { cn } from '@/lib/utils';
@@ -37,17 +38,53 @@ export interface ButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement>,
     VariantProps<typeof buttonVariants> {
   asChild?: boolean;
+  loading?: boolean;
+  success?: boolean;
+  error?: boolean;
+  loadingText?: string;
 }
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant, size, asChild = false, ...props }, ref) => {
+  (
+    {
+      className,
+      variant,
+      size,
+      asChild = false,
+      loading,
+      success,
+      error,
+      loadingText,
+      disabled,
+      children,
+      ...props
+    },
+    ref
+  ) => {
     const Comp = asChild ? Slot : 'button';
+    const isDisabled = disabled || loading;
+
+    const content = asChild ? (
+      children
+    ) : (
+      <>
+        {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}
+        {!loading && success && <Check className="mr-2 h-4 w-4 text-green-600" aria-hidden="true" />}
+        {!loading && error && <X className="mr-2 h-4 w-4 text-destructive" aria-hidden="true" />}
+        {loading && loadingText ? loadingText : children}
+      </>
+    );
+
     return (
       <Comp
         className={cn(buttonVariants({ variant, size, className }))}
         ref={ref}
+        disabled={isDisabled}
+        aria-busy={loading}
         {...props}
-      />
+      >
+        {content}
+      </Comp>
     );
   }
 );

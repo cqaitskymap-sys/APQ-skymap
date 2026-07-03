@@ -1,9 +1,12 @@
 import './globals.css';
 import type { Metadata } from 'next';
+import { Suspense } from 'react';
 import { ThemeProvider } from '@/components/theme-provider';
 import { Toaster } from '@/components/ui/sonner';
 import { AuthProvider } from '@/contexts/auth-context';
 import { LoadingProvider } from '@/contexts/loading-context';
+import { QueryProvider } from '@/providers/query-provider';
+import { AuthLoadingBridge } from '@/components/loading/auth-loading-bridge';
 import { FirebaseSetupBanner } from '@/components/layout/firebase-setup-banner';
 import { SystemSettingsProvider } from '@/contexts/system-settings-context';
 import { MaintenanceBanner } from '@/components/layout/maintenance-banner';
@@ -24,16 +27,21 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="font-sans antialiased">
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
           <LoadingProvider>
-            <AuthProvider>
-              <SystemSettingsProvider>
-                <FirebaseSetupBanner />
-                <MaintenanceBanner />
-                <MaintenanceGuard>
-                  {children}
-                </MaintenanceGuard>
-                <Toaster richColors position="top-right" />
-              </SystemSettingsProvider>
-            </AuthProvider>
+            <QueryProvider>
+              <AuthProvider>
+                <AuthLoadingBridge />
+                <SystemSettingsProvider>
+                  <FirebaseSetupBanner />
+                  <MaintenanceBanner />
+                  <MaintenanceGuard>
+                    <Suspense fallback={null}>
+                      {children}
+                    </Suspense>
+                  </MaintenanceGuard>
+                  <Toaster richColors position="top-right" />
+                </SystemSettingsProvider>
+              </AuthProvider>
+            </QueryProvider>
           </LoadingProvider>
         </ThemeProvider>
       </body>
