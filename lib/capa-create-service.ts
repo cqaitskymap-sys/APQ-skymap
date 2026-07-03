@@ -116,7 +116,8 @@ export async function fetchCapaProductOptions(): Promise<CapaProductOption[]> {
         name: String(data.product_name || data.name || data.productName || ''),
         code: String(data.product_code || data.code || ''),
       };
-    }).filter((p) => p.name);
+    }).filter((p) => p.name)
+      .filter((p, i, arr) => arr.findIndex((x) => x.name === p.name) === i);
   } catch {
     return [];
   }
@@ -135,7 +136,8 @@ export async function fetchCapaBatchOptions(productName?: string): Promise<CapaB
           product_name: String(data.product_name || data.productName || ''),
         };
       })
-      .filter((b) => b.batch_number && (!productName || b.product_name === productName));
+      .filter((b) => b.batch_number && (!productName || b.product_name === productName))
+      .filter((b, i, arr) => arr.findIndex((x) => x.batch_number === b.batch_number) === i);
   } catch {
     return [];
   }

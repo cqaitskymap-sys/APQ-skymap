@@ -1,16 +1,5 @@
-'use client';
-
-import { PlaceholderPage } from '@/components/layout/placeholder-page';
+import { DashboardReportsPage } from '@/components/dashboard/reports/dashboard-reports-page';
 
 export default function ReportsPage() {
-  return (
-    <PlaceholderPage
-      title="Reports"
-      description="QMS analytics and regulatory reports module."
-      breadcrumbs={[
-        { label: 'Dashboard', href: '/dashboard' },
-        { label: 'Reports' },
-      ]}
-    />
-  );
+  return <DashboardReportsPage />;
 }

@@ -41,37 +41,42 @@ export const capaCreateBaseSchema = z.object({
 });
 
 function applyCapaCreateRefinements<T extends z.ZodTypeAny>(schema: T) {
-  return schema.superRefine((data: z.infer<typeof capaCreateBaseSchema>, ctx) => {
-    const needsRef = !['Other', 'Self Inspection', 'Vendor Audit'].includes(data.capa_source);
-    if (needsRef && !data.source_reference_number.trim()) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'Source reference number is required',
-        path: ['source_reference_number'],
-      });
+  return schema.superRefine((data: Partial<z.infer<typeof capaCreateBaseSchema>>, ctx) => {
+    if (data.capa_source !== undefined) {
+      const needsRef = !['Other', 'Self Inspection', 'Vendor Audit'].includes(data.capa_source);
+      if (needsRef && !(data.source_reference_number ?? '').trim()) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Source reference number is required',
+          path: ['source_reference_number'],
+        });
+      }
     }
-    const capaDate = new Date(data.capa_date);
-    const targetDate = new Date(data.target_completion_date);
-    if (
-      !Number.isNaN(capaDate.getTime())
-      && !Number.isNaN(targetDate.getTime())
-      && targetDate <= capaDate
-    ) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'Target completion date must be after CAPA date',
-        path: ['target_completion_date'],
-      });
+    if (data.capa_date && data.target_completion_date) {
+      const capaDate = new Date(data.capa_date);
+      const targetDate = new Date(data.target_completion_date);
+      if (
+        !Number.isNaN(capaDate.getTime())
+        && !Number.isNaN(targetDate.getTime())
+        && targetDate <= capaDate
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Target completion date must be after CAPA date',
+          path: ['target_completion_date'],
+        });
+      }
     }
     if (data.effectiveness_check_required) {
-      if (!data.effectiveness_check_date?.trim()) {
+      if (!(data.effectiveness_check_date ?? '').trim()) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           message: 'Effectiveness check date is required',
           path: ['effectiveness_check_date'],
         });
       }
-      if (!data.effectiveness_criteria?.trim() || data.effectiveness_criteria.trim().length < 5) {
+      const criteria = (data.effectiveness_criteria ?? '').trim();
+      if (!criteria || criteria.length < 5) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           message: 'Effectiveness criteria is required',

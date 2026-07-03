@@ -315,10 +315,16 @@ function CreateCapaInner() {
                 <CardContent className="grid gap-4 sm:grid-cols-2">
                   <FormField control={form.control} name="product_name" render={({ field }) => (
                     <FormItem><FormLabel>Product Name</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value || undefined}>
+                      <Select
+                        onValueChange={(v) => {
+                          const product = products.find((p) => p.id === v);
+                          field.onChange(product?.name || v);
+                        }}
+                        value={products.find((p) => p.name === field.value)?.id || undefined}
+                      >
                         <FormControl><SelectTrigger><SelectValue placeholder="Select or type below" /></SelectTrigger></FormControl>
                         <SelectContent>
-                          {products.map((p) => <SelectItem key={p.id} value={p.name}>{p.name}</SelectItem>)}
+                          {products.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
                         </SelectContent>
                       </Select>
                       <FormControl><Input className="mt-2" {...field} placeholder="Or enter product name" /></FormControl>
@@ -326,10 +332,16 @@ function CreateCapaInner() {
                   )} />
                   <FormField control={form.control} name="batch_number" render={({ field }) => (
                     <FormItem><FormLabel>Batch Number</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value || undefined}>
+                      <Select
+                        onValueChange={(v) => {
+                          const batch = batches.find((b) => b.id === v);
+                          field.onChange(batch?.batch_number || v);
+                        }}
+                        value={batches.find((b) => b.batch_number === field.value)?.id || undefined}
+                      >
                         <FormControl><SelectTrigger><SelectValue placeholder="Select batch" /></SelectTrigger></FormControl>
                         <SelectContent>
-                          {batches.map((b) => <SelectItem key={b.id} value={b.batch_number}>{b.batch_number}</SelectItem>)}
+                          {batches.map((b) => <SelectItem key={b.id} value={b.id}>{b.batch_number}</SelectItem>)}
                         </SelectContent>
                       </Select>
                       <FormControl><Input className="mt-2" {...field} placeholder="Or enter batch" /></FormControl>

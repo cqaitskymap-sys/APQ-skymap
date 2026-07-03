@@ -209,7 +209,7 @@ export function Sidebar({ collapsed, onToggle, embedded = false }: SidebarProps)
   if (permLoading) {
     return (
       <aside className="hidden lg:flex h-screen w-[260px] items-center justify-center sidebar-bg border-r">
-        <span className="text-slate-400 text-sm">Loading menu...</span>
+        <span className="text-muted-foreground text-sm">Loading menu...</span>
       </aside>
     );
   }
@@ -269,11 +269,11 @@ export function Sidebar({ collapsed, onToggle, embedded = false }: SidebarProps)
             </div>
             {!collapsed && (
               <div className="overflow-hidden flex-1">
-                <span className="text-white font-bold text-sm leading-tight block">SKYMAP</span>
-                <span className="text-xs leading-tight block text-blue-300">Pharmaceuticals</span>
+                <span className="sidebar-fg font-bold text-sm leading-tight block">SKYMAP</span>
+                <span className="text-xs leading-tight block text-primary">Pharmaceuticals</span>
               </div>
             )}
-            <button type="button" onClick={onToggle} aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} className="ml-auto text-slate-400 hover:text-white transition-colors p-1 rounded">
+            <button type="button" onClick={onToggle} aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} className="ml-auto text-muted-foreground hover:text-foreground transition-colors p-1 rounded">
               {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
             </button>
           </div>
@@ -292,16 +292,16 @@ export function Sidebar({ collapsed, onToggle, embedded = false }: SidebarProps)
                       <TooltipTrigger asChild>
                         <div className={cn(
                           'w-9 h-9 mx-auto flex items-center justify-center rounded-lg cursor-pointer transition-colors',
-                          hasActiveChild ? 'bg-blue-600/20 text-blue-400' : 'text-slate-400 hover:bg-slate-700/50 hover:text-white'
+                          hasActiveChild ? 'bg-blue-100 text-blue-600 dark:bg-blue-600/20 dark:text-blue-400' : 'text-muted-foreground hover:bg-accent hover:text-foreground'
                         )}>
                           <item.icon className="h-4 w-4" />
                         </div>
                       </TooltipTrigger>
-                      <TooltipContent side="right" className="bg-slate-700 text-white border-slate-600">
+                      <TooltipContent side="right" className="bg-popover text-popover-foreground border-border">
                         <p className="font-medium">{item.label}</p>
                         <div className="mt-1 space-y-0.5">
                           {item.children.map((child) => (
-                            <Link key={child.href} href={child.href!} className="flex items-center gap-2 px-2 py-1 rounded text-sm text-slate-300 hover:text-white hover:bg-slate-600">
+                            <Link key={child.href} href={child.href!} className="flex items-center gap-2 px-2 py-1 rounded text-sm text-muted-foreground hover:text-foreground hover:bg-accent">
                               <child.icon className="h-3 w-3" />
                               {child.label}
                             </Link>
@@ -319,7 +319,7 @@ export function Sidebar({ collapsed, onToggle, embedded = false }: SidebarProps)
                     onClick={() => toggleGroup(item.label)}
                     className={cn(
                       'w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all duration-150',
-                      hasActiveChild ? 'text-blue-400 bg-blue-600/10' : 'text-slate-400 hover:text-white hover:bg-slate-700/40'
+                      hasActiveChild ? 'text-blue-600 bg-blue-50 dark:text-blue-400 dark:bg-blue-600/10' : 'text-muted-foreground hover:text-foreground hover:bg-accent'
                     )}
                   >
                     <item.icon className="h-4 w-4 flex-shrink-0" />
@@ -336,7 +336,7 @@ export function Sidebar({ collapsed, onToggle, embedded = false }: SidebarProps)
                             'flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-sm transition-all duration-150',
                             isLinkActive(child.href)
                               ? 'bg-blue-600 text-white shadow-sm shadow-blue-600/25'
-                              : 'text-slate-400 hover:text-white hover:bg-slate-700/40'
+                              : 'text-muted-foreground hover:text-foreground hover:bg-accent'
                           )}
                         >
                           <child.icon className="h-3.5 w-3.5 flex-shrink-0" />
@@ -358,13 +358,13 @@ export function Sidebar({ collapsed, onToggle, embedded = false }: SidebarProps)
                       href={item.href!}
                       className={cn(
                         'w-9 h-9 mx-auto flex items-center justify-center rounded-lg transition-colors relative',
-                        isLinkActive(item.href) ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-700/50 hover:text-white'
+                        isLinkActive(item.href) ? 'bg-blue-600 text-white' : 'text-muted-foreground hover:bg-accent hover:text-foreground'
                       )}
                     >
                       <item.icon className="h-4 w-4" />
                     </Link>
                   </TooltipTrigger>
-                  <TooltipContent side="right" className="bg-slate-700 text-white border-slate-600">
+                  <TooltipContent side="right" className="bg-popover text-popover-foreground border-border">
                     {item.label}
                   </TooltipContent>
                 </Tooltip>
@@ -377,7 +377,7 @@ export function Sidebar({ collapsed, onToggle, embedded = false }: SidebarProps)
                 href={item.href!}
                 className={cn(
                   'flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all duration-150',
-                  isLinkActive(item.href) ? 'bg-blue-600 text-white shadow-sm shadow-blue-600/25' : 'text-slate-400 hover:text-white hover:bg-slate-700/40'
+                  isLinkActive(item.href) ? 'bg-blue-600 text-white shadow-sm shadow-blue-600/25' : 'text-muted-foreground hover:text-foreground hover:bg-accent'
                 )}
               >
                 <item.icon className="h-4 w-4 flex-shrink-0" />
@@ -391,24 +391,24 @@ export function Sidebar({ collapsed, onToggle, embedded = false }: SidebarProps)
         <div className="border-t p-3 flex-shrink-0" style={{ borderColor: 'hsl(var(--sidebar-border))' }}>
           {!collapsed ? (
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-blue-600/20 rounded-lg flex items-center justify-center flex-shrink-0">
-                <UserCircle className="h-4 w-4 text-blue-400" />
+              <div className="w-8 h-8 bg-blue-100 dark:bg-blue-600/20 rounded-lg flex items-center justify-center flex-shrink-0">
+                <UserCircle className="h-4 w-4 text-blue-600 dark:text-blue-400" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-white text-sm font-medium truncate">{profile?.full_name || 'User'}</p>
+                <p className="sidebar-fg text-sm font-medium truncate">{profile?.full_name || 'User'}</p>
                 <p className="text-xs capitalize truncate" style={{ color: 'hsl(var(--sidebar-muted))' }}>
                   {profile?.role?.replace(/_/g, ' ') || 'Viewer'}
                 </p>
               </div>
-              <button onClick={signOut} className="text-slate-500 hover:text-red-400 transition-colors p-1" title="Sign out">
+              <button onClick={signOut} className="text-muted-foreground hover:text-red-500 dark:hover:text-red-400 transition-colors p-1" title="Sign out">
                 <LogOut className="h-4 w-4" />
               </button>
             </div>
           ) : (
             <Tooltip>
               <TooltipTrigger asChild>
-                <div className="w-9 h-9 mx-auto bg-blue-600/20 rounded-lg flex items-center justify-center cursor-pointer">
-                  <UserCircle className="h-5 w-5 text-blue-400" />
+                <div className="w-9 h-9 mx-auto bg-blue-100 dark:bg-blue-600/20 rounded-lg flex items-center justify-center cursor-pointer">
+                  <UserCircle className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                 </div>
               </TooltipTrigger>
               <TooltipContent side="right">{profile?.full_name || 'User'}</TooltipContent>
