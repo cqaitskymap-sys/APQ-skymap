@@ -51,6 +51,8 @@ interface PqrDoc {
   id: string;
   pqr_number: string;
   product_name: string;
+  product_id?: string;
+  productId?: string;
 }
 
 interface FormData {
@@ -211,10 +213,15 @@ function CreateMaterialContent() {
 
         const batchesData = await getPqrBatches(id);
         setBatches(
-          batchesData.map((b) => ({
-            id: String(b.id),
-            batch_no: String(b.batch_no || b.batchNo || ''),
-          })).filter((b) => b.batch_no),
+          batchesData
+            .map((b) => {
+              const row = b as { id: unknown; batch_no?: unknown; batchNo?: unknown };
+              return {
+                id: String(row.id ?? ''),
+                batch_no: String(row.batch_no ?? row.batchNo ?? ''),
+              };
+            })
+            .filter((b) => b.batch_no),
         );
 
         const materialsData = await getMaterialMasters({ status: 'Active' });
@@ -355,11 +362,14 @@ function CreateMaterialContent() {
     setIsSaving(true);
     try {
       const userId = user?.uid || 'system';
+      const selectedBatch = batches.find((b) => b.batch_no === formData.batch_no);
 
       const savePromise = createMaterialReview(
         {
           pqrId: params.id as string,
+          productId: pqr?.product_id || pqr?.productId || '',
           productName: pqr?.product_name || '',
+          batchId: selectedBatch?.id || '',
           batchNo: formData.batch_no,
           materialType: FORM_MATERIAL_TYPE_TO_FIRESTORE[formData.material_type] || 'API',
           materialId: formData.material_id || formData.material_name,
