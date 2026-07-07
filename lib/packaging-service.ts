@@ -357,10 +357,33 @@ export async function getPackagingReviews(filters?: {
 
   constraints.push(orderBy('createdAt', 'desc'));
 
-  const q = query(collection(getFirebaseFirestore(), 'packaging_reviews'), ...constraints);
-  const querySnapshot = await getDocs(q);
+  const db = getFirebaseFirestore();
+  const col = collection(db, 'packaging_reviews');
+
+  let querySnapshot;
+  try {
+    querySnapshot = await getDocs(query(col, ...constraints));
+  } catch (error) {
+    const code = (error as { code?: string })?.code;
+    const needsIndex =
+      code === 'failed-precondition' ||
+      String((error as Error)?.message ?? '').includes('requires an index');
+    if (!needsIndex || constraints.length <= 1) throw error;
+
+    // Composite index still building — fetch with filters only, sort client-side.
+    const filterConstraints = constraints.slice(0, -1);
+    querySnapshot = await getDocs(query(col, ...filterConstraints));
+  }
 
   let results = querySnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as PackagingReview));
+
+  if (results.length > 1 && constraints.length > 1) {
+    results.sort((a, b) => {
+      const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return bTime - aTime;
+    });
+  }
 
   if (filters?.search) {
     const searchLower = filters.search.toLowerCase();

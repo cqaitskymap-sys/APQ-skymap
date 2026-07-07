@@ -224,26 +224,3 @@ export class RestLmsAdapter extends BaseLmsAdapter {
 export function createLmsAdapter(connection: LmsConnection): BaseLmsAdapter {
   return new RestLmsAdapter(connection);
 }
-
-export function generateDemoData(connectionId: string) {
-  const now = new Date().toISOString();
-  return {
-    users: [
-      { external_id: 'u1', employee_id: 'EMP-001', email: 'john.doe@pharma.com', full_name: 'John Doe', department: 'QA', status: 'Active' },
-      { external_id: 'u2', employee_id: 'EMP-002', email: 'jane.smith@pharma.com', full_name: 'Jane Smith', department: 'Production', status: 'Active' },
-    ] as LmsRemoteUser[],
-    courses: [
-      { external_id: 'c1', course_code: 'GMP-101', course_title: 'GMP Fundamentals', course_type: 'GMP Training', duration_hours: 4, status: 'Active' },
-      { external_id: 'c2', course_code: 'SOP-202', course_title: 'SOP Read & Understand', course_type: 'SOP Training', duration_hours: 2, status: 'Active' },
-    ] as LmsRemoteCourse[],
-    completions: [
-      { external_id: 'comp1', employee_id: 'EMP-001', employee_email: 'john.doe@pharma.com', course_id: 'c1', course_title: 'GMP Fundamentals', completion_date: now, score: 92, status: 'Completed' },
-    ] as LmsRemoteCompletion[],
-    certificates: [
-      { external_id: 'cert1', employee_id: 'EMP-001', employee_name: 'John Doe', course_title: 'GMP Fundamentals', certificate_number: 'CERT-GMP-001', issued_date: now, expiry_date: null, file_url: null },
-    ] as LmsRemoteCertificate[],
-    assignments: [
-      { external_id: 'asgn1', employee_id: 'EMP-002', employee_email: 'jane.smith@pharma.com', course_id: 'c2', course_title: 'SOP Read & Understand', assigned_date: now, due_date: new Date(Date.now() + 14 * 86400000).toISOString(), status: 'Assigned' },
-    ] as LmsRemoteAssignment[],
-  };
-}

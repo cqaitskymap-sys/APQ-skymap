@@ -114,14 +114,14 @@ export function Header() {
               <div className="w-6 h-6 bg-primary/10 rounded-full flex items-center justify-center text-xs font-bold text-primary">
                 {(profile?.full_name || 'DU').charAt(0).toUpperCase()}
               </div>
-              <span className="hidden md:block max-w-[120px] truncate">{profile?.full_name || 'Demo User'}</span>
+              <span className="hidden md:block max-w-[120px] truncate">{profile?.full_name || 'User'}</span>
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
             <DropdownMenuLabel>
               <div>
-                <p className="font-medium">{profile?.full_name || 'Demo User'}</p>
-                <p className="text-xs text-muted-foreground">{profile?.email || 'admin@skymap.com'}</p>
+                <p className="font-medium">{profile?.full_name || 'User'}</p>
+                <p className="text-xs text-muted-foreground">{profile?.email || ''}</p>
                 <span className={cn('inline-block mt-1 text-xs px-2 py-0.5 rounded-full font-medium capitalize', getRoleBadgeColor(profile?.role))}>
                   {profile?.role?.replace('_', ' ') || 'Super Admin'}
                 </span>

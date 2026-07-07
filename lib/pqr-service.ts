@@ -7,9 +7,6 @@ import { CPV_COLLECTIONS } from '@/lib/cpv';
 import { getPackagingReviews } from '@/lib/packaging-service';
 import { getMaterialReviewsByPQR } from '@/lib/material-service';
 import {
-  mockRecentBatches, mockRecentDeviations, mockOosTrend, mockCapaStatus, mockYieldTrend,
-} from '@/lib/mock-data';
-import {
   PQR_COLLECTIONS, PqrDocument, PqrApproval, PqrDataSnapshot, PqrDocumentStatus, ESignPayload,
 } from '@/lib/pqr-types';
 
@@ -182,10 +179,7 @@ export async function buildPqrSnapshot(pqr: PqrDocument): Promise<PqrDataSnapsho
       ), from, to)
     ));
 
-  let batches = [...pqrBatches, ...filterRecords(allBatches as Record<string, unknown>[])];
-  if (!batches.length) {
-    batches = mockRecentBatches.filter((b) => matchesProduct(b as unknown as Record<string, unknown>, product)).map((b) => ({ ...b }));
-  }
+  const batches = [...pqrBatches, ...filterRecords(allBatches as Record<string, unknown>[])];
 
   const countByStatus = (records: Record<string, unknown>[], statusField: string, statusVal: string) =>
     records.filter((r) => String(r[statusField] || r.batch_status || r.status || '').toLowerCase().includes(statusVal)).length;
@@ -203,21 +197,10 @@ export async function buildPqrSnapshot(pqr: PqrDocument): Promise<PqrDataSnapsho
   });
 
   let deviations = filterRecords(deviationsRaw);
-  if (!deviations.length) {
-    deviations = mockRecentDeviations.filter((d) => matchesProduct(d as unknown as Record<string, unknown>, product)).map((d) => ({ ...d }));
-  }
 
   let oosRecords = filterRecords(oosRaw);
-  if (!oosRecords.length) {
-    oosRecords = [{ oos_number: 'OOS-2025-001', product_name: product, batch_number: 'B-001', status: 'open', test_parameter: 'Assay' }];
-  }
 
   let capaRecords = filterRecords(capaRaw);
-  if (!capaRecords.length) {
-    capaRecords = mockCapaStatus.flatMap((s, i) => Array(s.value).fill(0).map((_, j) => ({
-      capa_number: `CAPA-${i}-${j}`, product_name: product, status: s.name.toLowerCase().replace(' ', '_'), title: 'Corrective Action',
-    })));
-  }
 
   const changeControl = filterRecords(ccRaw);
   const stability = filterRecords(stabilityRaw);
@@ -305,9 +288,9 @@ export async function buildPqrSnapshot(pqr: PqrDocument): Promise<PqrDataSnapsho
     packaging: { total: packaging.length, records: packaging as Record<string, unknown>[], summary: `${packaging.length} packaging material reviews completed.` },
     equipment: { total: 0, records: [], summary: 'Equipment qualification status reviewed; all critical equipment within qualification validity.' },
     trends: {
-      monthlyBatches: [{ month: 'Jan', released: 22, rejected: 1 }, { month: 'Feb', released: 20, rejected: 0 }, { month: 'Mar', released: 25, rejected: 2 }],
-      oosTrend: mockOosTrend.map((t) => ({ month: t.month, count: t.count })),
-      yieldTrend: mockYieldTrend.map((t) => ({ month: t.month, yield: t.yield })),
+      monthlyBatches: [],
+      oosTrend: [],
+      yieldTrend: [],
       parameterTrends: trendAnalysisRecords.slice(0, 12).map((r) => ({
         parameter: String(r.parameterName || r.parameter_name || 'Parameter'),
         status: String(r.trendStatus || r.trend_status || 'Normal'),

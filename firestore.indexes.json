@@ -583,6 +583,78 @@
       "fields": [
         { "fieldPath": "exported_at", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "packaging_reviews",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "pqrId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "packaging_reviews",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "batchNo", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "packaging_reviews",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "materialType", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "packaging_reviews",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "complianceStatus", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "material_master",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "materialCode", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "material_master",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "materialType", "order": "ASCENDING" },
+        { "fieldPath": "materialCode", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "vendor_master",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "vendorCode", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "vendor_master",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "avlStatus", "order": "ASCENDING" },
+        { "fieldPath": "vendorCode", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "vendor_master",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "vendorType", "order": "ASCENDING" },
+        { "fieldPath": "vendorCode", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

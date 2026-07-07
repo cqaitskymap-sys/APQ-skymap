@@ -12,9 +12,33 @@ import {
   limit,
   Query,
   writeBatch,
+  type QueryConstraint,
 } from 'firebase/firestore';
 import { getFirebaseFirestore } from './firebase';
 import { MaterialMaster, VendorMaster, MaterialReview, AuditLogMaterial, DEFAULT_MATERIALS } from './material-schemas';
+
+function isMissingFirestoreIndex(error: unknown): boolean {
+  const code = (error as { code?: string })?.code;
+  return code === 'failed-precondition' || String((error as Error)?.message ?? '').includes('requires an index');
+}
+
+async function queryCollectionWithIndexFallback(
+  collectionName: string,
+  constraints: QueryConstraint[],
+  sortField?: string,
+) {
+  const col = collection(getFirebaseFirestore(), collectionName);
+  try {
+    return await getDocs(query(col, ...constraints));
+  } catch (error) {
+    if (!isMissingFirestoreIndex(error) || constraints.length <= 1) throw error;
+    return getDocs(query(col, ...constraints.slice(0, -1)));
+  }
+}
+
+function sortByStringField<T extends Record<string, unknown>>(items: T[], field: string) {
+  return [...items].sort((a, b) => String(a[field] ?? '').localeCompare(String(b[field] ?? '')));
+}
 
 // ============= MATERIAL MASTER OPERATIONS =============
 
@@ -64,10 +88,12 @@ export async function getMaterialMasters(
 
   constraints.push(orderBy('materialCode', 'asc'));
 
-  const q = query(collection(getFirebaseFirestore(), 'material_master'), ...constraints);
-  const querySnapshot = await getDocs(q);
-  
+  const querySnapshot = await queryCollectionWithIndexFallback('material_master', constraints);
+
   let results = querySnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as MaterialMaster));
+  if (constraints.length > 1) {
+    results = sortByStringField(results, 'materialCode');
+  }
 
   // Client-side search if provided
   if (filters?.search) {
@@ -187,10 +213,12 @@ export async function getVendorMasters(
 
   constraints.push(orderBy('vendorCode', 'asc'));
 
-  const q = query(collection(getFirebaseFirestore(), 'vendor_master'), ...constraints);
-  const querySnapshot = await getDocs(q);
+  const querySnapshot = await queryCollectionWithIndexFallback('vendor_master', constraints);
 
   let results = querySnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as VendorMaster));
+  if (constraints.length > 1) {
+    results = sortByStringField(results, 'vendorCode');
+  }
 
   // Merge approved vendors from QMS Vendor Management module
   const wantsApproved = !filters?.avlStatus || ['Approved', 'Conditional Approved'].includes(filters.avlStatus);

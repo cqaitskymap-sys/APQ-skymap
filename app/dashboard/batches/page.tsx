@@ -3,12 +3,9 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Search, Download, Filter, Eye } from 'lucide-react';
-import { mockRecentBatches } from '@/lib/mock-data';
-import { cn } from '@/lib/utils';
+import { Plus, Search, Download, Filter } from 'lucide-react';
 import { PageLoader } from '@/components/loaders/page-loader';
 
 export default function BatchesPage() {
@@ -23,17 +20,6 @@ export default function BatchesPage() {
   if (isLoading) {
     return <PageLoader />;
   }
-
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'released': return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400';
-      case 'in_process': return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400';
-      case 'quarantine': return 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400';
-      case 'rejected': return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400';
-      default: return 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400';
-    }
-  };
 
   return (
     <div className="space-y-6">
@@ -57,7 +43,7 @@ export default function BatchesPage() {
       <Card>
         <CardHeader>
           <CardTitle>Recent Batches</CardTitle>
-          <CardDescription>{mockRecentBatches.length} batches this year</CardDescription>
+          <CardDescription>0 batches this year</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="rounded-lg border overflow-hidden">
@@ -73,26 +59,11 @@ export default function BatchesPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {mockRecentBatches.map((batch) => (
-                  <TableRow key={batch.id} className="hover:bg-muted/50 transition-colors">
-                    <TableCell className="font-mono font-semibold text-sm">{batch.batch_number}</TableCell>
-                    <TableCell className="text-sm">{batch.product_name}</TableCell>
-                    <TableCell className="text-sm">{new Date(batch.manufacturing_date).toLocaleDateString()}</TableCell>
-                    <TableCell>
-                      <Badge className={cn('text-xs', getStatusColor(batch.status))} variant="outline">
-                        {batch.status.replace('_', ' ')}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right text-sm font-medium">
-                      {batch.yield_percentage ? `${batch.yield_percentage}%` : '—'}
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                    No batches found.
+                  </TableCell>
+                </TableRow>
               </TableBody>
             </Table>
           </div>

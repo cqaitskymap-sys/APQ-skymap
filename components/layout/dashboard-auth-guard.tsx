@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
+import { clearAuthSessionCookies } from '@/lib/auth-session-cookies';
 import { Skeleton } from '@/components/ui/skeleton';
 
 export function DashboardAuthGuard({ children }: { children: React.ReactNode }) {
@@ -12,11 +13,7 @@ export function DashboardAuthGuard({ children }: { children: React.ReactNode }) 
 
   useEffect(() => {
     if (!loading && !user) {
-      // The middleware only sees the cookie, while demo auth is stored in
-      // localStorage. Clear a stale cookie before navigating to avoid a
-      // /dashboard <-> /auth/login redirect loop.
-      document.cookie = 'firebase-auth-session=; path=/; max-age=0; SameSite=Lax';
-      document.cookie = '__session=; path=/; max-age=0; SameSite=Lax';
+      clearAuthSessionCookies();
       router.replace(`/auth/login?redirect=${encodeURIComponent(pathname)}`);
     }
   }, [user, loading, router, pathname]);

@@ -26,11 +26,16 @@ const SystemSettingsContext = createContext<SystemSettingsContextValue>({
 });
 
 export function SystemSettingsProvider({ children }: { children: ReactNode }) {
-  const { profile } = useAuth();
+  const { user, profile, loading: authLoading } = useAuth();
   const [settings, setSettings] = useState<SystemSettings | null>(null);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
+    if (!user) {
+      setSettings(null);
+      setLoading(false);
+      return;
+    }
     try {
       const s = await fetchSystemSettings();
       setSettings(s);
@@ -39,13 +44,28 @@ export function SystemSettingsProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [user]);
 
   useEffect(() => {
-    load();
-    const interval = window.setInterval(load, 120000);
-    return () => window.clearInterval(interval);
-  }, [load]);
+    if (authLoading) return;
+
+    const refreshIfVisible = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      void load();
+    };
+
+    refreshIfVisible();
+    const interval = window.setInterval(refreshIfVisible, 120000);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') refreshIfVisible();
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, [load, authLoading]);
 
   const maintenanceActive = isMaintenanceModeActive(settings);
   const canBypass = canAccessDuringMaintenance(profile?.role);

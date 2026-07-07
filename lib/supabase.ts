@@ -1,11 +1,34 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
-const supabaseUrl =
-  process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://127.0.0.1:54321';
-const supabaseAnonKey =
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'public-anon-key';
+export function isSupabaseConfigured(): boolean {
+  return Boolean(
+    process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() &&
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim(),
+  );
+}
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+function createSupabaseClient(): SupabaseClient {
+  if (!isSupabaseConfigured()) {
+    throw new Error(
+      'Supabase is not configured. This screen still uses legacy Supabase — migrate to Firebase or set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.',
+    );
+  }
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+  );
+}
+
+let client: SupabaseClient | null = null;
+
+/** @deprecated Prefer Firebase services; legacy pages only. */
+export const supabase = new Proxy({} as SupabaseClient, {
+  get(_target, prop) {
+    if (!client) client = createSupabaseClient();
+    const value = client[prop as keyof SupabaseClient];
+    return typeof value === 'function' ? value.bind(client) : value;
+  },
+});
 
 export type UserRole = 'super_admin' | 'qa' | 'qc' | 'production' | 'engineering' | 'warehouse' | 'regulatory' | 'viewer' | 'auditor';
 

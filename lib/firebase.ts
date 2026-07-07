@@ -59,12 +59,19 @@ function createFirestoreInstance(): Firestore {
     return getFirestore(firebaseApp);
   }
 
-  // Client: prefer initializeFirestore so we can auto-detect long-polling.
-  // Fixes Listen/channel 400 errors on networks that block WebChannel/QUIC.
+  // Client: WebChannel/QUIC often fails on Windows/corporate networks (Listen 400).
+  // Always use long-polling unless Firebase emulators are enabled.
+  if (isFirebaseEmulatorEnabled()) {
+    try {
+      return initializeFirestore(firebaseApp, {});
+    } catch {
+      return getFirestore(firebaseApp);
+    }
+  }
+
   try {
     return initializeFirestore(firebaseApp, {
-      experimentalAutoDetectLongPolling: true,
-      ...(isFirestoreLongPollingEnabled() ? { experimentalForceLongPolling: true } : {}),
+      experimentalForceLongPolling: true,
     });
   } catch {
     // Firestore already initialized (e.g. hot reload) — reuse existing instance.
@@ -109,6 +116,14 @@ export function getFirebaseFirestore(): Firestore {
     if (authInstance) connectEmulators(authInstance, firestoreInstance);
   }
   return firestoreInstance;
+}
+
+// Re-initialize Firestore transport after hot reload so long-polling settings apply.
+if (typeof module !== 'undefined' && process.env.NODE_ENV === 'development') {
+  const hot = (module as { hot?: { dispose: (cb: () => void) => void } }).hot;
+  hot?.dispose(() => {
+    firestoreInstance = null;
+  });
 }
 
 export function getFirebaseStorage(): FirebaseStorage {

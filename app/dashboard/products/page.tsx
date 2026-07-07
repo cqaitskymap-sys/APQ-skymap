@@ -9,7 +9,6 @@ import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Plus, Search, Download, Filter, Eye, Edit, Trash2 } from 'lucide-react';
-import { mockProducts } from '@/lib/mock-data';
 import { cn } from '@/lib/utils';
 import { PageLoader } from '@/components/loaders/page-loader';
 
@@ -24,7 +23,7 @@ interface Product {
 
 export default function ProductsPage() {
   const [search, setSearch] = useState('');
-  const [products, setProducts] = useState<Product[]>(mockProducts);
+  const [products, setProducts] = useState<Product[]>([]);
   const [openDialog, setOpenDialog] = useState(false);
   const [formData, setFormData] = useState({ code: '', name: '', formulation: '', strength: '' });
   const [isLoading, setIsLoading] = useState(true);
@@ -114,7 +113,7 @@ export default function ProductsPage() {
         <Card>
           <CardContent className="p-6">
             <p className="text-sm text-muted-foreground mb-1">Batches This Year</p>
-            <p className="text-3xl font-bold">284</p>
+            <p className="text-3xl font-bold">0</p>
             <p className="text-xs text-amber-600 mt-2">All products</p>
           </CardContent>
         </Card>
@@ -148,7 +147,13 @@ export default function ProductsPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredProducts.map((product) => (
+                {filteredProducts.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                      No products found. Add a product to get started.
+                    </TableCell>
+                  </TableRow>
+                ) : filteredProducts.map((product) => (
                   <TableRow key={product.id} className="hover:bg-muted/50 transition-colors">
                     <TableCell className="font-mono font-semibold text-sm">{product.product_code}</TableCell>
                     <TableCell className="text-sm font-medium">{product.product_name}</TableCell>

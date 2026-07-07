@@ -4,6 +4,7 @@ import { ReactNode, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
 import { canAccessModule } from '@/lib/permissions';
+import { clearAuthSessionCookies } from '@/lib/auth-session-cookies';
 import { resolveModuleFromPath } from '@/lib/nav-permissions';
 import { PremiumFullScreenLoader } from '@/components/loading';
 import { ShieldX } from 'lucide-react';
@@ -25,8 +26,7 @@ export function ProtectedRoute({ children, module, requireEdit = false }: Protec
 
   useEffect(() => {
     if (!loading && !user) {
-      document.cookie = 'firebase-auth-session=; path=/; max-age=0; SameSite=Lax';
-      document.cookie = '__session=; path=/; max-age=0; SameSite=Lax';
+      clearAuthSessionCookies();
       router.replace(`/auth/login?redirect=${encodeURIComponent(pathname)}`);
     }
   }, [user, loading, router, pathname]);
@@ -39,7 +39,13 @@ export function ProtectedRoute({ children, module, requireEdit = false }: Protec
     );
   }
 
-  if (!user) return null;
+  if (!user) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <PremiumFullScreenLoader message="Redirecting to login..." compact />
+      </div>
+    );
+  }
 
   const resolvedModule = module ?? resolveModuleFromPath(pathname);
   if (resolvedModule && !canAccessModule(profile?.role, resolvedModule)) {

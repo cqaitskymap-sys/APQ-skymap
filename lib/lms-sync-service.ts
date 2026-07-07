@@ -10,7 +10,7 @@ import {
   createSyncJob, updateSyncJob, getConnectionRaw, logIntegrationEvent,
   notifySyncFailure,
 } from './lms-service';
-import { createLmsAdapter, generateDemoData } from './lms-adapters/base-adapter';
+import { createLmsAdapter } from './lms-adapters/base-adapter';
 import { generateTrainingRecordNumber, generateAssignmentNumber } from './training-service';
 
 function now() { return new Date().toISOString(); }
@@ -51,7 +51,6 @@ export async function runLmsSync(
   connectionId: string,
   actor: LmsActor,
   mode = 'Manual',
-  useDemoFallback = true,
 ): Promise<{ jobDocId: string; status: string }> {
   const conn = await getConnectionRaw(connectionId);
   if (!conn) throw new Error('Connection not found');
@@ -79,19 +78,19 @@ export async function runLmsSync(
 
       switch (entity) {
         case 'Users':
-          result = await syncUsers(connectionId, adapter, useDemoFallback);
+          result = await syncUsers(connectionId, adapter);
           break;
         case 'Training Courses':
-          result = await syncCourses(connectionId, adapter, useDemoFallback);
+          result = await syncCourses(connectionId, adapter);
           break;
         case 'Training Completion':
-          result = await syncCompletions(connectionId, adapter, actor, useDemoFallback);
+          result = await syncCompletions(connectionId, adapter, actor);
           break;
         case 'Certificates':
-          result = await syncCertificates(connectionId, adapter, useDemoFallback);
+          result = await syncCertificates(connectionId, adapter);
           break;
         case 'Training Assignments':
-          result = await syncAssignments(connectionId, adapter, actor, useDemoFallback);
+          result = await syncAssignments(connectionId, adapter, actor);
           break;
         default:
           result = { imported: 0, updated: 0, skipped: 0, failed: 0, processed: 0 };
@@ -147,9 +146,8 @@ export async function runLmsSync(
   }
 }
 
-async function syncUsers(connectionId: string, adapter: ReturnType<typeof createLmsAdapter>, useDemo: boolean) {
-  let users = (await adapter.fetchUsers()).data;
-  if (!users.length && useDemo) users = generateDemoData(connectionId).users;
+async function syncUsers(connectionId: string, adapter: ReturnType<typeof createLmsAdapter>) {
+  const users = (await adapter.fetchUsers()).data;
 
   let imported = 0, updated = 0, skipped = 0, failed = 0;
   for (const u of users) {
@@ -168,9 +166,8 @@ async function syncUsers(connectionId: string, adapter: ReturnType<typeof create
   return { processed: users.length, imported, updated, skipped, failed };
 }
 
-async function syncCourses(connectionId: string, adapter: ReturnType<typeof createLmsAdapter>, useDemo: boolean) {
-  let courses = (await adapter.fetchCourses()).data;
-  if (!courses.length && useDemo) courses = generateDemoData(connectionId).courses;
+async function syncCourses(connectionId: string, adapter: ReturnType<typeof createLmsAdapter>) {
+  const courses = (await adapter.fetchCourses()).data;
 
   let imported = 0, updated = 0, skipped = 0, failed = 0;
   for (const c of courses) {
@@ -189,9 +186,8 @@ async function syncCourses(connectionId: string, adapter: ReturnType<typeof crea
   return { processed: courses.length, imported, updated, skipped, failed };
 }
 
-async function syncCompletions(connectionId: string, adapter: ReturnType<typeof createLmsAdapter>, actor: LmsActor, useDemo: boolean) {
-  let completions = (await adapter.fetchCompletions()).data;
-  if (!completions.length && useDemo) completions = generateDemoData(connectionId).completions;
+async function syncCompletions(connectionId: string, adapter: ReturnType<typeof createLmsAdapter>, actor: LmsActor) {
+  const completions = (await adapter.fetchCompletions()).data;
 
   let imported = 0, updated = 0, skipped = 0, failed = 0;
   for (const c of completions) {
@@ -242,9 +238,8 @@ async function syncCompletions(connectionId: string, adapter: ReturnType<typeof 
   return { processed: completions.length, imported, updated, skipped, failed };
 }
 
-async function syncCertificates(connectionId: string, adapter: ReturnType<typeof createLmsAdapter>, useDemo: boolean) {
-  let certs = (await adapter.fetchCertificates()).data;
-  if (!certs.length && useDemo) certs = generateDemoData(connectionId).certificates;
+async function syncCertificates(connectionId: string, adapter: ReturnType<typeof createLmsAdapter>) {
+  const certs = (await adapter.fetchCertificates()).data;
 
   let imported = 0, updated = 0, skipped = 0, failed = 0;
   for (const c of certs) {
@@ -263,9 +258,8 @@ async function syncCertificates(connectionId: string, adapter: ReturnType<typeof
   return { processed: certs.length, imported, updated, skipped, failed };
 }
 
-async function syncAssignments(connectionId: string, adapter: ReturnType<typeof createLmsAdapter>, actor: LmsActor, useDemo: boolean) {
-  let assignments = (await adapter.fetchAssignments()).data;
-  if (!assignments.length && useDemo) assignments = generateDemoData(connectionId).assignments;
+async function syncAssignments(connectionId: string, adapter: ReturnType<typeof createLmsAdapter>, actor: LmsActor) {
+  const assignments = (await adapter.fetchAssignments()).data;
 
   let imported = 0, updated = 0, skipped = 0, failed = 0;
   for (const a of assignments) {
@@ -386,5 +380,5 @@ export async function resolveConflict(
 
 export async function handleWebhookSync(connectionId: string, payload: Record<string, unknown>, actor: LmsActor): Promise<void> {
   await logIntegrationEvent(connectionId, 'info', 'webhook_received', 'Webhook payload received', { details: payload });
-  await runLmsSync(connectionId, actor, 'Real-time Webhook', false);
+  await runLmsSync(connectionId, actor, 'Real-time Webhook');
 }

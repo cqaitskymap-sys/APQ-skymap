@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -14,10 +14,19 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { ArrowLeft, Save, AlertCircle } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
 import { PageLoader } from '@/components/loaders/page-loader';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/auth-context';
 import Link from 'next/link';
+import { LoadingSkeleton } from '@/components/admin/dashboard/loading-skeleton';
+import { getPqrDocument, getPqrBatches } from '@/lib/pqr-service';
+import {
+  createMaterialReview,
+  getMaterialMasters,
+  getVendorMasters,
+  logMaterialAudit,
+} from '@/lib/material-service';
+import type { MaterialReview } from '@/lib/material-schemas';
 
 interface Batch {
   id: string;
@@ -74,11 +83,80 @@ interface FormData {
   remarks: string;
 }
 
+const FORM_MATERIAL_TYPE_TO_FIRESTORE: Record<string, MaterialReview['materialType']> = {
+  api: 'API',
+  raw_material: 'Raw Material',
+  excipient: 'Excipient',
+  solvent: 'Solvent',
+  preservative: 'Preservative',
+  buffer: 'Buffer',
+  ph_adjuster: 'pH Adjuster',
+};
+
+const FIRESTORE_MATERIAL_TYPE_TO_FORM: Record<string, string> = {
+  API: 'api',
+  'Raw Material': 'raw_material',
+  Excipient: 'excipient',
+  Solvent: 'solvent',
+  Preservative: 'preservative',
+  Buffer: 'buffer',
+  'pH Adjuster': 'ph_adjuster',
+};
+
+function avlToForm(status: string): string {
+  const map: Record<string, string> = {
+    Approved: 'approved',
+    'Not Approved': 'not_approved',
+    'Conditional Approved': 'conditional',
+    Blocked: 'blocked',
+  };
+  return map[status] || status.toLowerCase().replace(/\s+/g, '_');
+}
+
+function avlToFirestore(status: string): MaterialReview['avlStatus'] {
+  const map: Record<string, MaterialReview['avlStatus']> = {
+    approved: 'Approved',
+    not_approved: 'Not Approved',
+    conditional: 'Conditional Approved',
+    blocked: 'Blocked',
+  };
+  return map[status] || 'Not Approved';
+}
+
+function qcToFirestore(status: string): MaterialReview['qcStatus'] {
+  const map: Record<string, MaterialReview['qcStatus']> = {
+    approved: 'Approved',
+    rejected: 'Rejected',
+    under_test: 'Under Test',
+    quarantine: 'Quarantine',
+    retest_required: 'Retest Required',
+  };
+  return map[status] || 'Under Test';
+}
+
+function complianceToFirestore(status: string): MaterialReview['complianceStatus'] {
+  const map: Record<string, MaterialReview['complianceStatus']> = {
+    complies: 'Complies',
+    does_not_comply: 'Does Not Comply',
+    not_applicable: 'Not Applicable',
+  };
+  return map[status] || 'Not Applicable';
+}
+
 export default function CreateMaterialPage() {
+  return (
+    <Suspense fallback={<LoadingSkeleton rows={8} />}>
+      <CreateMaterialContent />
+    </Suspense>
+  );
+}
+
+function CreateMaterialContent() {
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
   const { toast } = useToast();
+  const { user } = useAuth();
 
   const [pqr, setPqr] = useState<PqrDoc | null>(null);
   const [batches, setBatches] = useState<Batch[]>([]);
@@ -121,49 +199,56 @@ export default function CreateMaterialPage() {
     const fetch = async () => {
       const id = params.id as string;
 
-      // Fetch PQR
-      const { data: pqrData } = await supabase
-        .from('pqr_documents')
-        .select('id, pqr_number, product_name')
-        .eq('id', id)
-        .maybeSingle();
-      if (pqrData) setPqr(pqrData as PqrDoc);
+      try {
+        const pqrData = await getPqrDocument(id);
+        if (pqrData) {
+          setPqr({
+            id: pqrData.id!,
+            pqr_number: pqrData.pqr_number,
+            product_name: pqrData.product_name,
+          });
+        }
 
-      // Fetch batches
-      const { data: batchesData } = await supabase
-        .from('pqr_batches')
-        .select('id, batch_no')
-        .eq('pqr_id', id)
-        .order('created_at', { ascending: false });
-      if (batchesData) setBatches(batchesData as Batch[]);
+        const batchesData = await getPqrBatches(id);
+        setBatches(
+          batchesData.map((b) => ({
+            id: String(b.id),
+            batch_no: String(b.batch_no || b.batchNo || ''),
+          })).filter((b) => b.batch_no),
+        );
 
-      // Fetch materials
-      const { data: materialsData } = await supabase
-        .from('material_master')
-        .select('id, material_code, material_name, material_type')
-        .eq('status', 'active')
-        .order('material_name');
-      if (materialsData) setMaterials(materialsData as Material[]);
+        const materialsData = await getMaterialMasters({ status: 'Active' });
+        setMaterials(
+          materialsData.map((m) => ({
+            id: m.id!,
+            material_code: m.materialCode,
+            material_name: m.materialName,
+            material_type: FIRESTORE_MATERIAL_TYPE_TO_FORM[m.materialType] || m.materialType.toLowerCase(),
+          })),
+        );
 
-      // Fetch vendors
-      const { data: vendorsData } = await supabase
-        .from('vendor_master')
-        .select('id, vendor_name, avl_status')
-        .eq('status', 'active')
-        .order('vendor_name');
-      if (vendorsData) {
-        setVendors(vendorsData.map((v: any) => ({
-          id: v.id,
-          vendor_id: v.id,
-          vendor_name: v.vendor_name,
-          avl_status: v.avl_status,
-        })) as Vendor[]);
+        const vendorsData = await getVendorMasters({ status: 'Active' });
+        setVendors(
+          vendorsData.map((v) => ({
+            id: v.id!,
+            vendor_id: v.id!,
+            vendor_name: v.vendorName,
+            avl_status: avlToForm(v.avlStatus),
+          })),
+        );
+      } catch (error) {
+        console.error('Failed to load material review form data:', error);
+        toast({
+          title: 'Error',
+          description: 'Failed to load form data',
+          variant: 'destructive',
+        });
+      } finally {
+        setIsLoading(false);
       }
-
-      setIsLoading(false);
     };
-    fetch();
-  }, [params.id]);
+    void fetch();
+  }, [params.id, toast]);
 
   // Auto-fill material_code when material selected
   const handleMaterialChange = (materialId: string) => {
@@ -269,62 +354,70 @@ export default function CreateMaterialPage() {
 
     setIsSaving(true);
     try {
-      const { data: user } = await supabase.auth.getUser();
-      const userId = user?.user?.id || '';
+      const userId = user?.uid || 'system';
 
-      // Insert material review
-      const { error: insertError } = await supabase
-        .from('material_review')
-        .insert({
-          pqr_id: params.id,
-          batch_no: formData.batch_no,
-          material_type: formData.material_type,
-          material_id: formData.material_id || null,
-          material_name: formData.material_name,
-          material_code: formData.material_code,
-          manufacturer_name: formData.manufacturer_name,
-          supplier_name: formData.supplier_name,
-          vendor_id: formData.vendor_id || null,
-          avl_status: formData.avl_status,
-          ar_no: formData.ar_no,
-          grn_no: formData.grn_no,
-          received_quantity: formData.received_quantity,
-          issued_quantity: formData.issued_quantity,
-          used_quantity: formData.used_quantity,
+      const savePromise = createMaterialReview(
+        {
+          pqrId: params.id as string,
+          productName: pqr?.product_name || '',
+          batchNo: formData.batch_no,
+          materialType: FORM_MATERIAL_TYPE_TO_FIRESTORE[formData.material_type] || 'API',
+          materialId: formData.material_id || formData.material_name,
+          materialName: formData.material_name,
+          materialCode: formData.material_code,
+          manufacturerName: formData.manufacturer_name,
+          supplierName: formData.supplier_name,
+          vendorId: formData.vendor_id || '',
+          avlStatus: avlToFirestore(formData.avl_status),
+          arNo: formData.ar_no,
+          grnNo: formData.grn_no,
+          receivedQuantity: parseFloat(formData.received_quantity) || 0,
+          issuedQuantity: parseFloat(formData.issued_quantity) || 0,
+          usedQuantity: parseFloat(formData.used_quantity) || 0,
           unit: formData.unit,
-          lot_no: formData.lot_no,
-          mfg_date: formData.mfg_date || null,
-          exp_date: formData.exp_date || null,
-          retest_date: formData.retest_date || null,
-          qc_status: formData.qc_status,
-          coa_available: formData.coa_available,
-          specification_no: formData.specification_no,
-          stp_no: formData.stp_no,
-          test_result_summary: formData.test_result_summary,
-          compliance_status: formData.compliance_status,
-          compliance_reasons: formData.compliance_reasons,
+          lotNo: formData.lot_no,
+          mfgDate: formData.mfg_date || '',
+          expDate: formData.exp_date || '',
+          retestDate: formData.retest_date || null,
+          qcStatus: qcToFirestore(formData.qc_status),
+          coaAvailable: formData.coa_available === 'yes' ? 'Yes' : 'No',
+          specificationNo: formData.specification_no,
+          stpNo: formData.stp_no,
+          testResultSummary: formData.test_result_summary,
+          complianceStatus: complianceToFirestore(formData.compliance_status),
+          complianceReasons: formData.compliance_reasons,
           remarks: formData.remarks,
-          created_by: userId,
-          updated_by: userId,
-        });
+        },
+        userId,
+      );
 
-      if (insertError) throw insertError;
+      await Promise.race([
+        savePromise,
+        new Promise<never>((_, reject) =>
+          window.setTimeout(
+            () => reject(new Error('Save timed out after 30 seconds. Check your network and try again.')),
+            30000,
+          ),
+        ),
+      ]);
 
-      // Log to audit_logs
-      await supabase
-        .from('audit_logs')
-        .insert({
-          user_id: userId,
-          action: 'create',
-          module: 'material_review',
-          record_id: formData.ar_no,
-          record_number: formData.ar_no,
-          field_name: 'material_review',
-          old_value: '',
-          new_value: formData.material_name,
-          ip_address: '0.0.0.0',
-          user_agent: navigator.userAgent,
-        });
+      await Promise.race([
+        logMaterialAudit(
+          {
+            module: 'material_review',
+            recordId: formData.ar_no,
+            fieldName: 'material_review',
+            oldValue: '',
+            newValue: formData.material_name,
+            changedBy: userId,
+            reason: 'Created from PQR material review form',
+          },
+          userId,
+        ),
+        new Promise<never>((_, reject) =>
+          window.setTimeout(() => reject(new Error('Audit log timed out.')), 15000),
+        ),
+      ]);
 
       toast({
         title: 'Success',
@@ -332,10 +425,10 @@ export default function CreateMaterialPage() {
       });
 
       router.push(`/dashboard/pqr/${params.id}/materials`);
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: 'Error',
-        description: error?.message || 'Failed to create material review',
+        description: error instanceof Error ? error.message : 'Failed to create material review',
         variant: 'destructive',
       });
     } finally {

@@ -18,13 +18,13 @@ import {
 import { cn } from '@/lib/utils';
 
 export function NotificationBell() {
-  const { user, isDemoMode } = useAuth();
+  const { user } = useAuth();
   const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
 
   useEffect(() => {
-    if (!user?.uid || !isFirebaseConfigured() || isDemoMode) return;
+    if (!user?.uid || !isFirebaseConfigured()) return;
     return subscribeToNotifications(user.uid, setNotifications, undefined, 15);
-  }, [user?.uid, isDemoMode]);
+  }, [user?.uid]);
 
   const unreadCount = notifications.filter((n) => !n.isRead).length;
 

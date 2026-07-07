@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { Suspense, useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/contexts/auth-context';
@@ -45,8 +45,17 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Textarea } from '@/components/ui/textarea';
 import { downloadCsv, printPage } from '@/lib/export-utils';
 import { useSearchParams } from 'next/navigation';
+import { LoadingSkeleton } from '@/components/admin/dashboard/loading-skeleton';
 
 export default function PackagingReviewPage() {
+  return (
+    <Suspense fallback={<LoadingSkeleton rows={6} />}>
+      <PackagingReviewContent />
+    </Suspense>
+  );
+}
+
+function PackagingReviewContent() {
   const { user, profile } = useAuth();
   const canCreate = profile?.role === 'qa' || profile?.role === 'super_admin';
   const canEdit = canCreate || profile?.role === 'qc' || profile?.role === 'warehouse';

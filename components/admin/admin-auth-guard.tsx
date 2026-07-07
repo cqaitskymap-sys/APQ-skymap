@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
 import { useAdminPermissions } from '@/hooks/use-admin-permissions';
+import { clearAuthSessionCookies } from '@/lib/auth-session-cookies';
 import { Skeleton } from '@/components/ui/skeleton';
 
 interface AdminAuthGuardProps {
@@ -26,6 +27,7 @@ export function AdminAuthGuard({
   useEffect(() => {
     if (authLoading || perms.loading) return;
     if (!user) {
+      clearAuthSessionCookies();
       router.replace('/auth/login?redirect=/admin');
       return;
     }
@@ -44,7 +46,20 @@ export function AdminAuthGuard({
     if (requireManageMaster && !perms.canManageMasterData && perms.isReadOnly) {
       router.replace('/dashboard/admin');
     }
-  }, [user, authLoading, perms, router, requireSuperAdmin, requireManageUsers, requireManageMaster]);
+  }, [
+    user,
+    authLoading,
+    perms.loading,
+    perms.canAccessAdmin,
+    perms.canManageRoles,
+    perms.canManageUsers,
+    perms.canManageMasterData,
+    perms.isReadOnly,
+    router,
+    requireSuperAdmin,
+    requireManageUsers,
+    requireManageMaster,
+  ]);
 
   if (authLoading || perms.loading) {
     return (
@@ -56,8 +71,22 @@ export function AdminAuthGuard({
     );
   }
 
-  if (!user) return null;
-  if (!perms.canAccessAdmin) return null;
+  if (!user) {
+    return (
+      <div className="space-y-4 p-6">
+        <Skeleton className="h-10 w-64" />
+        <Skeleton className="h-40 w-full" />
+      </div>
+    );
+  }
+  if (!perms.canAccessAdmin) {
+    return (
+      <div className="space-y-4 p-6">
+        <Skeleton className="h-10 w-64" />
+        <Skeleton className="h-40 w-full" />
+      </div>
+    );
+  }
 
   return <>{children}</>;
 }

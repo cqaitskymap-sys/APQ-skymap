@@ -1,13 +1,13 @@
 import { writeAuditTrail, createAuditLog } from '@/lib/audit-trail';
+import { collection, getDocs, limit, query } from 'firebase/firestore';
 import {
-  getAdminRecords, createAdminRecord, updateAdminRecord, logAuditEvent,
+  createAdminRecord, updateAdminRecord, logAuditEvent,
   checkFirebaseConnection,
 } from './admin-service';
 import { ADMIN_COLLECTIONS } from './constants';
 import type { SystemSettings } from './schemas';
-import { isFirebaseConfigured, getFirebaseAuth } from '@/lib/firebase';
+import { isFirebaseConfigured, getFirebaseAuth, getFirebaseFirestore } from '@/lib/firebase';
 import { getFirebaseStorageHealthStatus } from '@/lib/firebase-config';
-import { isDemoAuthEnabled } from '@/lib/demo-auth-config';
 
 export interface SystemSettingsAuditMeta {
   userId: string;
@@ -171,21 +171,22 @@ function getLocalSystemSettings(id = 'local'): SystemSettings {
 }
 
 export async function fetchSystemSettings(): Promise<SystemSettings | null> {
-  if (isDemoAuthEnabled()) {
-    const { demoGetSession } = await import('@/lib/demo-auth');
-    if (demoGetSession()) return getLocalSystemSettings('demo');
-    return null;
-  }
-
   if (!isFirebaseConfigured()) return null;
 
   const auth = getFirebaseAuth();
   if (!auth.currentUser) return null;
 
   try {
-    const records = await getAdminRecords<SystemSettings>(ADMIN_COLLECTIONS.systemSettings);
-    if (!records.length) return getLocalSystemSettings('default');
-    return normalizeSystemSettings(records[0]);
+    const fetchPromise = getDocs(
+      query(collection(getFirebaseFirestore(), ADMIN_COLLECTIONS.systemSettings), limit(1)),
+    );
+    const snap = await Promise.race([
+      fetchPromise,
+      new Promise<null>((resolve) => window.setTimeout(() => resolve(null), 15000)),
+    ]);
+    if (!snap || snap === null || snap.empty) return getLocalSystemSettings('default');
+    const docSnap = snap.docs[0];
+    return normalizeSystemSettings({ id: docSnap.id, ...docSnap.data() } as SystemSettings);
   } catch {
     return getLocalSystemSettings('local');
   }
