@@ -2,15 +2,18 @@ export const TRAINING_DASHBOARD_MODULE = 'Training Management Dashboard';
 
 export const TRAINING_DASHBOARD_TYPES = [
   'Induction',
-  'SOP Training',
+  'Training of New Joinee',
   'Refresher Training',
+  'On Job Training',
+  'Need Based Training',
+  'Self Reading Declaration',
+  'External Training',
+  'SOP Training',
   'Role Based Training',
   'GMP Training',
   'Safety Training',
   'CSV Training',
   'Data Integrity Training',
-  'On Job Training',
-  'External Training',
 ] as const;
 
 export const TRAINING_DASHBOARD_STATUSES = [

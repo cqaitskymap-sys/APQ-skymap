@@ -58,7 +58,7 @@ const KPI_ITEMS: {
 
 function viewAction(id: string) {
   return (
-    <Link href={`/qms/training/assignments?highlight=${id}`}>
+    <Link href={`/training/assignments?highlight=${id}`}>
       <Button variant="ghost" size="sm" aria-label="View assignment"><Eye className="h-4 w-4" /></Button>
     </Link>
   );
@@ -66,7 +66,7 @@ function viewAction(id: string) {
 
 function effectivenessAction(id: string) {
   return (
-    <Link href={`/qms/training/effectiveness?highlight=${id}`}>
+    <Link href={`/training/effectiveness?highlight=${id}`}>
       <Button variant="ghost" size="sm" aria-label="Evaluate"><Eye className="h-4 w-4" /></Button>
     </Link>
   );
@@ -164,6 +164,9 @@ export function TrainingManagementDashboardPage() {
         trail={[{ label: 'Dashboard' }]}
         actions={(
           <div className="flex flex-wrap gap-2">
+            <Link href="/training/company-program">
+              <Button variant="outline" className="gap-2">Company Training Program</Button>
+            </Link>
             <Button variant="outline" className="gap-2" onClick={() => void handleRefresh()} disabled={refreshing}>
               <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} /> Refresh
             </Button>
@@ -181,7 +184,7 @@ export function TrainingManagementDashboardPage() {
               </>
             )}
             {canManage && !isReadOnly && (
-              <Link href="/qms/training/assignments">
+              <Link href="/training/assignments">
                 <Button className="bg-blue-600 hover:bg-blue-700">Assign Training</Button>
               </Link>
             )}

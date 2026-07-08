@@ -12,6 +12,7 @@ import {
   PanelLeftOpen, LogOut, Settings, UserCircle, PackageSearch, Beaker, Award,
   AlertCircle, Building2, Activity,   Hash, GitBranch, PenLine, Database, SlidersHorizontal,
   BadgeCheck, Factory, FileSearch, Plus, CheckCircle, FileDown, Search, Link2, Microscope, Calendar, MessageSquare, RotateCcw, Library, Grid3X3, ListChecks, FileSignature, TrendingUp, FileCheck, PlayCircle, Monitor, Sparkles, Server, Code, PenTool, Lock, Wrench, MapPin, Thermometer, Droplets, PackagePlus, ShieldAlert, Boxes,
+  CalendarDays, UserCheck, ScrollText, History,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
@@ -101,6 +102,27 @@ const navItems: NavItem[] = [
     ],
   },
   {
+    label: 'Training Management',
+    icon: Users,
+    matchPrefix: '/training',
+    children: [
+      { label: 'Dashboard', href: '/training', icon: LayoutDashboard },
+      { label: 'Training Matrix', href: '/training/matrix', icon: Grid3X3 },
+      { label: 'Assignment & Scheduling', href: '/training/assignments', icon: ClipboardList },
+      { label: 'Calendar & Scheduler', href: '/training/calendar', icon: CalendarDays },
+      { label: 'Completion & Attendance', href: '/training/completion', icon: UserCheck },
+      { label: 'Approval Workflow', href: '/training/approval-workflow', icon: ShieldCheck },
+      { label: 'Audit Trail', href: '/training/audit-trail', icon: FileSearch },
+      { label: 'Training Effectiveness', href: '/training/effectiveness', icon: CheckCircle },
+      { label: 'Competency Assessment', href: '/training/competency', icon: Award },
+      { label: 'Certificates', href: '/training/certificates', icon: ScrollText },
+      { label: 'Retraining', href: '/training/retraining', icon: RefreshCw },
+      { label: 'Employee History', href: '/training/history', icon: History },
+      { label: 'Training Reports', href: '/training/reports', icon: FileDown },
+      { label: 'LMS Integration', href: '/training/lms-integration', icon: Link2 },
+    ],
+  },
+  {
     label: 'QMS',
     icon: ShieldCheck,
     matchPrefix: '/qms',
@@ -113,7 +135,6 @@ const navItems: NavItem[] = [
       { label: 'Complaint Management', href: '/qms/complaints', icon: MessageSquare },
       { label: 'Product Recall', href: '/qms/recall', icon: RotateCcw },
       { label: 'Document Management', href: '/qms/documents/master', icon: BookOpen },
-      { label: 'Training Management', href: '/qms/training', icon: Users },
       { label: 'Audit Management', href: '/qms/audit', icon: ClipboardList },
       { label: 'Vendor Management', href: '/qms/vendors', icon: TruckIcon },
       { label: 'Validation Management', href: '/qms/validation', icon: FileCheck },
@@ -138,7 +159,6 @@ const navItems: NavItem[] = [
     children: [
       { label: 'Audit Trail', href: '/dashboard/audit-trail', icon: FileText },
       { label: 'Document Management', href: '/qms/documents/master', icon: BookOpen },
-      { label: 'Training Records', href: '/qms/training', icon: Users },
     ],
   },
   {
@@ -180,6 +200,7 @@ export function Sidebar({ collapsed, onToggle, embedded = false }: SidebarProps)
     'Admin',
     'Continued Process Verification',
     'PQR Management',
+    'Training Management',
   ]);
 
   const visibleNavItems = navItems
@@ -222,7 +243,7 @@ export function Sidebar({ collapsed, onToggle, embedded = false }: SidebarProps)
 
   const isLinkActive = (href?: string) => {
     if (!href) return false;
-    if (href === '/dashboard' || href === '/cpv' || href === '/cpv/dashboard' || href === '/admin' || href === '/pqr/dashboard') {
+    if (href === '/dashboard' || href === '/cpv' || href === '/cpv/dashboard' || href === '/admin' || href === '/pqr/dashboard' || href === '/training') {
       return pathname === href || (href === '/cpv/dashboard' && pathname === '/cpv');
     }
     return pathname === href || pathname.startsWith(href + '/');

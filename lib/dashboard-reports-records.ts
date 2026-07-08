@@ -185,7 +185,7 @@ export const REPORT_MODULE_CATALOG: ReportModuleCategory[] = [
         id: 'training',
         label: 'Training Reports',
         description: 'Training compliance, certificate expiry, and GMP training matrix.',
-        href: '/qms/training/reports',
+        href: '/training/reports',
         reportTypes: ['Training Compliance', 'Certificate Expiry', 'Annual GMP Training'],
       },
       {
@@ -228,7 +228,7 @@ export const REGULATORY_REPORT_TYPES = [
   {
     title: 'Training Compliance Report',
     description: 'GMP training matrix coverage for regulatory inspection readiness.',
-    href: '/qms/training/reports',
+    href: '/training/reports',
     regulation: '21 CFR 211.25',
   },
   {

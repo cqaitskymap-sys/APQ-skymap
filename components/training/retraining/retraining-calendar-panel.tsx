@@ -21,7 +21,7 @@ export function RetrainingCalendarPanel({ upcoming }: { upcoming: RetrainingReco
         <CardTitle className="text-sm font-semibold flex items-center gap-2">
           <CalendarDays className="h-4 w-4" /> Training Schedule
         </CardTitle>
-        <Link href="/qms/training/calendar" className="text-xs text-blue-600 hover:underline">Open Calendar</Link>
+        <Link href="/training/calendar" className="text-xs text-blue-600 hover:underline">Open Calendar</Link>
       </CardHeader>
       <CardContent className="space-y-3 max-h-[320px] overflow-y-auto">
         {dates.length === 0 ? (

@@ -1,11 +1,16 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-const PROTECTED_PREFIXES = ['/dashboard', '/cpv', '/qms', '/pqr', '/admin'];
+const PROTECTED_PREFIXES = ['/dashboard', '/cpv', '/qms', '/pqr', '/admin', '/training'];
 const AUTH_ROUTES = ['/auth/login', '/auth/signup', '/login'];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  if (pathname === '/qms/training' || pathname.startsWith('/qms/training/')) {
+    const newPath = pathname.replace(/^\/qms\/training/, '/training') || '/training';
+    return NextResponse.redirect(new URL(newPath, request.url));
+  }
 
   const isProtected = PROTECTED_PREFIXES.some(
     (prefix) => pathname === prefix || pathname.startsWith(prefix + '/')
@@ -29,5 +34,5 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/dashboard/:path*', '/cpv/:path*', '/qms/:path*', '/pqr/:path*', '/admin/:path*', '/auth/:path*', '/login'],
+  matcher: ['/dashboard/:path*', '/cpv/:path*', '/qms/:path*', '/pqr/:path*', '/admin/:path*', '/training/:path*', '/auth/:path*', '/login'],
 };

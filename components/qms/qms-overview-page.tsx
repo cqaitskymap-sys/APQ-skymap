@@ -4,7 +4,7 @@ import Link from 'next/link';
 import {
   AlertTriangle, BookOpen, CheckSquare, ClipboardList, Factory, FileCheck,
   LineChart, MessageSquare, Monitor, PackageSearch, RefreshCw, RotateCcw,
-  ShieldCheck, TestTube, Thermometer, TruckIcon, Users, Wrench,
+  ShieldCheck, TestTube, Thermometer, TruckIcon, Wrench,
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
@@ -17,7 +17,6 @@ const QMS_MODULES = [
   { label: 'Complaint Management', href: '/qms/complaints', icon: MessageSquare, description: 'Customer complaint intake and resolution' },
   { label: 'Product Recall', href: '/qms/recall', icon: RotateCcw, description: 'Recall initiation and distribution tracking' },
   { label: 'Document Management', href: '/qms/documents/master', icon: BookOpen, description: 'Controlled documents, SOPs, and forms' },
-  { label: 'Training Management', href: '/qms/training', icon: Users, description: 'Employee training and qualification records' },
   { label: 'Audit Management', href: '/qms/audit', icon: ClipboardList, description: 'Internal and external audit programs' },
   { label: 'Vendor Management', href: '/qms/vendors', icon: TruckIcon, description: 'Approved vendor list and qualification' },
   { label: 'Validation Management', href: '/qms/validation', icon: FileCheck, description: 'Equipment and process validation' },

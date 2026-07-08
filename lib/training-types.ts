@@ -28,7 +28,37 @@ export const TMS_COLLECTIONS = {
   retrainingRecords: 'retraining_records',
   sessions: 'training_assignments_sessions',
   certificates: 'training_certificates',
+  trainerCertifications: 'trainer_certifications',
+  trainerAssessments: 'trainer_assessment_checklists',
+  inductionRecords: 'induction_records',
+  tniRecords: 'training_needs_identification',
+  jobDescriptions: 'job_descriptions',
+  ojtPlans: 'ojt_training_plans',
+  ojtMatrix: 'ojt_competency_matrix',
+  srdDeclarations: 'self_reading_declarations',
+  annualPlans: 'annual_training_plans',
+  trainingRequests: 'training_requests',
+  questionBank: 'question_bank',
+  questionnaires: 'questionnaires',
+  questionnaireAttempts: 'questionnaire_attempts',
+  practicalAssessments: 'practical_assessments',
+  trainingSettings: 'training_settings',
+  needBasedTraining: 'need_based_training',
+  externalTraining: 'external_training_records',
+  trainerQualifications: 'trainer_qualifications',
+  trainerRenewals: 'trainer_renewals',
+  automationLog: 'training_automation_log',
+  trainingPlanner: 'training_planner_items',
 } as const;
+
+/** Full enterprise training type taxonomy */
+export const ENTERPRISE_TRAINING_TYPES = [
+  'Internal', 'External', 'Induction', 'New Joiner', 'Refresher', 'Need Based',
+  'On Job Training', 'Self Reading', 'Emergency Training', 'CAPA Training',
+  'Deviation Training', 'Change Control Training', 'Validation Training',
+  'Equipment Training', 'Safety Training', 'GMP Training', 'GDP Training',
+  'CSV Training', 'IT Training', 'Quality Training', 'SOP Training',
+] as const;
 
 export const TRAINING_TYPES = [
   'SOP Training', 'GMP Training', 'GDP Training', 'CSV Training', 'Data Integrity Training',
@@ -38,6 +68,27 @@ export const TRAINING_TYPES = [
 
 export const TRAINING_CATEGORIES = [
   'Initial', 'Refresher', 'Retraining', 'On-the-Job', 'Read & Understand', 'Classroom', 'Other',
+  'Induction', 'Training of New Joinee', 'Need Based Training', 'Self Reading Declaration',
+] as const;
+
+/** Company training classification per internal SOP */
+export const COMPANY_TRAINING_CLASSIFICATION = ['Internal', 'External'] as const;
+
+export const COMPANY_INTERNAL_TRAINING_TYPES = [
+  'Induction',
+  'Training of New Joinee',
+  'Refresher Training',
+  'On-Job Training',
+  'Need Based Training',
+  'Self Reading Declaration',
+] as const;
+
+export const COMPANY_EXTERNAL_TRAINING_TYPES = [
+  'External Seminar', 'External Workshop', 'Vendor Training', 'Regulatory Training', 'Conference',
+] as const;
+
+export const COMPANY_EVALUATION_METHODS = [
+  'Questionnaire', 'Training Attendance Record', 'Training Record',
 ] as const;
 
 export const TMS_DEPARTMENTS = [

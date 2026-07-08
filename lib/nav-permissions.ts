@@ -72,7 +72,7 @@ export const ROUTE_MODULE_MAP: Array<{ prefix: string; module: AppModule }> = [
   { prefix: '/qms/document-management', module: 'dms' },
   { prefix: '/qms/document-master', module: 'dms' },
   { prefix: '/qms/dms', module: 'dms' },
-  { prefix: '/qms/training', module: 'training' },
+  { prefix: '/training', module: 'training' },
   { prefix: '/qms/audit', module: 'audit' },
   { prefix: '/qms/vendors', module: 'vendors' },
   { prefix: '/qms/validation', module: 'validation' },

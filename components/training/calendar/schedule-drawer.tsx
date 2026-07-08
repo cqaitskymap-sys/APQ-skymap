@@ -64,6 +64,10 @@ export function ScheduleDrawer({
   const selectedEmployees = form.watch('assigned_employees') ?? [];
   const reminders = form.watch('reminder_schedule') ?? [];
 
+  // Radix Select keys items by `value`; duplicate room/trainer names cause React key warnings.
+  const uniqueRooms = Array.from(new Map(rooms.map((r) => [r.room_name, r])).values());
+  const uniqueTrainers = Array.from(new Map(trainers.map((t) => [t.full_name, t])).values());
+
   const toggleEmployee = (id: string) => {
     const current = form.getValues('assigned_employees') ?? [];
     form.setValue('assigned_employees',
@@ -119,14 +123,14 @@ export function ScheduleDrawer({
               <Label>Trainer *</Label>
               <Select value={form.watch('trainer')} onValueChange={(v) => form.setValue('trainer', v, { shouldValidate: true })}>
                 <SelectTrigger><SelectValue placeholder="Select trainer" /></SelectTrigger>
-                <SelectContent>{trainers.map((t) => <SelectItem key={t.id} value={t.full_name}>{t.full_name}</SelectItem>)}</SelectContent>
+                <SelectContent>{uniqueTrainers.map((t) => <SelectItem key={t.id} value={t.full_name}>{t.full_name}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div>
               <Label>Room</Label>
               <Select value={form.watch('room')} onValueChange={(v) => form.setValue('room', v)}>
                 <SelectTrigger><SelectValue placeholder="Select room" /></SelectTrigger>
-                <SelectContent>{rooms.map((r) => <SelectItem key={r.id} value={r.room_name}>{r.room_name}</SelectItem>)}</SelectContent>
+                <SelectContent>{uniqueRooms.map((r) => <SelectItem key={r.id} value={r.room_name}>{r.room_name}</SelectItem>)}</SelectContent>
               </Select>
             </div>
           </div>

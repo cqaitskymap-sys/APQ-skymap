@@ -259,3 +259,28 @@ export const scheduledDocumentAuditJobs = onSchedule(
     logger.info('Document audit scheduler completed', body);
   },
 );
+
+const trainingAutoCronSecret = defineSecret('TRAINING_AUTOMATION_CRON_SECRET');
+const trainingAutoApiUrl = defineSecret('TRAINING_AUTOMATION_API_URL');
+
+export const scheduledTrainingAutomationJobs = onSchedule(
+  {
+    schedule: 'every day 05:00',
+    timeZone: 'UTC',
+    secrets: [trainingAutoCronSecret, trainingAutoApiUrl],
+  },
+  async () => {
+    const url = trainingAutoApiUrl.value() || process.env.TRAINING_AUTOMATION_API_URL;
+    const secret = trainingAutoCronSecret.value() || process.env.TRAINING_AUTOMATION_CRON_SECRET;
+    if (!url) {
+      logger.error('TRAINING_AUTOMATION_API_URL not configured');
+      return;
+    }
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: secret ? { Authorization: `Bearer ${secret}` } : {},
+    });
+    const body = await res.json();
+    logger.info('Training automation scheduler completed', body);
+  },
+);
