@@ -402,85 +402,234 @@ export async function logProductExport(meta: ProductAuditMeta, count: number) {
   await logProductAudit('EXPORT_PRODUCT_LIST', 'export', meta, null, { count });
 }
 
-export function parseProductImportRows(text: string): Partial<ProductFormData>[] {
-  const lines = text.trim().split(/\r?\n/).filter(Boolean);
+export interface ProductImportRow extends Partial<ProductFormData> {
+  mfrNumber?: string;
+  bprNumber?: string;
+  remarks?: string;
+}
+
+function splitImportLine(line: string): string[] {
+  const hasTabs = line.includes('\t');
+  if (hasTabs) return line.split('\t').map((c) => c.trim());
+  return line
+    .match(/("([^"]|"")*"|[^,]*)/g)
+    ?.map((c) => c.replace(/^"|"$/g, '').replace(/""/g, '"').trim()) || [];
+}
+
+function mergeMultilineImportRows(lines: string[]): string[] {
+  const merged: string[] = [];
+  let buffer = '';
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    if (/^s\.\s*no\./i.test(trimmed) || /^\d+\.\t/.test(trimmed) || /^\d+\.\s+\S/.test(trimmed)) {
+      if (buffer) merged.push(buffer);
+      buffer = trimmed;
+      continue;
+    }
+    if (buffer) buffer = `${buffer} ${trimmed}`;
+  }
+
+  if (buffer) merged.push(buffer);
+  return merged;
+}
+
+export function extractStrengthFromProductName(rawName: string): { productName: string; strength: string } {
+  let name = rawName.trim().replace(/\s+/g, ' ');
+  let strength = '';
+
+  const mlMatch = name.match(/(\d+(?:\.\d+)?)\s*ml\b/i);
+  if (mlMatch) {
+    strength = `${mlMatch[1]} ML`;
+    name = name.replace(mlMatch[0], ' ').replace(/\s+/g, ' ').trim();
+  }
+
+  if (!strength) {
+    const mgMatch = name.match(/(\d+(?:\.\d+)?)\s*mg\b/i);
+    if (mgMatch) {
+      strength = `${mgMatch[1]} MG`;
+      name = name.replace(mgMatch[0], ' ').replace(/\s+/g, ' ').trim();
+    }
+  }
+
+  if (!strength) {
+    const ratioMatch = name.match(/\d+(?:\.\d+)?\s*mg\s*\/\s*\d+(?:\.\d+)?\s*ml/i);
+    if (ratioMatch) {
+      strength = ratioMatch[0].toUpperCase().replace(/\s+/g, ' ');
+    }
+  }
+
+  name = name.replace(/\s*-\s*$/, '').replace(/^\s*-\s*/, '').trim();
+  return { productName: name || rawName.trim(), strength: strength || 'N/A' };
+}
+
+function inferDosageForm(productName: string): ProductFormData['dosageForm'] {
+  if (/\bINFUSION\b/i.test(productName)) return 'Injection';
+  if (/\bINJ(ECTION)?\b/i.test(productName)) return 'Injection';
+  return 'Injection';
+}
+
+function parseImportStatus(remarks: string): ProductFormData['productStatus'] {
+  return /discontinue/i.test(remarks) ? 'Inactive' : 'Active';
+}
+
+function parseSmartImportColumns(cols: string[]) {
+  const productCode = cols.find((c) => /^FAMP[E]?-/i.test(c))?.trim() || '';
+  const mfrNumber = cols.find((c) => /^MFR\//i.test(c))?.trim() || '';
+  const bprNumber = cols.find((c) => /^BPR\//i.test(c))?.trim() || '';
+  const codeIdx = productCode ? cols.indexOf(productCode) : -1;
+  const productName = (codeIdx > 0 ? cols.slice(0, codeIdx) : cols.slice(1))
+    .join(' ')
+    .replace(/^\d+\.\s*/, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const remarks = cols[cols.length - 1] || '';
+
+  return { productCode, productName, mfrNumber, bprNumber, remarks };
+}
+
+function makeUniqueImportCode(code: string, mfrNumber: string, seen: Set<string>): string {
+  const base = code.trim();
+  if (!base) return base;
+  if (!seen.has(base)) {
+    seen.add(base);
+    return base;
+  }
+
+  const suffix = (mfrNumber || 'REV').replace(/^MFR\//i, '').replace(/\//g, '-');
+  const alt = `${base}-${suffix}`;
+  if (!seen.has(alt)) {
+    seen.add(alt);
+    return alt;
+  }
+
+  let i = 2;
+  while (seen.has(`${alt}-${i}`)) i += 1;
+  const unique = `${alt}-${i}`;
+  seen.add(unique);
+  return unique;
+}
+
+function defaultImportComposition(): ProductFormData['compositions'] {
+  return [{
+    ingredientName: 'API',
+    ingredientType: 'API',
+    grade: '',
+    quantity: 1,
+    unit: 'mg',
+    functionPurpose: '',
+    specificationNo: '',
+    stpNo: '',
+  }];
+}
+
+function rowToImportProduct(
+  row: ProductImportRow,
+  seenCodes: Set<string>,
+): ProductFormData | null {
+  if (!row.productCode || !row.productName) return null;
+
+  const extracted = extractStrengthFromProductName(row.productName);
+  const productCode = makeUniqueImportCode(row.productCode, row.mfrNumber || '', seenCodes);
+
+  return {
+    productCode,
+    productName: extracted.productName,
+    genericName: row.genericName || extracted.productName,
+    brandName: '',
+    strength: row.strength || extracted.strength,
+    dosageForm: row.dosageForm || inferDosageForm(extracted.productName),
+    routeOfAdministration: '',
+    packSize: '',
+    market: row.market || 'Domestic',
+    therapeuticCategory: '',
+    shelfLife: row.shelfLife || '24',
+    storageCondition: '',
+    standardBatchSize: '',
+    manufacturingLicenseNumber: '',
+    mfrNumber: row.mfrNumber || '',
+    bmrNumber: '',
+    bprNumber: row.bprNumber || '',
+    specificationNumber: '',
+    stpNumber: '',
+    productStatus: row.productStatus || parseImportStatus(row.remarks || ''),
+    remarks: row.remarks || 'Imported',
+    compositions: row.compositions || defaultImportComposition(),
+    packingDetails: row.packingDetails || [],
+  };
+}
+
+export function parseProductImportRows(text: string): ProductImportRow[] {
+  const lines = mergeMultilineImportRows(text.trim().split(/\r?\n/));
   if (lines.length < 2) return [];
 
-  const headers = lines[0].split(',').map((h) => h.replace(/^"|"$/g, '').trim().toLowerCase());
+  const headers = splitImportLine(lines[0]).map((h) => h.replace(/^"|"$/g, '').trim().toLowerCase());
+  const isTabularHeader = headers.some((h) => h.includes('product name') || h.includes('product code'));
   const idx = (name: string) => headers.findIndex((h) => h.includes(name));
+  const seenCodes = new Set<string>();
 
   const codeI = idx('product code') >= 0 ? idx('product code') : idx('code');
   const nameI = idx('product name') >= 0 ? idx('product name') : idx('name');
   const genericI = idx('generic');
   const strengthI = idx('strength');
+  const mfrI = idx('mfr');
+  const bprI = idx('bpr');
   const formI = idx('dosage');
   const marketI = idx('market');
   const shelfI = idx('shelf');
+  const remarksI = idx('remark');
 
   return lines.slice(1).map((line) => {
-    const cols = line.match(/("([^"]|"")*"|[^,]*)/g)?.map((c) => c.replace(/^"|"$/g, '').replace(/""/g, '"').trim()) || [];
+    const cols = splitImportLine(line);
+    if (!isTabularHeader || cols.find((c) => /^FAMP[E]?-/i.test(c))) {
+      const smart = parseSmartImportColumns(cols);
+      if (!smart.productCode || !smart.productName) return null;
+      return {
+        productCode: smart.productCode,
+        productName: smart.productName,
+        genericName: smart.productName,
+        mfrNumber: smart.mfrNumber,
+        bprNumber: smart.bprNumber,
+        remarks: smart.remarks,
+        productStatus: parseImportStatus(smart.remarks),
+        dosageForm: inferDosageForm(smart.productName),
+        shelfLife: '24',
+        compositions: defaultImportComposition(),
+        packingDetails: [],
+      } satisfies ProductImportRow;
+    }
+
     return {
       productCode: cols[codeI] || '',
       productName: cols[nameI] || '',
       genericName: cols[genericI] || cols[nameI] || '',
       strength: cols[strengthI] || '',
-      dosageForm: (cols[formI] || 'Other') as ProductFormData['dosageForm'],
+      mfrNumber: cols[mfrI] || '',
+      bprNumber: cols[bprI] || '',
+      remarks: cols[remarksI] || '',
+      productStatus: parseImportStatus(cols[remarksI] || ''),
+      dosageForm: (cols[formI] || inferDosageForm(cols[nameI] || '')) as ProductFormData['dosageForm'],
       market: (cols[marketI] || 'Domestic') as ProductFormData['market'],
       shelfLife: cols[shelfI] || '24',
-      productStatus: 'Active' as const,
-      compositions: [{
-        ingredientName: 'API',
-        ingredientType: 'API' as const,
-        grade: '',
-        quantity: 1,
-        unit: 'mg',
-        functionPurpose: '',
-        specificationNo: '',
-        stpNo: '',
-      }],
+      compositions: defaultImportComposition(),
       packingDetails: [],
-    };
-  }).filter((r) => r.productCode && r.productName);
+    } satisfies ProductImportRow;
+  }).filter((r): r is ProductImportRow => !!r && !!r.productCode && !!r.productName);
 }
 
-export async function importProductsFromFile(
-  file: File,
+export async function importProductsFromText(
+  text: string,
   meta: ProductAuditMeta,
 ): Promise<{ imported: number; errors: string[] }> {
-  const text = await file.text();
   const rows = parseProductImportRows(text);
   let imported = 0;
   const errors: string[] = [];
+  const seenCodes = new Set<string>();
 
   for (const row of rows) {
-    const data: ProductFormData = {
-      productCode: row.productCode!,
-      productName: row.productName!,
-      genericName: row.genericName || row.productName!,
-      brandName: '',
-      strength: row.strength || 'N/A',
-      dosageForm: row.dosageForm || 'Other',
-      routeOfAdministration: '',
-      packSize: '',
-      market: row.market || 'Domestic',
-      therapeuticCategory: '',
-      shelfLife: row.shelfLife || '24',
-      storageCondition: '',
-      standardBatchSize: '',
-      manufacturingLicenseNumber: '',
-      mfrNumber: '',
-      bmrNumber: '',
-      bprNumber: '',
-      specificationNumber: '',
-      stpNumber: '',
-      productStatus: 'Active',
-      remarks: 'Imported',
-      compositions: row.compositions || [{
-        ingredientName: 'API', ingredientType: 'API', grade: '', quantity: 1, unit: 'mg',
-        functionPurpose: '', specificationNo: '', stpNo: '',
-      }],
-      packingDetails: [],
-    };
+    const data = rowToImportProduct(row, seenCodes);
+    if (!data) continue;
 
     const result = await createProduct(data, meta);
     if (result.error) errors.push(`${data.productCode}: ${result.error}`);
@@ -489,4 +638,12 @@ export async function importProductsFromFile(
 
   if (imported) await logProductAudit('IMPORT_PRODUCT', 'import', meta, null, { imported, errors: errors.length });
   return { imported, errors };
+}
+
+export async function importProductsFromFile(
+  file: File,
+  meta: ProductAuditMeta,
+): Promise<{ imported: number; errors: string[] }> {
+  const text = await file.text();
+  return importProductsFromText(text, meta);
 }

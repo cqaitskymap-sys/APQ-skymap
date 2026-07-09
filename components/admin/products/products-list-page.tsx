@@ -23,13 +23,17 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea';
 import { useAuth } from '@/contexts/auth-context';
 import { useAdminPermissions } from '@/hooks/use-admin-permissions';
 import { canEditProducts, canImportProducts } from '@/lib/permissions';
 import { DOSAGE_FORMS, MARKET_OPTIONS, PRODUCT_STATUSES } from '@/lib/admin/constants';
 import type { AdminProduct } from '@/lib/admin/schemas';
 import {
-  fetchProducts, setProductStatus, exportProductsCsv, logProductExport, importProductsFromFile,
+  fetchProducts, setProductStatus, exportProductsCsv, logProductExport, importProductsFromFile, importProductsFromText,
 } from '@/lib/admin/product-service';
 
 const PAGE_SIZE = 10;
@@ -49,6 +53,9 @@ export function ProductsListPage() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [page, setPage] = useState(0);
   const [confirm, setConfirm] = useState<{ product: AdminProduct; activate: boolean } | null>(null);
+  const [pasteOpen, setPasteOpen] = useState(false);
+  const [pasteText, setPasteText] = useState('');
+  const [importing, setImporting] = useState(false);
 
   const auditMeta = {
     userId: user?.uid || 'system',
@@ -103,11 +110,30 @@ export function ProductsListPage() {
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setImporting(true);
     const result = await importProductsFromFile(file, auditMeta);
+    setImporting(false);
     if (result.imported) toast.success(`Imported ${result.imported} product(s)`);
     if (result.errors.length) toast.warning(`${result.errors.length} row(s) failed`);
     load();
     e.target.value = '';
+  };
+
+  const handlePasteImport = async () => {
+    if (!pasteText.trim()) {
+      toast.error('Paste product rows first');
+      return;
+    }
+    setImporting(true);
+    const result = await importProductsFromText(pasteText, auditMeta);
+    setImporting(false);
+    if (result.imported) toast.success(`Imported ${result.imported} product(s)`);
+    if (result.errors.length) toast.warning(`${result.errors.length} row(s) failed`);
+    if (result.imported) {
+      setPasteText('');
+      setPasteOpen(false);
+      load();
+    }
   };
 
   const runConfirm = async () => {
@@ -134,12 +160,17 @@ export function ProductsListPage() {
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={handleExport}><Download className="h-4 w-4 mr-1" />Export</Button>
             {canImport && (
-              <Button variant="outline" size="sm" asChild>
-                <label className="cursor-pointer">
-                  <Upload className="h-4 w-4 mr-1" />Import CSV
-                  <input type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={handleImport} />
-                </label>
-              </Button>
+              <>
+                <Button variant="outline" size="sm" onClick={() => setPasteOpen(true)} disabled={importing}>
+                  <Upload className="h-4 w-4 mr-1" />Paste & Import
+                </Button>
+                <Button variant="outline" size="sm" asChild>
+                  <label className="cursor-pointer">
+                    <Upload className="h-4 w-4 mr-1" />Import CSV
+                    <input type="file" accept=".csv,.tsv,.txt,.xlsx,.xls" className="hidden" onChange={handleImport} />
+                  </label>
+                </Button>
+              </>
             )}
             {canEdit && (
               <Button asChild size="sm" className="bg-blue-600 hover:bg-blue-700">
@@ -272,6 +303,29 @@ export function ProductsListPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={pasteOpen} onOpenChange={setPasteOpen}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Paste Product List</DialogTitle>
+            <DialogDescription>
+              Paste tab-separated rows with Product Name, Product Code, MFR No., and BPR No. ML values in product name move to Strength automatically.
+            </DialogDescription>
+          </DialogHeader>
+          <Textarea
+            value={pasteText}
+            onChange={(e) => setPasteText(e.target.value)}
+            rows={12}
+            placeholder="Product Name&#9;Product Code&#9;MFR No.&#9;BPR No."
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPasteOpen(false)}>Cancel</Button>
+            <Button className="bg-blue-600 hover:bg-blue-700" disabled={importing} onClick={handlePasteImport}>
+              {importing ? 'Importing...' : 'Import Products'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

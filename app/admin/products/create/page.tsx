@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { ProductAccessGuard } from '@/components/admin/products/product-access-guard';
 import { ProductForm } from '@/components/admin/products/product-form';
+import { ProductBulkImport } from '@/components/admin/products/product-bulk-import';
 import { PageHeader } from '@/components/admin/dashboard/page-header';
 import { ErrorCard } from '@/components/admin/dashboard/error-card';
 import { useAuth } from '@/contexts/auth-context';
@@ -19,16 +20,18 @@ function CreateProductContent() {
   const { role } = useAdminPermissions();
   const [submitting, setSubmitting] = useState(false);
 
+  const auditMeta = {
+    userId: user?.uid || 'system',
+    userName: profile?.full_name || profile?.email || 'Admin',
+  };
+
   if (!canEditProducts(role)) {
     return <ErrorCard accessDenied message="You do not have permission to create products." />;
   }
 
   const onSubmit = async (data: ProductFormData) => {
     setSubmitting(true);
-    const result = await createProduct(data, {
-      userId: user?.uid || 'system',
-      userName: profile?.full_name || profile?.email || 'Admin',
-    });
+    const result = await createProduct(data, auditMeta);
     setSubmitting(false);
     if (result.error) {
       toast.error(result.error);
@@ -41,6 +44,7 @@ function CreateProductContent() {
   return (
     <div className="space-y-6">
       <PageHeader title="Create Product" description="Add a new pharmaceutical product master record" basePath="/admin" />
+      <ProductBulkImport auditMeta={auditMeta} onImported={() => router.push('/admin/products')} />
       <ProductForm onSubmit={onSubmit} onCancel={() => router.push('/admin/products')} submitting={submitting} />
     </div>
   );
