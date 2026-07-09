@@ -580,42 +580,48 @@ export function parseProductImportRows(text: string): ProductImportRow[] {
   const shelfI = idx('shelf');
   const remarksI = idx('remark');
 
-  return lines.slice(1).map((line) => {
-    const cols = splitImportLine(line);
-    if (!isTabularHeader || cols.find((c) => /^FAMP[E]?-/i.test(c))) {
-      const smart = parseSmartImportColumns(cols);
-      if (!smart.productCode || !smart.productName) return null;
+  return lines.slice(1)
+    .map((line): ProductImportRow | null => {
+      const cols = splitImportLine(line);
+      if (!isTabularHeader || cols.find((c) => /^FAMP[E]?-/i.test(c))) {
+        const smart = parseSmartImportColumns(cols);
+        if (!smart.productCode || !smart.productName) return null;
+        return {
+          productCode: smart.productCode,
+          productName: smart.productName,
+          genericName: smart.productName,
+          mfrNumber: smart.mfrNumber,
+          bprNumber: smart.bprNumber,
+          remarks: smart.remarks,
+          productStatus: parseImportStatus(smart.remarks),
+          dosageForm: inferDosageForm(smart.productName),
+          shelfLife: '24',
+          compositions: defaultImportComposition(),
+          packingDetails: [],
+        };
+      }
+
+      const productCode = cols[codeI] || '';
+      const productName = cols[nameI] || '';
+      if (!productCode || !productName) return null;
+
       return {
-        productCode: smart.productCode,
-        productName: smart.productName,
-        genericName: smart.productName,
-        mfrNumber: smart.mfrNumber,
-        bprNumber: smart.bprNumber,
-        remarks: smart.remarks,
-        productStatus: parseImportStatus(smart.remarks),
-        dosageForm: inferDosageForm(smart.productName),
-        shelfLife: '24',
+        productCode,
+        productName,
+        genericName: cols[genericI] || cols[nameI] || '',
+        strength: cols[strengthI] || '',
+        mfrNumber: cols[mfrI] || '',
+        bprNumber: cols[bprI] || '',
+        remarks: cols[remarksI] || '',
+        productStatus: parseImportStatus(cols[remarksI] || ''),
+        dosageForm: (cols[formI] || inferDosageForm(cols[nameI] || '')) as ProductFormData['dosageForm'],
+        market: (cols[marketI] || 'Domestic') as ProductFormData['market'],
+        shelfLife: cols[shelfI] || '24',
         compositions: defaultImportComposition(),
         packingDetails: [],
-      } satisfies ProductImportRow;
-    }
-
-    return {
-      productCode: cols[codeI] || '',
-      productName: cols[nameI] || '',
-      genericName: cols[genericI] || cols[nameI] || '',
-      strength: cols[strengthI] || '',
-      mfrNumber: cols[mfrI] || '',
-      bprNumber: cols[bprI] || '',
-      remarks: cols[remarksI] || '',
-      productStatus: parseImportStatus(cols[remarksI] || ''),
-      dosageForm: (cols[formI] || inferDosageForm(cols[nameI] || '')) as ProductFormData['dosageForm'],
-      market: (cols[marketI] || 'Domestic') as ProductFormData['market'],
-      shelfLife: cols[shelfI] || '24',
-      compositions: defaultImportComposition(),
-      packingDetails: [],
-    } satisfies ProductImportRow;
-  }).filter((r): r is ProductImportRow => !!r && !!r.productCode && !!r.productName);
+      };
+    })
+    .filter((r): r is ProductImportRow => r !== null);
 }
 
 export async function importProductsFromText(
