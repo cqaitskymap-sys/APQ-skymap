@@ -8,30 +8,65 @@ export const CQA_MODULE_NAME = 'CQA Monitoring';
 export const CQA_TEST_STAGES = [
   'In-Process Testing',
   'Finished Product Testing',
-  'Stability Testing',
-  'Microbiology Testing',
-  'Sterility Testing',
-  'Endotoxin Testing',
-  'Particulate Matter Testing',
-  'Preservative Testing',
-  'Identification Testing',
-  'Assay Testing',
-  'Related Substance Testing',
+  'Raw Material Testing',
 ] as const;
 
-export const DEFAULT_CQA_PARAMETERS = [
-  'Description', 'Colour', 'Clarity', 'Identification', 'pH', 'Extractable Volume',
-  'Assay', 'Related Substances', 'Sterility', 'Bacterial Endotoxin',
-  'Particulate Matter >=10µm', 'Particulate Matter >=25µm',
-  'Methyl Paraben Assay', 'Propyl Paraben Assay', 'Preservative Content',
-  'Visible Particles', 'Sub Visible Particles', 'Water Content', 'Appearance',
-  'Total Viable Count', 'Colour Index', 'Ondansetron Imp. D',
-  'Any Secondary Impurity', 'Sum of All Impurities',
-] as const;
+export type CqaTestStage = (typeof CQA_TEST_STAGES)[number];
+
+/** Canonical CQA parameters allowed per test stage. */
+export const CQA_STAGE_PARAMETERS: Record<CqaTestStage, readonly string[]> = {
+  'In-Process Testing': [
+    'Description',
+    'pH',
+    'Weight per mL',
+    'Colour Index',
+    'Viscosity',
+    'Assay',
+    'Preservative Content',
+  ],
+  'Finished Product Testing': [
+    'Description',
+    'Identification',
+    'pH',
+    'Extractable Vol (mL)',
+    'Particulate Matter',
+    'Bacterial Endotoxin Test',
+    'Sterility',
+    'Related Substance',
+    'Assay',
+    'Preservative Content',
+  ],
+  'Raw Material Testing': [
+    'API Assay (ODB)',
+    'Water/ LOD',
+    'Relative Substance',
+    'pH',
+  ],
+};
+
+export const DEFAULT_CQA_PARAMETERS = Array.from(
+  new Set(Object.values(CQA_STAGE_PARAMETERS).flat()),
+) as readonly string[];
 
 export const MICROBIOLOGY_CQA_PARAMETERS = [
-  'Sterility', 'Bacterial Endotoxin', 'Microbiology Testing',
+  'Sterility',
+  'Bacterial Endotoxin Test',
 ] as const;
+
+export interface CqaStageParameterOption {
+  id: string;
+  parameterName: string;
+  parameterCode: string;
+  section: string;
+  responsibility: string;
+  specificationText: string;
+  target: number;
+  lsl: number;
+  usl: number;
+  unit: string;
+  resultType: 'Numeric' | 'Pass/Fail' | 'Complies/Does Not Comply';
+  criticality: 'Critical' | 'Major' | 'Minor';
+}
 
 export const CQA_RESULT_STATUSES = [
   'Complies', 'Alert', 'Action', 'OOS', 'Pass', 'Fail', 'Does Not Comply',
@@ -265,6 +300,10 @@ function normalizeCqaTestStageLabel(stage: string): string {
   return stage.trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
+function normalizeCqaParameterLabel(name: string): string {
+  return name.trim().toLowerCase().replace(/\s+/g, ' ').replace(/[()]/g, '');
+}
+
 /** Compare CQA test stage labels (e.g. "Finished Product" vs "Finished Product Testing"). */
 export function cqaTestStagesMatch(a: string, b: string): boolean {
   const left = normalizeCqaTestStageLabel(a);
@@ -275,84 +314,107 @@ export function cqaTestStagesMatch(a: string, b: string): boolean {
   return stripTesting(left) === stripTesting(right);
 }
 
-/** Default mapping of CQA parameter names to applicable test stages. */
-export const CQA_PARAMETER_STAGE_MAP: Record<string, readonly string[]> = {
-  Description: ['Finished Product Testing'],
-  Identification: ['Identification Testing', 'Finished Product Testing'],
-  Colour: ['Finished Product Testing'],
-  Clarity: ['In-Process Testing', 'Finished Product Testing'],
-  pH: ['In-Process Testing', 'Finished Product Testing', 'Stability Testing'],
-  'Extractable Volume': ['Finished Product Testing'],
-  'Extractable Volume (mL)': ['Finished Product Testing'],
-  Assay: ['Assay Testing', 'Finished Product Testing', 'Stability Testing'],
-  'Assay (%)': ['Assay Testing', 'Finished Product Testing', 'Stability Testing'],
-  'Related Substances': ['Related Substance Testing', 'Finished Product Testing'],
-  'Any Secondary Impurity (%)': ['Related Substance Testing', 'Finished Product Testing'],
-  'Sum of All Impurities (%)': ['Related Substance Testing', 'Finished Product Testing'],
-  'Ondansetron Imp. D (%)': ['Related Substance Testing', 'Finished Product Testing'],
-  Sterility: ['Sterility Testing', 'Microbiology Testing', 'Finished Product Testing'],
-  'Bacterial Endotoxin': ['Endotoxin Testing', 'Microbiology Testing', 'Finished Product Testing'],
-  'Bacterial Endotoxin (EU/mg)': ['Endotoxin Testing', 'Microbiology Testing', 'Finished Product Testing'],
-  'Particulate Matter >=10µm': ['Particulate Matter Testing', 'Finished Product Testing'],
-  'Particulate Matter >=25µm': ['Particulate Matter Testing', 'Finished Product Testing'],
-  'Particulate Matter — ≥10 µm (/mL)': ['Particulate Matter Testing', 'Finished Product Testing'],
-  'Particulate Matter — ≥25 µm (/mL)': ['Particulate Matter Testing', 'Finished Product Testing'],
-  'Particulate Matter — Visible': ['Particulate Matter Testing', 'Finished Product Testing'],
-  'Methyl Paraben Assay': ['Preservative Testing', 'Finished Product Testing'],
-  'Propyl Paraben Assay': ['Preservative Testing', 'Finished Product Testing'],
-  'Preservative — Methyl Paraben (%)': ['Preservative Testing', 'Finished Product Testing'],
-  'Preservative — Propyl Paraben (%)': ['Preservative Testing', 'Finished Product Testing'],
-  'Preservative Content': ['Preservative Testing', 'Finished Product Testing'],
-  'Visible Particles': ['Particulate Matter Testing', 'Finished Product Testing'],
-  'Sub Visible Particles': ['Particulate Matter Testing', 'Finished Product Testing'],
-  'Water Content': ['In-Process Testing', 'Finished Product Testing', 'Stability Testing'],
-  Appearance: ['In-Process Testing', 'Finished Product Testing'],
-  'Total Viable Count': ['Microbiology Testing'],
-  'Total Viable Count (CFU/100 mL)': ['Microbiology Testing'],
-  'Colour Index': ['In-Process Testing', 'Finished Product Testing'],
-  'Colour Index (AU)': ['In-Process Testing', 'Finished Product Testing'],
-  'Weight/ml': ['In-Process Testing'],
-  'Weight per mL (g/mL)': ['In-Process Testing'],
-  'Ondansetron Imp. D': ['Related Substance Testing', 'Finished Product Testing'],
-  'Any Secondary Impurity': ['Related Substance Testing', 'Finished Product Testing'],
-  'Sum of All Impurities': ['Related Substance Testing', 'Finished Product Testing'],
+/** Aliases for matching stored / BMR parameter names to canonical stage parameters. */
+export const CQA_PARAMETER_ALIASES: Record<string, readonly string[]> = {
+  Description: ['description'],
+  Identification: ['identification'],
+  pH: ['ph'],
+  'Weight per mL': ['weight per ml', 'weight/ml', 'weight per ml g/ml'],
+  'Colour Index': ['colour index', 'colour index au'],
+  Viscosity: ['viscosity'],
+  Assay: ['assay', 'assay %'],
+  'Preservative Content': ['preservative content', 'preservative methyl paraben', 'preservative propyl paraben', 'methyl paraben', 'propyl paraben'],
+  'Extractable Vol (mL)': ['extractable vol ml', 'extractable volume', 'extractable volume ml'],
+  'Particulate Matter': ['particulate matter', 'particulate matter visible', 'particulate matter ≥10', 'particulate matter >=10', 'particulate matter ≥25', 'particulate matter >=25', 'particles >=10', 'particles >=25'],
+  'Bacterial Endotoxin Test': ['bacterial endotoxin test', 'bacterial endotoxin', 'bacterial endotoxin eu/mg'],
+  Sterility: ['sterility'],
+  'Related Substance': ['related substance', 'related substances', 'ondansetron imp. d', 'sum of all impurities', 'any secondary impurity'],
+  'API Assay (ODB)': ['api assay odb', 'assay odb', 'assay odb %'],
+  'Water/ LOD': ['water/ lod', 'water lod', 'water / lod'],
+  'Relative Substance': ['relative substance', 'sum of related substances'],
 };
 
-function stagesForParameterName(parameterName: string): string[] | null {
-  const exact = CQA_PARAMETER_STAGE_MAP[parameterName];
-  if (exact) return [...exact];
+/** Default mapping of CQA parameter names to applicable test stages. */
+export const CQA_PARAMETER_STAGE_MAP: Record<string, readonly string[]> = Object.fromEntries(
+  Object.entries(CQA_STAGE_PARAMETERS).flatMap(([stage, params]) =>
+    params.map((param) => [param, [stage]]),
+  ),
+);
 
-  const lower = parameterName.toLowerCase();
-  for (const [key, stages] of Object.entries(CQA_PARAMETER_STAGE_MAP)) {
-    const keyLower = key.toLowerCase();
-    if (lower === keyLower || lower.includes(keyLower) || keyLower.includes(lower)) {
-      return [...stages];
-    }
-  }
+export function resolveCqaTestStage(testStage: string): CqaTestStage | null {
+  const match = CQA_TEST_STAGES.find((stage) => cqaTestStagesMatch(stage, testStage));
+  return match ?? null;
+}
 
-  if (lower.includes('sterility')) return ['Sterility Testing', 'Microbiology Testing', 'Finished Product Testing'];
-  if (lower.includes('endotoxin')) return ['Endotoxin Testing', 'Microbiology Testing', 'Finished Product Testing'];
-  if (lower.includes('identification')) return ['Identification Testing', 'Finished Product Testing'];
-  if (lower.includes('assay')) return ['Assay Testing', 'Finished Product Testing', 'Stability Testing'];
-  if (lower.includes('ph')) return ['In-Process Testing', 'Finished Product Testing', 'Stability Testing'];
-  if (lower.includes('extractable')) return ['Finished Product Testing'];
-  if (lower.includes('colour index') || lower.includes('weight/ml') || lower.includes('weight per ml')) {
-    return ['In-Process Testing', 'Finished Product Testing'];
-  }
-  if (lower.includes('particulate') || lower.includes('particle')) {
-    return ['Particulate Matter Testing', 'Finished Product Testing'];
-  }
-  if (lower.includes('paraben') || lower.includes('preservative')) {
-    return ['Preservative Testing', 'Finished Product Testing'];
-  }
-  if (lower.includes('related') || lower.includes('impurity') || lower.includes('imp.')) {
-    return ['Related Substance Testing', 'Finished Product Testing'];
-  }
-  if (lower.includes('microbial') || lower.includes('microbiology') || lower.includes('viable count')) {
-    return ['Microbiology Testing'];
-  }
+export function getCqaParametersForStage(testStage: string): readonly string[] {
+  const stage = resolveCqaTestStage(testStage);
+  return stage ? CQA_STAGE_PARAMETERS[stage] : [];
+}
 
-  return null;
+export function cqaParameterNamesMatch(canonicalName: string, candidateName: string): boolean {
+  const left = normalizeCqaParameterLabel(canonicalName);
+  const right = normalizeCqaParameterLabel(candidateName);
+  if (!left || !right) return false;
+  if (left === right) return true;
+
+  const aliases = CQA_PARAMETER_ALIASES[canonicalName] || [];
+  if (aliases.some((alias) => right === alias || right.includes(alias) || alias.includes(right))) return true;
+
+  return left.includes(right) || right.includes(left);
+}
+
+export function parameterBelongsToCqaStage(parameterName: string, testStage: string): boolean {
+  const stageParams = getCqaParametersForStage(testStage);
+  return stageParams.some((param) => cqaParameterNamesMatch(param, parameterName));
+}
+
+function cqaStageResultType(name: string): CqaStageParameterOption['resultType'] {
+  const lower = name.toLowerCase();
+  if (lower === 'description' || lower === 'sterility') return 'Pass/Fail';
+  if (lower === 'identification') return 'Complies/Does Not Comply';
+  return 'Numeric';
+}
+
+function cqaStageCriticality(name: string): CqaStageParameterOption['criticality'] {
+  const lower = name.toLowerCase();
+  if (lower.includes('assay') || lower.includes('sterility') || lower.includes('endotoxin')) return 'Critical';
+  return 'Major';
+}
+
+const CQA_STAGE_PARAMETER_DEFAULTS: Partial<Record<string, { target: number; lsl: number; usl: number; unit: string }>> = {
+  pH: { target: 3.65, lsl: 3.3, usl: 4.0, unit: '' },
+  Assay: { target: 100, lsl: 95, usl: 105, unit: '%' },
+  'Weight per mL': { target: 1.025, lsl: 1.0, usl: 1.05, unit: 'g/mL' },
+  'Colour Index': { target: 0.1, lsl: 0, usl: 0.2, unit: 'AU' },
+  Viscosity: { target: 1, lsl: 0.8, usl: 1.2, unit: 'cP' },
+  'Preservative Content': { target: 90, lsl: 80, usl: 100, unit: '%' },
+  'Extractable Vol (mL)': { target: 2.1, lsl: 2.0, usl: 2.5, unit: 'mL' },
+  'Bacterial Endotoxin Test': { target: 4.95, lsl: 0, usl: 9.9, unit: 'EU/mg' },
+  'Related Substance': { target: 0.25, lsl: 0, usl: 0.5, unit: '%' },
+  'API Assay (ODB)': { target: 100, lsl: 98, usl: 102, unit: '%' },
+  'Water/ LOD': { target: 9.75, lsl: 9.0, usl: 10.5, unit: '%' },
+  'Relative Substance': { target: 0.25, lsl: 0, usl: 0.5, unit: '%' },
+};
+
+export function buildCqaStageParameterOptions(testStage: string): CqaStageParameterOption[] {
+  return getCqaParametersForStage(testStage).map((parameterName) => {
+    const defaults = CQA_STAGE_PARAMETER_DEFAULTS[parameterName];
+    const code = parameterName.toUpperCase().replace(/[^A-Z0-9]+/g, '_').slice(0, 24);
+    return {
+      id: `cqa-stage-${code}`,
+      parameterName,
+      parameterCode: `CQA_${code}`,
+      section: testStage,
+      responsibility: testStage === 'In-Process Testing' ? 'IPQA' : 'QA',
+      specificationText: defaults ? `${defaults.lsl} – ${defaults.usl} ${defaults.unit}`.trim() : '',
+      target: defaults?.target ?? 0,
+      lsl: defaults?.lsl ?? 0,
+      usl: defaults?.usl ?? 0,
+      unit: defaults?.unit ?? '',
+      resultType: cqaStageResultType(parameterName),
+      criticality: cqaStageCriticality(parameterName),
+    };
+  });
 }
 
 export function parameterMatchesCqaTestStage(
@@ -364,9 +426,5 @@ export function parameterMatchesCqaTestStage(
   if (!testStage) return true;
   if (explicitTestStage && cqaTestStagesMatch(explicitTestStage, testStage)) return true;
   if (processStage && cqaTestStagesMatch(processStage, testStage)) return true;
-
-  const mappedStages = stagesForParameterName(parameterName);
-  if (mappedStages?.some((stage) => cqaTestStagesMatch(stage, testStage))) return true;
-
-  return false;
+  return parameterBelongsToCqaStage(parameterName, testStage);
 }

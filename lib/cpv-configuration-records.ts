@@ -147,7 +147,7 @@ export const cppConfigurationSchema = z.object({
 export const cqaConfigurationSchema = z.object({
   parameterCode: requiredText,
   parameterName: requiredText,
-  testStage: z.string().trim().default('Finished Product'),
+  testStage: z.string().trim().default('Finished Product Testing'),
   specificationNumber: z.string().trim().optional().default(''),
   stpNumber: z.string().trim().optional().default(''),
   targetValue: finiteNumber,

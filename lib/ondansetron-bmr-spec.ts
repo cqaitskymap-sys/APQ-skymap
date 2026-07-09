@@ -3,6 +3,13 @@
  * Source: data/Ondansetron_Injection_BMR_Specification_Corrected.xlsx
  */
 
+import {
+  CQA_PARAMETER_ALIASES,
+  cqaParameterNamesMatch,
+  getCqaParametersForStage,
+  type CqaStageParameterOption,
+} from '@/lib/cpv-cqa-monitoring';
+
 export const ONDANSETRON_PRODUCT_KEY = 'ondansetron';
 
 export interface BmrSpecLimit {
@@ -476,81 +483,121 @@ export const ONDANSETRON_CQA_SPECS: Record<string, { target: number; lsl: number
   'Total Viable Count (CFU/100 mL)': { target: 5, lsl: 0, usl: 10, unit: 'CFU/100 mL' },
   'Colour Index': { target: 0.1, lsl: 0, usl: 0.2, unit: 'AU' },
   'Colour Index (AU)': { target: 0.1, lsl: 0, usl: 0.2, unit: 'AU' },
+  'Weight per mL': { target: 1.025, lsl: 1.0, usl: 1.05, unit: 'g/mL' },
+  'Weight per mL (g/mL)': { target: 1.025, lsl: 1.0, usl: 1.05, unit: 'g/mL' },
+  Viscosity: { target: 1, lsl: 0.8, usl: 1.2, unit: 'cP' },
+  'Preservative Content': { target: 90, lsl: 80, usl: 100, unit: '%' },
+  'Extractable Vol (mL)': { target: 2.1, lsl: 2.0, usl: 2.5, unit: 'mL' },
+  'Particulate Matter': { target: 0, lsl: 0, usl: 0, unit: 'count' },
+  'Bacterial Endotoxin Test': { target: 4.95, lsl: 0, usl: 9.9, unit: 'EU/mg' },
+  'Related Substance': { target: 0.25, lsl: 0, usl: 0.5, unit: '%' },
+  'API Assay (ODB)': { target: 100, lsl: 98, usl: 102, unit: '%' },
+  'Assay (ODB) (%)': { target: 100, lsl: 98, usl: 102, unit: '%' },
+  'Water/ LOD': { target: 9.75, lsl: 9.0, usl: 10.5, unit: '%' },
+  'Water / LOD': { target: 9.75, lsl: 9.0, usl: 10.5, unit: '%' },
+  'Relative Substance': { target: 0.25, lsl: 0, usl: 0.5, unit: '%' },
+  'Sum of Related Substances (%)': { target: 0.25, lsl: 0, usl: 0.5, unit: '%' },
 };
 
 /** Maps CQA test stage → BMR spec sections for Ondansetron. */
 export const CQA_STAGE_TO_BMR_SECTIONS: Record<string, string[]> = {
   'In-Process Testing': ['BULK RESULTS'],
   'Finished Product Testing': ['FINISHED PRODUCT DATA'],
-  'Related Substance Testing': ['STARTING MATERIAL (API)', 'FINISHED PRODUCT DATA'],
-  'Endotoxin Testing': ['FINISHED PRODUCT DATA'],
-  'Particulate Matter Testing': ['FINISHED PRODUCT DATA'],
-  'Preservative Testing': ['FINISHED PRODUCT DATA'],
-  'Microbiology Testing': ['BULK RESULTS'],
-  'Assay Testing': ['BULK RESULTS', 'FINISHED PRODUCT DATA'],
-  'Sterility Testing': ['FINISHED PRODUCT DATA'],
-  'Identification Testing': ['STARTING MATERIAL (API)'],
-  'Stability Testing': ['FINISHED PRODUCT DATA'],
+  'Raw Material Testing': ['STARTING MATERIAL (API)'],
 };
 
-export interface OndansetronCqaOption {
-  id: string;
-  parameterName: string;
-  parameterCode: string;
-  section: string;
-  responsibility: string;
-  specificationText: string;
-  target: number;
-  lsl: number;
-  usl: number;
-  unit: string;
-  resultType: 'Numeric' | 'Pass/Fail' | 'Complies/Does Not Comply';
-  criticality: 'Critical' | 'Major' | 'Minor';
-}
+const CQA_STAGE_BMR_PARAMETER_ALIASES: Record<string, string[]> = {
+  ...CQA_PARAMETER_ALIASES,
+  'Weight per mL': ['Weight per mL (g/mL)'],
+  'Colour Index': ['Colour Index (AU)'],
+  Assay: ['Assay (%)'],
+  'Preservative Content': ['Preservative — Methyl Paraben (%)', 'Preservative — Propyl Paraben (%)'],
+  'Extractable Vol (mL)': ['Extractable Volume (mL)'],
+  'Particulate Matter': ['Particulate Matter — Visible'],
+  'Bacterial Endotoxin Test': ['Bacterial Endotoxin (EU/mg)'],
+  'Related Substance': ['Sum of All Impurities (%)', 'Ondansetron Imp. D (%)'],
+  'API Assay (ODB)': ['Assay (ODB) (%)'],
+  'Water/ LOD': ['Water / LOD'],
+  'Relative Substance': ['Sum of Related Substances (%)'],
+};
+
+export interface OndansetronCqaOption extends CqaStageParameterOption {}
 
 function cqaResultType(name: string): OndansetronCqaOption['resultType'] {
-  if (name === 'Description' || name === 'Sterility' || name.startsWith('Particulate Matter — Visible')) {
-    return 'Pass/Fail';
-  }
-  if (name === 'Identification') return 'Complies/Does Not Comply';
+  const lower = name.toLowerCase();
+  if (lower === 'description' || lower === 'sterility' || lower === 'particulate matter') return 'Pass/Fail';
+  if (lower === 'identification') return 'Complies/Does Not Comply';
   return 'Numeric';
 }
 
 function cqaCriticality(name: string): OndansetronCqaOption['criticality'] {
   const n = name.toLowerCase();
   if (n.includes('assay') || n.includes('sterility') || n.includes('endotoxin')) return 'Critical';
-  if (n.includes('impurity') || n.includes('imp.') || n.includes('particulate')) return 'Major';
+  if (n.includes('impurity') || n.includes('imp.') || n.includes('particulate') || n.includes('related')) return 'Major';
   return 'Major';
 }
 
-export function getOndansetronCqaOptionsForStage(testStage: string): OndansetronCqaOption[] {
-  const sections = CQA_STAGE_TO_BMR_SECTIONS[testStage]
-    || ['BULK RESULTS', 'FINISHED PRODUCT DATA'];
-  const options: OndansetronCqaOption[] = [];
-
+function findBmrParameterForCanonical(canonicalName: string, sections: string[]): BmrSpecParameter | null {
+  const aliases = CQA_STAGE_BMR_PARAMETER_ALIASES[canonicalName] || [canonicalName];
   for (const sec of ONDANSETRON_INJECTION_BMR_SPEC) {
     if (!sections.includes(sec.section)) continue;
-    for (const p of sec.parameters) {
-      const parsed = parseBmrLimits(p.limits.lower, p.limits.upper);
-      const alias = ONDANSETRON_CQA_SPECS[p.parameter];
-      const code = p.parameter.toUpperCase().replace(/[^A-Z0-9]+/g, '_').slice(0, 24);
-      options.push({
-        id: `bmr-cqa-${code}`,
-        parameterName: p.parameter,
-        parameterCode: `CQA_${code}`,
-        section: sec.section,
-        responsibility: p.responsibility,
-        specificationText: parsed?.specification ?? `${p.limits.lower ?? '—'} / ${p.limits.upper ?? '—'}`,
-        target: alias?.target ?? parsed?.target ?? 0,
-        lsl: alias?.lsl ?? parsed?.lsl ?? 0,
-        usl: alias?.usl ?? parsed?.usl ?? 0,
-        unit: alias?.unit ?? parsed?.unit ?? '',
-        resultType: cqaResultType(p.parameter),
-        criticality: cqaCriticality(p.parameter),
-      });
+    for (const param of sec.parameters) {
+      if (aliases.some((alias) => cqaParameterNamesMatch(alias, param.parameter))) {
+        return param;
+      }
     }
   }
-  return options;
+  return null;
+}
+
+function buildOndansetronCqaOption(
+  canonicalName: string,
+  testStage: string,
+  bmr: BmrSpecParameter | null,
+): OndansetronCqaOption {
+  const code = canonicalName.toUpperCase().replace(/[^A-Z0-9]+/g, '_').slice(0, 24);
+  if (!bmr) {
+    const spec = ONDANSETRON_CQA_SPECS[canonicalName];
+    return {
+      id: `bmr-cqa-${code}`,
+      parameterName: canonicalName,
+      parameterCode: `CQA_${code}`,
+      section: testStage,
+      responsibility: testStage === 'In-Process Testing' ? 'IPQA' : 'QA',
+      specificationText: spec ? `${spec.lsl} – ${spec.usl} ${spec.unit}`.trim() : '',
+      target: spec?.target ?? 0,
+      lsl: spec?.lsl ?? 0,
+      usl: spec?.usl ?? 0,
+      unit: spec?.unit ?? '',
+      resultType: cqaResultType(canonicalName),
+      criticality: cqaCriticality(canonicalName),
+    };
+  }
+
+  const parsed = parseBmrLimits(bmr.limits.lower, bmr.limits.upper);
+  const alias = ONDANSETRON_CQA_SPECS[canonicalName] ?? ONDANSETRON_CQA_SPECS[bmr.parameter];
+  return {
+    id: `bmr-cqa-${code}`,
+    parameterName: canonicalName,
+    parameterCode: `CQA_${code}`,
+    section: testStage,
+    responsibility: bmr.responsibility,
+    specificationText: parsed?.specification ?? `${bmr.limits.lower ?? '—'} / ${bmr.limits.upper ?? '—'}`,
+    target: alias?.target ?? parsed?.target ?? 0,
+    lsl: alias?.lsl ?? parsed?.lsl ?? 0,
+    usl: alias?.usl ?? parsed?.usl ?? 0,
+    unit: alias?.unit ?? parsed?.unit ?? '',
+    resultType: cqaResultType(canonicalName),
+    criticality: cqaCriticality(canonicalName),
+  };
+}
+
+export function getOndansetronCqaOptionsForStage(testStage: string): OndansetronCqaOption[] {
+  const sections = CQA_STAGE_TO_BMR_SECTIONS[testStage] || [];
+  return getCqaParametersForStage(testStage).map((canonicalName) => {
+    const bmr = findBmrParameterForCanonical(canonicalName, sections);
+    return buildOndansetronCqaOption(canonicalName, testStage, bmr);
+  });
 }
 
 export function resolveOndansetronCqaDefaults(parameterName: string): Partial<OndansetronCqaOption> | null {

@@ -20,6 +20,7 @@ import {
   canApproveCpvConfiguration, canEditCpvConfiguration, canImportExportCpvConfiguration,
   isCpvConfigurationViewOnly,
 } from '@/lib/cpv-configuration-records';
+import { CQA_STAGE_PARAMETERS, CQA_TEST_STAGES } from '@/lib/cpv-cqa-monitoring';
 import {
   CONFIG_LIST_COLLECTIONS as LIST_COLS,
   createConfigListRecord, exportConfigurationJson, fetchCpvConfiguration,
@@ -358,7 +359,7 @@ export function ConfigurationPage() {
   const listDefaults: Record<string, DefaultValues<FieldValues>> = {
     product: { product: '', cpvRequired: true, reviewFrequency: 'Yearly', cpvOwner: 'production', qaReviewer: 'qa', finalApprover: 'head_qa', status: 'Active' },
     cpp: { parameterCode: '', parameterName: '', processStage: 'Manufacturing', targetValue: 0, lowerLimit: 0, upperLimit: 0, unit: '', frequency: 'Per Batch', criticality: 'Medium', autoDeviationRequired: false, autoCapaRequired: false, status: 'Active' },
-    cqa: { parameterCode: '', parameterName: '', testStage: 'Finished Product', targetValue: 0, lowerLimit: 0, upperLimit: 0, unit: '', resultType: 'Numeric', criticality: 'Medium', oosRequired: true, autoCapaRequired: false, status: 'Active' },
+    cqa: { parameterCode: '', parameterName: '', testStage: 'Finished Product Testing', targetValue: 0, lowerLimit: 0, upperLimit: 0, unit: '', resultType: 'Numeric', criticality: 'Medium', oosRequired: true, autoCapaRequired: false, status: 'Active' },
     limits: { ruleName: '', parameterType: 'CPP', moduleName: 'CPP Monitoring', alertLimitPercent: 80, actionLimitPercent: 95, repeatedFailureCount: 3, triggerDeviation: true, triggerOos: true, triggerCapa: false, status: 'Active' },
     'review-frequency': { product: 'All Products', moduleName: 'CPP', reviewFrequency: 'Quarterly', dueDay: 1, reminderBeforeDays: 7, escalationAfterDays: 3, responsibleRole: 'qa', reviewerRole: 'head_qa', status: 'Active' },
     'alert-rules': { ruleCode: '', ruleName: '', sourceModule: 'CPP Monitoring', condition: 'Value Outside Limit', priority: 'High', severity: 'Major', notifyRole: 'qa', escalationRole: 'head_qa', autoCreateDeviation: false, autoCreateOos: false, autoSuggestCapa: false, status: 'Active' },
@@ -670,7 +671,18 @@ export function ConfigurationPage() {
               {listSection === 'cqa' && (
                 <>
                   <TextField form={listForm} name="parameterCode" label="Parameter Code *" />
-                  <TextField form={listForm} name="parameterName" label="Parameter Name *" />
+                  <SelectField
+                    form={listForm}
+                    name="testStage"
+                    label="Test Stage *"
+                    options={[...CQA_TEST_STAGES]}
+                  />
+                  <SelectField
+                    form={listForm}
+                    name="parameterName"
+                    label="Parameter Name *"
+                    options={[...CQA_STAGE_PARAMETERS[(listForm.watch('testStage') as typeof CQA_TEST_STAGES[number]) || CQA_TEST_STAGES[1]]]}
+                  />
                   <TextField form={listForm} name="specificationNumber" label="Specification Number" />
                   <NumberField form={listForm} name="targetValue" label="Target Value *" />
                   <NumberField form={listForm} name="lowerLimit" label="Lower Limit *" />

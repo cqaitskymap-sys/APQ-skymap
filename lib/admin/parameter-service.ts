@@ -7,6 +7,7 @@ import {
   ADMIN_COLLECTIONS, DEFAULT_CPP_PARAMETERS, DEFAULT_CQA_PARAMETERS,
   DEFAULT_UTILITY_PARAMETERS,
 } from './constants';
+import { CQA_PARAMETER_STAGE_MAP } from '@/lib/cpv-cqa-monitoring';
 import type { Parameter, ParameterFormData } from './schemas';
 
 export interface ParameterAuditMeta {
@@ -415,7 +416,12 @@ export async function seedDefaultParameters(meta: ParameterAuditMeta): Promise<{
 
   const presets: ParameterFormData[] = [
     ...DEFAULT_CPP_PARAMETERS.map((n) => presetToForm(n, 'CPP', 'Manufacturing', 'Mixing')),
-    ...DEFAULT_CQA_PARAMETERS.map((n) => presetToForm(n, 'CQA', 'Quality Control', 'Finished Product Testing')),
+    ...DEFAULT_CQA_PARAMETERS.map((n) => presetToForm(
+      n,
+      'CQA',
+      'Quality Control',
+      (CQA_PARAMETER_STAGE_MAP[n]?.[0] || 'Finished Product Testing') as ParameterFormData['processStage'],
+    )),
     ...DEFAULT_UTILITY_PARAMETERS.map((n) => presetToForm(n, 'Utility Parameter', 'Utility', 'Utility Monitoring')),
   ];
 

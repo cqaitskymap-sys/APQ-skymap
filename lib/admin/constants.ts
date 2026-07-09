@@ -119,12 +119,9 @@ export const DEFAULT_CPP_PARAMETERS = [
 ] as const;
 
 export const DEFAULT_CQA_PARAMETERS = [
-  'Assay', 'pH', 'Description', 'Colour', 'Clarity', 'Extractable Volume',
-  'Sterility', 'Bacterial Endotoxin', 'Particulate Matter >=10µm',
-  'Particulate Matter >=25µm', 'Methyl Paraben Assay', 'Propyl Paraben Assay',
-  'Related Substances', 'Identification',
-  'Total Viable Count', 'Colour Index', 'Ondansetron Imp. D',
-  'Any Secondary Impurity', 'Sum of All Impurities',
+  'Description', 'pH', 'Weight per mL', 'Colour Index', 'Viscosity', 'Assay', 'Preservative Content',
+  'Identification', 'Extractable Vol (mL)', 'Particulate Matter', 'Bacterial Endotoxin Test', 'Sterility',
+  'Related Substance', 'API Assay (ODB)', 'Water/ LOD', 'Relative Substance',
 ] as const;
 
 export const DEFAULT_UTILITY_PARAMETERS = [

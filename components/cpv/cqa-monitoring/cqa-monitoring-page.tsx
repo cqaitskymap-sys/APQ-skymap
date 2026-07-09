@@ -9,11 +9,12 @@ import { useAuth } from '@/contexts/auth-context';
 import { cpvPermissions } from '@/lib/cpv';
 import {
   summarizeCqaResults, buildCqaChartSeries, CQA_TEST_STAGES, CQA_RESULT_STATUSES,
-  type CqaResultFormData, type CqaResultRecord,
+  buildCqaStageParameterOptions, isMicrobiologyCqaParameter,
+  type CqaResultFormData, type CqaResultRecord, type CqaStageParameterOption,
 } from '@/lib/cpv-cqa-monitoring';
 import {
   fetchCqaResults, fetchCqaBatchesForProduct,
-  fetchCqaParametersForProduct, createCqaResult, updateCqaResult,
+  createCqaResult, updateCqaResult,
   approveCqaResult, reviewCqaResult, bulkCreateCqaResults,
   logCqaExport, parameterTrendData,
 } from '@/lib/cpv-cqa-monitoring-service';
@@ -52,10 +53,10 @@ import type { ColumnDef } from '@/components/admin/admin-data-table';
 
 const CHART_COLORS = ['#2563eb', '#059669', '#d97706', '#dc2626', '#7c3aed'];
 
-type CqaParamOption = Parameter | OndansetronCqaOption;
+type CqaParamOption = Parameter | OndansetronCqaOption | CqaStageParameterOption;
 
-function isBmrCqaOption(p: CqaParamOption): p is OndansetronCqaOption {
-  return 'specificationText' in p && String(p.id).startsWith('bmr-cqa-');
+function isBmrCqaOption(p: CqaParamOption): p is OndansetronCqaOption | CqaStageParameterOption {
+  return 'specificationText' in p && (String(p.id).startsWith('bmr-cqa-') || String(p.id).startsWith('cqa-stage-'));
 }
 
 function paramOptionId(p: CqaParamOption): string {
@@ -152,20 +153,20 @@ export function CqaMonitoringPage() {
   const paramNames = useMemo(() => Array.from(new Set(results.map((r) => r.parameterName))), [results]);
   const trendData = useMemo(() => trendParam !== 'all' ? parameterTrendData(filtered, trendParam) : [], [filtered, trendParam]);
 
-  const resolveFormParameters = useCallback(async (
+  const resolveFormParameters = useCallback((
     productName: string,
-    productId: string,
+    _productId: string,
     testStage: string,
-  ): Promise<CqaParamOption[]> => {
-    const dbParams = await fetchCqaParametersForProduct(productName, productId, isMicroOnly, testStage);
-    if (isOndansetronProduct(productName)) {
-      const bmrOptions = getOndansetronCqaOptionsForStage(testStage);
-      if (!dbParams.length) return bmrOptions;
-      const dbNames = new Set(dbParams.map((p) => normalizeParameter(p).parameterName.toLowerCase()));
-      const extras = bmrOptions.filter((o) => !dbNames.has(o.parameterName.toLowerCase()));
-      return [...dbParams, ...extras];
+  ): CqaParamOption[] => {
+    let options: CqaParamOption[] = isOndansetronProduct(productName)
+      ? getOndansetronCqaOptionsForStage(testStage)
+      : buildCqaStageParameterOptions(testStage);
+
+    if (isMicroOnly) {
+      options = options.filter((p) => isMicrobiologyCqaParameter(paramOptionName(p)));
     }
-    return dbParams;
+
+    return options;
   }, [isMicroOnly]);
 
   const openCreate = () => {
@@ -199,19 +200,17 @@ export function CqaMonitoringPage() {
       stpNumber: p.stpNumber || f.stpNumber || '',
       manufacturingDate: f.manufacturingDate || new Date().toISOString().split('T')[0],
     }));
-    const [batches, params] = await Promise.all([
+    const [batches] = await Promise.all([
       fetchCqaBatchesForProduct(p.productName),
-      resolveFormParameters(p.productName, productId, stage),
     ]);
     setFormBatches(batches);
-    setFormParams(params);
+    setFormParams(resolveFormParameters(p.productName, productId, stage));
   };
 
-  const onFormStageChange = async (testStage: string) => {
+  const onFormStageChange = (testStage: string) => {
     setForm((f) => ({ ...f, testStage, parameterId: '', parameterCode: '', parameterName: '' }));
     if (formProductId && formProductName) {
-      const params = await resolveFormParameters(formProductName, formProductId, testStage);
-      setFormParams(params);
+      setFormParams(resolveFormParameters(formProductName, formProductId, testStage));
     }
   };
 
@@ -300,7 +299,7 @@ export function CqaMonitoringPage() {
     setBulkProductId(productId);
     const p = products.find((x) => x.id === productId);
     if (!p) return;
-    const params = await resolveFormParameters(p.productName, productId, bulkStage);
+    const params = resolveFormParameters(p.productName, productId, bulkStage);
     setBulkRows(params.map((param) => ({ param, observed: '', remarks: '' })));
     const batches = await fetchCqaBatchesForProduct(p.productName);
     setFormBatches(batches);
@@ -683,7 +682,7 @@ export function CqaMonitoringPage() {
                 if (p) {
                   const batches = await fetchCqaBatchesForProduct(p.productName);
                   setFormBatches(batches);
-                  const params = await resolveFormParameters(p.productName, v, bulkStage);
+                  const params = resolveFormParameters(p.productName, v, bulkStage);
                   setBulkRows(params.map((param) => ({ param, observed: '', remarks: '' })));
                 }
               }}>
@@ -702,7 +701,7 @@ export function CqaMonitoringPage() {
                 setBulkStage(v);
                 const p = products.find((x) => x.id === bulkProductId);
                 if (p) {
-                  const params = await resolveFormParameters(p.productName, bulkProductId, v);
+                  const params = resolveFormParameters(p.productName, bulkProductId, v);
                   setBulkRows(params.map((param) => ({ param, observed: '', remarks: '' })));
                 }
               }}>
