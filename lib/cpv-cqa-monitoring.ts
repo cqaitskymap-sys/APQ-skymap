@@ -278,26 +278,41 @@ export function cqaTestStagesMatch(a: string, b: string): boolean {
 /** Default mapping of CQA parameter names to applicable test stages. */
 export const CQA_PARAMETER_STAGE_MAP: Record<string, readonly string[]> = {
   Description: ['Finished Product Testing'],
+  Identification: ['Identification Testing', 'Finished Product Testing'],
   Colour: ['Finished Product Testing'],
   Clarity: ['In-Process Testing', 'Finished Product Testing'],
-  Identification: ['Identification Testing', 'Finished Product Testing'],
   pH: ['In-Process Testing', 'Finished Product Testing', 'Stability Testing'],
   'Extractable Volume': ['Finished Product Testing'],
+  'Extractable Volume (mL)': ['Finished Product Testing'],
   Assay: ['Assay Testing', 'Finished Product Testing', 'Stability Testing'],
+  'Assay (%)': ['Assay Testing', 'Finished Product Testing', 'Stability Testing'],
   'Related Substances': ['Related Substance Testing', 'Finished Product Testing'],
+  'Any Secondary Impurity (%)': ['Related Substance Testing', 'Finished Product Testing'],
+  'Sum of All Impurities (%)': ['Related Substance Testing', 'Finished Product Testing'],
+  'Ondansetron Imp. D (%)': ['Related Substance Testing', 'Finished Product Testing'],
   Sterility: ['Sterility Testing', 'Microbiology Testing', 'Finished Product Testing'],
   'Bacterial Endotoxin': ['Endotoxin Testing', 'Microbiology Testing', 'Finished Product Testing'],
+  'Bacterial Endotoxin (EU/mg)': ['Endotoxin Testing', 'Microbiology Testing', 'Finished Product Testing'],
   'Particulate Matter >=10µm': ['Particulate Matter Testing', 'Finished Product Testing'],
   'Particulate Matter >=25µm': ['Particulate Matter Testing', 'Finished Product Testing'],
+  'Particulate Matter — ≥10 µm (/mL)': ['Particulate Matter Testing', 'Finished Product Testing'],
+  'Particulate Matter — ≥25 µm (/mL)': ['Particulate Matter Testing', 'Finished Product Testing'],
+  'Particulate Matter — Visible': ['Particulate Matter Testing', 'Finished Product Testing'],
   'Methyl Paraben Assay': ['Preservative Testing', 'Finished Product Testing'],
   'Propyl Paraben Assay': ['Preservative Testing', 'Finished Product Testing'],
+  'Preservative — Methyl Paraben (%)': ['Preservative Testing', 'Finished Product Testing'],
+  'Preservative — Propyl Paraben (%)': ['Preservative Testing', 'Finished Product Testing'],
   'Preservative Content': ['Preservative Testing', 'Finished Product Testing'],
   'Visible Particles': ['Particulate Matter Testing', 'Finished Product Testing'],
   'Sub Visible Particles': ['Particulate Matter Testing', 'Finished Product Testing'],
   'Water Content': ['In-Process Testing', 'Finished Product Testing', 'Stability Testing'],
   Appearance: ['In-Process Testing', 'Finished Product Testing'],
   'Total Viable Count': ['Microbiology Testing'],
+  'Total Viable Count (CFU/100 mL)': ['Microbiology Testing'],
   'Colour Index': ['In-Process Testing', 'Finished Product Testing'],
+  'Colour Index (AU)': ['In-Process Testing', 'Finished Product Testing'],
+  'Weight/ml': ['In-Process Testing'],
+  'Weight per mL (g/mL)': ['In-Process Testing'],
   'Ondansetron Imp. D': ['Related Substance Testing', 'Finished Product Testing'],
   'Any Secondary Impurity': ['Related Substance Testing', 'Finished Product Testing'],
   'Sum of All Impurities': ['Related Substance Testing', 'Finished Product Testing'],
@@ -317,14 +332,19 @@ function stagesForParameterName(parameterName: string): string[] | null {
 
   if (lower.includes('sterility')) return ['Sterility Testing', 'Microbiology Testing', 'Finished Product Testing'];
   if (lower.includes('endotoxin')) return ['Endotoxin Testing', 'Microbiology Testing', 'Finished Product Testing'];
+  if (lower.includes('identification')) return ['Identification Testing', 'Finished Product Testing'];
   if (lower.includes('assay')) return ['Assay Testing', 'Finished Product Testing', 'Stability Testing'];
+  if (lower.includes('ph')) return ['In-Process Testing', 'Finished Product Testing', 'Stability Testing'];
+  if (lower.includes('extractable')) return ['Finished Product Testing'];
+  if (lower.includes('colour index') || lower.includes('weight/ml') || lower.includes('weight per ml')) {
+    return ['In-Process Testing', 'Finished Product Testing'];
+  }
   if (lower.includes('particulate') || lower.includes('particle')) {
     return ['Particulate Matter Testing', 'Finished Product Testing'];
   }
   if (lower.includes('paraben') || lower.includes('preservative')) {
     return ['Preservative Testing', 'Finished Product Testing'];
   }
-  if (lower.includes('identification')) return ['Identification Testing', 'Finished Product Testing'];
   if (lower.includes('related') || lower.includes('impurity') || lower.includes('imp.')) {
     return ['Related Substance Testing', 'Finished Product Testing'];
   }

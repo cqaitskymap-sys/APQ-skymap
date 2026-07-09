@@ -192,18 +192,21 @@ export const ONDANSETRON_INJECTION_BMR_SPEC: BmrSpecSection[] = [
   {
     section: 'FINISHED PRODUCT DATA',
     parameters: [
-      { srNo: 1, parameter: 'pH', limits: { lower: 3.300, upper: 4.000 }, responsibility: 'QA' },
-      { srNo: 2, parameter: 'Extractable Volume (mL)', limits: { lower: 'NLT 2.0', upper: null }, responsibility: 'QA' },
-      { srNo: 3, parameter: 'Particulate Matter — Visible', limits: { lower: 0, upper: 0 }, responsibility: 'QA' },
-      { srNo: 4, parameter: 'Particulate Matter — ≥10 µm (/mL)', limits: { lower: null, upper: 'NMT 6000' }, responsibility: 'QA' },
-      { srNo: 5, parameter: 'Particulate Matter — ≥25 µm (/mL)', limits: { lower: null, upper: 'NMT 600' }, responsibility: 'QA' },
-      { srNo: 6, parameter: 'Bacterial Endotoxin (EU/mg)', limits: { lower: null, upper: 'NMT 9.9' }, responsibility: 'QA' },
-      { srNo: 7, parameter: 'Ondansetron Imp. D (%)', limits: { lower: null, upper: 'NMT 0.12' }, responsibility: 'QA' },
-      { srNo: 8, parameter: 'Any Secondary Impurity (%)', limits: { lower: null, upper: 'NMT 0.2' }, responsibility: 'QA' },
-      { srNo: 9, parameter: 'Sum of All Impurities (%)', limits: { lower: null, upper: 'NMT 0.5' }, responsibility: 'QA' },
-      { srNo: 10, parameter: 'Assay (%)', limits: { lower: 95, upper: 105 }, responsibility: 'QA' },
-      { srNo: 11, parameter: 'Preservative — Methyl Paraben (%)', limits: { lower: 'NLT 80', upper: null }, responsibility: 'QA', remarks: '≥80% of label claim' },
-      { srNo: 12, parameter: 'Preservative — Propyl Paraben (%)', limits: { lower: 'NLT 80', upper: null }, responsibility: 'QA', remarks: '≥80% of label claim' },
+      { srNo: 1, parameter: 'Description', limits: { lower: 'Clear Solution', upper: 'Clear Solution' }, responsibility: 'QA' },
+      { srNo: 2, parameter: 'Identification', limits: { lower: 'Complies', upper: 'Complies' }, responsibility: 'QA' },
+      { srNo: 3, parameter: 'pH', limits: { lower: 3.300, upper: 4.000 }, responsibility: 'QA' },
+      { srNo: 4, parameter: 'Extractable Volume (mL)', limits: { lower: 'NLT 2.0', upper: null }, responsibility: 'QA' },
+      { srNo: 5, parameter: 'Particulate Matter — Visible', limits: { lower: 0, upper: 0 }, responsibility: 'QA' },
+      { srNo: 6, parameter: 'Particulate Matter — ≥10 µm (/mL)', limits: { lower: null, upper: 'NMT 6000' }, responsibility: 'QA' },
+      { srNo: 7, parameter: 'Particulate Matter — ≥25 µm (/mL)', limits: { lower: null, upper: 'NMT 600' }, responsibility: 'QA' },
+      { srNo: 8, parameter: 'Bacterial Endotoxin (EU/mg)', limits: { lower: null, upper: 'NMT 9.9' }, responsibility: 'QA' },
+      { srNo: 9, parameter: 'Sterility', limits: { lower: 'Pass', upper: 'Pass' }, responsibility: 'QA' },
+      { srNo: 10, parameter: 'Ondansetron Imp. D (%)', limits: { lower: null, upper: 'NMT 0.12' }, responsibility: 'QA' },
+      { srNo: 11, parameter: 'Any Secondary Impurity (%)', limits: { lower: null, upper: 'NMT 0.2' }, responsibility: 'QA' },
+      { srNo: 12, parameter: 'Sum of All Impurities (%)', limits: { lower: null, upper: 'NMT 0.5' }, responsibility: 'QA' },
+      { srNo: 13, parameter: 'Assay (%)', limits: { lower: 95, upper: 105 }, responsibility: 'QA' },
+      { srNo: 14, parameter: 'Preservative — Methyl Paraben (%)', limits: { lower: 'NLT 80', upper: null }, responsibility: 'QA', remarks: '≥80% of label claim' },
+      { srNo: 15, parameter: 'Preservative — Propyl Paraben (%)', limits: { lower: 'NLT 80', upper: null }, responsibility: 'QA', remarks: '≥80% of label claim' },
     ],
   },
 ];
@@ -447,6 +450,7 @@ export const ONDANSETRON_CQA_SPECS: Record<string, { target: number; lsl: number
   'Assay (%)': { target: 100, lsl: 97, usl: 103, unit: '%' },
   pH: { target: 3.65, lsl: 3.3, usl: 4.0, unit: '' },
   Description: { target: 1, lsl: 1, usl: 1, unit: 'Pass/Fail' },
+  Identification: { target: 1, lsl: 1, usl: 1, unit: 'Complies/Does Not Comply' },
   'Extractable Volume': { target: 2.1, lsl: 2.0, usl: 2.5, unit: 'mL' },
   'Extractable Volume (mL)': { target: 2.1, lsl: 2.0, usl: 2.5, unit: 'mL' },
   'Bacterial Endotoxin': { target: 4.95, lsl: 0, usl: 9.9, unit: 'EU/mg' },
@@ -505,7 +509,10 @@ export interface OndansetronCqaOption {
 }
 
 function cqaResultType(name: string): OndansetronCqaOption['resultType'] {
-  if (name === 'Description' || name.startsWith('Particulate Matter — Visible')) return 'Pass/Fail';
+  if (name === 'Description' || name === 'Sterility' || name.startsWith('Particulate Matter — Visible')) {
+    return 'Pass/Fail';
+  }
+  if (name === 'Identification') return 'Complies/Does Not Comply';
   return 'Numeric';
 }
 
