@@ -410,10 +410,42 @@ export interface ProductImportRow extends Partial<ProductFormData> {
 
 function splitImportLine(line: string): string[] {
   const hasTabs = line.includes('\t');
-  if (hasTabs) return line.split('\t').map((c) => c.trim());
-  return line
+  if (hasTabs) return line.split('\t').map((c) => c.trim()).filter(Boolean);
+  return (line
     .match(/("([^"]|"")*"|[^,]*)/g)
-    ?.map((c) => c.replace(/^"|"$/g, '').replace(/""/g, '"').trim()) || [];
+    ?.map((c) => c.replace(/^"|"$/g, '').replace(/""/g, '"').trim())
+    .filter(Boolean) || []);
+}
+
+const IMPORT_PRODUCT_CODE = /\b([A-Z]{2,6}-\d+)\b/i;
+const IMPORT_MFR = /\b(MFR\/\S+)/i;
+const IMPORT_BPR = /\b(B(?:MR|PR)\/\S+)/i;
+
+function isImportProductCode(value: string): boolean {
+  return /^[A-Z]{2,6}-\d+$/i.test(value.trim());
+}
+
+function normalizeImportBprNumber(value: string): string {
+  return value.trim().replace(/^BMR/i, 'BPR');
+}
+
+function parseSmartImportLine(line: string) {
+  const trimmed = line.trim().replace(/^\d+\.\s*/, '');
+  const codeMatch = trimmed.match(IMPORT_PRODUCT_CODE);
+  const mfrMatch = trimmed.match(IMPORT_MFR);
+  const bprMatch = trimmed.match(IMPORT_BPR);
+
+  const productCode = codeMatch?.[1]?.trim() || '';
+  const mfrNumber = mfrMatch?.[1]?.trim() || '';
+  const bprNumber = bprMatch?.[1] ? normalizeImportBprNumber(bprMatch[1]) : '';
+
+  let productName = trimmed;
+  if (codeMatch && codeMatch.index !== undefined) {
+    productName = trimmed.slice(0, codeMatch.index).trim();
+  }
+  productName = productName.replace(/\s+/g, ' ').trim();
+
+  return { productCode, productName, mfrNumber, bprNumber, remarks: '' };
 }
 
 function mergeMultilineImportRows(lines: string[]): string[] {
@@ -429,6 +461,7 @@ function mergeMultilineImportRows(lines: string[]): string[] {
       continue;
     }
     if (buffer) buffer = `${buffer} ${trimmed}`;
+    else merged.push(trimmed);
   }
 
   if (buffer) merged.push(buffer);
@@ -475,9 +508,9 @@ function parseImportStatus(remarks: string): ProductFormData['productStatus'] {
 }
 
 function parseSmartImportColumns(cols: string[]) {
-  const productCode = cols.find((c) => /^FAMP[E]?-/i.test(c))?.trim() || '';
+  const productCode = cols.find((c) => isImportProductCode(c))?.trim() || '';
   const mfrNumber = cols.find((c) => /^MFR\//i.test(c))?.trim() || '';
-  const bprNumber = cols.find((c) => /^BPR\//i.test(c))?.trim() || '';
+  const bprNumber = normalizeImportBprNumber(cols.find((c) => /^B(?:MR|PR)\//i.test(c)) || '');
   const codeIdx = productCode ? cols.indexOf(productCode) : -1;
   const productName = (codeIdx > 0 ? cols.slice(0, codeIdx) : cols.slice(1))
     .join(' ')
@@ -562,13 +595,16 @@ function rowToImportProduct(
 
 export function parseProductImportRows(text: string): ProductImportRow[] {
   const lines = mergeMultilineImportRows(text.trim().split(/\r?\n/));
-  if (lines.length < 2) return [];
+  if (lines.length === 0) return [];
 
   const headers = splitImportLine(lines[0]).map((h) => h.replace(/^"|"$/g, '').trim().toLowerCase());
-  const isTabularHeader = headers.some((h) => h.includes('product name') || h.includes('product code'));
-  const idx = (name: string) => headers.findIndex((h) => h.includes(name));
-  const seenCodes = new Set<string>();
+  const isTabularHeader = headers.some((h) =>
+    h.includes('product name') || h.includes('product code') || /^s\.?\s*no/.test(h),
+  );
+  const dataLines = isTabularHeader ? lines.slice(1) : lines;
+  if (dataLines.length === 0) return [];
 
+  const idx = (name: string) => headers.findIndex((h) => h.includes(name));
   const codeI = idx('product code') >= 0 ? idx('product code') : idx('code');
   const nameI = idx('product name') >= 0 ? idx('product name') : idx('name');
   const genericI = idx('generic');
@@ -580,11 +616,17 @@ export function parseProductImportRows(text: string): ProductImportRow[] {
   const shelfI = idx('shelf');
   const remarksI = idx('remark');
 
-  return lines.slice(1)
+  return dataLines
     .map((line): ProductImportRow | null => {
       const cols = splitImportLine(line);
-      if (!isTabularHeader || cols.find((c) => /^FAMP[E]?-/i.test(c))) {
-        const smart = parseSmartImportColumns(cols);
+      const useSmart = !isTabularHeader
+        || !line.includes('\t')
+        || cols.some((c) => isImportProductCode(c));
+
+      if (useSmart) {
+        const smart = !line.includes('\t')
+          ? parseSmartImportLine(line)
+          : parseSmartImportColumns(cols);
         if (!smart.productCode || !smart.productName) return null;
         return {
           productCode: smart.productCode,

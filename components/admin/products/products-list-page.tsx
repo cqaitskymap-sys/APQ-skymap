@@ -129,6 +129,10 @@ export function ProductsListPage() {
     setImporting(false);
     if (result.imported) toast.success(`Imported ${result.imported} product(s)`);
     if (result.errors.length) toast.warning(`${result.errors.length} row(s) failed`);
+    if (!result.imported && !result.errors.length) {
+      toast.error('No valid product rows found. Include Product Name, Product Code (e.g. HMF-0179), MFR No., and BPR/BMR No.');
+      return;
+    }
     if (result.imported) {
       setPasteText('');
       setPasteOpen(false);
@@ -309,14 +313,15 @@ export function ProductsListPage() {
           <DialogHeader>
             <DialogTitle>Paste Product List</DialogTitle>
             <DialogDescription>
-              Paste tab-separated rows with Product Name, Product Code, MFR No., and BPR No. ML values in product name move to Strength automatically.
+              Paste rows with Product Name, Product Code (e.g. FAMP-0029 or HMF-0179), MFR No., and BPR/BMR No.
+              Tab-separated or space-separated lines work. ML values in the product name move to Strength automatically.
             </DialogDescription>
           </DialogHeader>
           <Textarea
             value={pasteText}
             onChange={(e) => setPasteText(e.target.value)}
             rows={12}
-            placeholder="Product Name&#9;Product Code&#9;MFR No.&#9;BPR No."
+            placeholder="Phenytoin inj. Bp 2ml HMF-0179 MFR/LA/183 BMR/LA/183&#10;Or tab-separated: Product Name&#9;Product Code&#9;MFR No.&#9;BPR No."
           />
           <DialogFooter>
             <Button variant="outline" onClick={() => setPasteOpen(false)}>Cancel</Button>
