@@ -21,6 +21,12 @@ import { fetchActiveCpvProductsForBatch as fetchProducts } from '@/lib/cpv-batch
 import type { CpvProductRecord } from '@/lib/cpv-product-master';
 import type { Parameter } from '@/lib/admin/schemas';
 import { buildParameterId, normalizeParameter } from '@/lib/admin/parameter-service';
+import {
+  getOndansetronCppOptionsForStage,
+  isOndansetronProduct,
+  resolveOndansetronCppDefaults,
+  type OndansetronCppOption,
+} from '@/lib/ondansetron-bmr-spec';
 import { downloadCsv } from '@/lib/export-utils';
 import { CpvPageHeader } from '@/components/cpv/product-master/cpv-page-header';
 import { ResponsiveDataTable } from '@/components/cpv/product-master/responsive-data-table';
@@ -46,8 +52,19 @@ import type { ColumnDef } from '@/components/admin/admin-data-table';
 
 const CHART_COLORS = ['#2563eb', '#059669', '#d97706', '#dc2626', '#7c3aed'];
 
-function paramOptionId(p: Parameter): string {
+type CppParamOption = Parameter | OndansetronCppOption;
+
+function isBmrCppOption(p: CppParamOption): p is OndansetronCppOption {
+  return 'specificationText' in p && String(p.id).startsWith('bmr-cpp-');
+}
+
+function paramOptionId(p: CppParamOption): string {
+  if (isBmrCppOption(p)) return p.id;
   return p.id || p.parameterId || buildParameterId(p.parameterCode);
+}
+
+function paramOptionName(p: CppParamOption): string {
+  return p.parameterName || '';
 }
 
 function RiskBadge({ level }: { level: string }) {
@@ -86,14 +103,15 @@ export function CppMonitoringPage() {
   const [trendParam, setTrendParam] = useState('all');
 
   const [formProductId, setFormProductId] = useState('');
+  const [formProductName, setFormProductName] = useState('');
   const [formBatches, setFormBatches] = useState<Awaited<ReturnType<typeof fetchCppBatchesForProduct>>>([]);
-  const [formParams, setFormParams] = useState<Parameter[]>([]);
+  const [formParams, setFormParams] = useState<CppParamOption[]>([]);
   const [form, setForm] = useState<Partial<CppResultFormData>>({});
 
   const [bulkProductId, setBulkProductId] = useState('');
   const [bulkBatchId, setBulkBatchId] = useState('');
   const [bulkStage, setBulkStage] = useState<string>(CPP_PROCESS_STAGES[0]);
-  const [bulkRows, setBulkRows] = useState<Array<{ param: Parameter; observed: string; remarks: string }>>([]);
+  const [bulkRows, setBulkRows] = useState<Array<{ param: CppParamOption; observed: string; remarks: string }>>([]);
 
   const actor = { id: user?.uid || 'system', name: profile?.full_name || 'System', role: role || '' };
 
@@ -133,16 +151,26 @@ export function CppMonitoringPage() {
   const paramNames = useMemo(() => Array.from(new Set(results.map((r) => r.parameterName))), [results]);
   const trendData = useMemo(() => trendParam !== 'all' ? parameterTrendData(filtered, trendParam) : [], [filtered, trendParam]);
 
-  const filteredFormParams = useMemo(() => {
-    const stage = form.processStage;
-    if (!stage || !formParams.length) return formParams;
-    const forStage = formParams.filter((p) => !p.processStage || p.processStage === stage);
-    return forStage.length ? forStage : formParams;
-  }, [formParams, form.processStage]);
+  const resolveFormParameters = useCallback(async (
+    productName: string,
+    productId: string,
+    processStage: string,
+  ): Promise<CppParamOption[]> => {
+    const dbParams = await fetchCppParametersForProduct(productName, productId, processStage);
+    if (isOndansetronProduct(productName)) {
+      const bmrOptions = getOndansetronCppOptionsForStage(processStage);
+      if (!dbParams.length) return bmrOptions;
+      const dbNames = new Set(dbParams.map((p) => normalizeParameter(p).parameterName.toLowerCase()));
+      const extras = bmrOptions.filter((o) => !dbNames.has(o.parameterName.toLowerCase()));
+      return [...dbParams, ...extras];
+    }
+    return dbParams;
+  }, []);
 
   const openCreate = () => {
     setEditing(null);
     setFormProductId('');
+    setFormProductName('');
     setFormBatches([]);
     setFormParams([]);
     setForm({
@@ -160,6 +188,7 @@ export function CppMonitoringPage() {
     setFormProductId(productId);
     const p = products.find((x) => x.id === productId);
     if (!p) return;
+    setFormProductName(p.productName);
     setForm((f) => ({
       ...f,
       cpvProductId: productId,
@@ -169,9 +198,10 @@ export function CppMonitoringPage() {
       strength: p.strength,
       dosageForm: p.dosageForm,
     }));
+    const stage = form.processStage || CPP_PROCESS_STAGES[0];
     const [batches, params] = await Promise.all([
       fetchCppBatchesForProduct(p.productName),
-      fetchCppParametersForProduct(p.productName, productId),
+      resolveFormParameters(p.productName, productId, stage),
     ]);
     setFormBatches(batches);
     setFormParams(params);
@@ -186,7 +216,7 @@ export function CppMonitoringPage() {
     }));
   };
 
-  const onFormStageChange = (stage: string) => {
+  const onFormStageChange = async (stage: string) => {
     setForm((f) => ({
       ...f,
       processStage: stage,
@@ -199,30 +229,58 @@ export function CppMonitoringPage() {
       upperLimit: undefined,
       targetValue: undefined,
     }));
+    if (formProductId) {
+      const p = products.find((x) => x.id === formProductId);
+      if (p) {
+        const params = await resolveFormParameters(p.productName, formProductId, stage);
+        setFormParams(params);
+      }
+    }
   };
 
   const onFormParamChange = (paramId: string) => {
     const p = formParams.find((x) => paramOptionId(x) === paramId);
     if (!p) return;
+
+    if (isBmrCppOption(p)) {
+      setForm((f) => ({
+        ...f,
+        parameterId: paramId,
+        parameterCode: p.parameterCode,
+        parameterName: p.parameterName,
+        parameterCategory: p.section,
+        lowerLimit: p.lsl,
+        upperLimit: p.usl,
+        targetValue: p.target,
+        unit: p.unit,
+        resultType: p.resultType === 'Text' ? 'Text' : 'Numeric',
+        criticality: p.criticality,
+        processStage: f.processStage || p.processStage || CPP_PROCESS_STAGES[0],
+      }));
+      return;
+    }
+
     const n = normalizeParameter(p);
+    const ond = isOndansetronProduct(formProductName)
+      ? resolveOndansetronCppDefaults(n.parameterName) : null;
     setForm((f) => ({
       ...f,
       parameterId: paramId,
       parameterCode: n.parameterCode,
       parameterName: n.parameterName,
       parameterCategory: n.parameterCategory,
-      lowerLimit: Number(n.lsl || n.lowerLimit) || 0,
-      upperLimit: Number(n.usl || n.upperLimit) || 0,
-      targetValue: Number(n.target || n.targetValue) || 0,
-      unit: n.unit,
+      lowerLimit: ond?.lsl ?? (Number(n.lsl || n.lowerLimit) || 0),
+      upperLimit: ond?.usl ?? (Number(n.usl || n.upperLimit) || 0),
+      targetValue: ond?.target ?? (Number(n.target || n.targetValue) || 0),
+      unit: ond?.unit || n.unit,
       resultType: (n.resultType as CppResultFormData['resultType']) || 'Numeric',
-      criticality: (n.criticality as CppResultFormData['criticality']) || 'Major',
+      criticality: (ond?.criticality || n.criticality as CppResultFormData['criticality']) || 'Major',
       alertLimitLow: n.alertLimitLow ? Number(n.alertLimitLow) : undefined,
       alertLimitHigh: n.alertLimitHigh ? Number(n.alertLimitHigh) : undefined,
       actionLimitLow: n.actionLimitLow ? Number(n.actionLimitLow) : undefined,
       actionLimitHigh: n.actionLimitHigh ? Number(n.actionLimitHigh) : undefined,
       frequency: n.frequency,
-      processStage: n.processStage || f.processStage || CPP_PROCESS_STAGES[0],
+      processStage: f.processStage || ond?.processStage || n.processStage || CPP_PROCESS_STAGES[0],
     }));
   };
 
@@ -250,7 +308,7 @@ export function CppMonitoringPage() {
     setBulkProductId(productId);
     const p = products.find((x) => x.id === productId);
     if (!p) return;
-    const params = await fetchCppParametersForProduct(p.productName, productId);
+    const params = await resolveFormParameters(p.productName, productId, bulkStage);
     setBulkRows(params.map((param) => ({ param, observed: '', remarks: '' })));
     setBulkOpen(true);
   };
@@ -261,7 +319,37 @@ export function CppMonitoringPage() {
     const batch = formBatches.find((b) => b.id === bulkBatchId) || (await fetchCppBatchesForProduct(p.productName)).find((b) => b.id === bulkBatchId);
     if (!batch) { toast.error('Invalid batch'); return; }
     const rows: CppResultFormData[] = bulkRows.filter((r) => r.observed).map((row) => {
+      if (isBmrCppOption(row.param)) {
+        const n = row.param;
+        return {
+          cpvProductId: bulkProductId,
+          productName: p.productName,
+          productCode: p.productCode,
+          batchNumber: batch.batchNumber,
+          manufacturingDate: batch.manufacturingDate,
+          processStage: bulkStage,
+          parameterId: n.id,
+          parameterCode: n.parameterCode,
+          parameterName: n.parameterName,
+          parameterCategory: n.section,
+          observedValue: Number(row.observed),
+          targetValue: n.target,
+          lowerLimit: n.lsl,
+          upperLimit: n.usl,
+          unit: n.unit,
+          resultType: (n.resultType === 'Text' ? 'Text' : 'Numeric') as CppResultFormData['resultType'],
+          frequency: 'Per Batch',
+          criticality: n.criticality,
+          observationDateTime: new Date().toISOString(),
+          recordedBy: profile?.full_name || '',
+          reviewedBy: '',
+          reviewDate: '',
+          remarks: row.remarks,
+        };
+      }
       const n = normalizeParameter(row.param);
+      const ond = isOndansetronProduct(p.productName)
+        ? resolveOndansetronCppDefaults(n.parameterName) : null;
       return {
         cpvProductId: bulkProductId,
         productName: p.productName,
@@ -274,13 +362,13 @@ export function CppMonitoringPage() {
         parameterName: n.parameterName,
         parameterCategory: n.parameterCategory,
         observedValue: Number(row.observed),
-        targetValue: Number(n.target || n.targetValue) || 0,
-        lowerLimit: Number(n.lsl) || 0,
-        upperLimit: Number(n.usl) || 0,
-        unit: n.unit,
+        targetValue: ond?.target ?? (Number(n.target || n.targetValue) || 0),
+        lowerLimit: ond?.lsl ?? (Number(n.lsl) || 0),
+        upperLimit: ond?.usl ?? (Number(n.usl) || 0),
+        unit: ond?.unit || n.unit,
         resultType: (n.resultType as CppResultFormData['resultType']) || 'Numeric',
         frequency: n.frequency,
-        criticality: (n.criticality as CppResultFormData['criticality']) || 'Major',
+        criticality: (ond?.criticality || n.criticality as CppResultFormData['criticality']) || 'Major',
         observationDateTime: new Date().toISOString(),
         recordedBy: profile?.full_name || '',
         reviewedBy: '',
@@ -430,6 +518,7 @@ export function CppMonitoringPage() {
                       setEditing(row);
                       setForm(row);
                       setFormProductId(row.cpvProductId);
+                      setFormProductName(row.productName);
                       void onFormProductChange(row.cpvProductId);
                       setFormOpen(true);
                     }}><Pencil className="h-4 w-4" /></Button>
@@ -466,7 +555,7 @@ export function CppMonitoringPage() {
               </Select>
             </div>
             <div><Label>Process Stage *</Label>
-              <Select value={form.processStage || ''} onValueChange={onFormStageChange}>
+              <Select value={form.processStage || ''} onValueChange={(v) => void onFormStageChange(v)}>
                 <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
                 <SelectContent>{CPP_PROCESS_STAGES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
               </Select>
@@ -479,8 +568,8 @@ export function CppMonitoringPage() {
               >
                 <SelectTrigger className="mt-1"><SelectValue placeholder={formProductId ? 'Parameter' : 'Select product first'} /></SelectTrigger>
                 <SelectContent>
-                  {filteredFormParams.map((p) => (
-                    <SelectItem key={paramOptionId(p)} value={paramOptionId(p)}>{p.parameterName}</SelectItem>
+                  {formParams.map((p) => (
+                    <SelectItem key={paramOptionId(p)} value={paramOptionId(p)}>{paramOptionName(p)}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -521,7 +610,7 @@ export function CppMonitoringPage() {
                 if (p) {
                   const batches = await fetchCppBatchesForProduct(p.productName);
                   setFormBatches(batches);
-                  const params = await fetchCppParametersForProduct(p.productName, v);
+                  const params = await resolveFormParameters(p.productName, v, bulkStage);
                   setBulkRows(params.map((param) => ({ param, observed: '', remarks: '' })));
                 }
               }}>
@@ -536,7 +625,14 @@ export function CppMonitoringPage() {
               </Select>
             </div>
             <div><Label>Process Stage</Label>
-              <Select value={bulkStage} onValueChange={setBulkStage}>
+              <Select value={bulkStage} onValueChange={async (v) => {
+                setBulkStage(v);
+                const p = products.find((x) => x.id === bulkProductId);
+                if (p) {
+                  const params = await resolveFormParameters(p.productName, bulkProductId, v);
+                  setBulkRows(params.map((param) => ({ param, observed: '', remarks: '' })));
+                }
+              }}>
                 <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
                 <SelectContent>{CPP_PROCESS_STAGES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
               </Select>
@@ -546,10 +642,22 @@ export function CppMonitoringPage() {
             <TableHeader><TableRow><TableHead>Parameter</TableHead><TableHead>Target</TableHead><TableHead>LCL/UCL</TableHead><TableHead>Observed</TableHead><TableHead>Remarks</TableHead></TableRow></TableHeader>
             <TableBody>
               {bulkRows.map((row, i) => {
+                if (isBmrCppOption(row.param)) {
+                  const n = row.param;
+                  return (
+                    <TableRow key={paramOptionId(row.param) || i}>
+                      <TableCell>{paramOptionName(row.param)}</TableCell>
+                      <TableCell>{n.target}</TableCell>
+                      <TableCell>{`${n.lsl}/${n.usl}`}</TableCell>
+                      <TableCell><Input value={row.observed} onChange={(e) => setBulkRows((rows) => rows.map((r, j) => j === i ? { ...r, observed: e.target.value } : r))} /></TableCell>
+                      <TableCell><Input value={row.remarks} onChange={(e) => setBulkRows((rows) => rows.map((r, j) => j === i ? { ...r, remarks: e.target.value } : r))} /></TableCell>
+                    </TableRow>
+                  );
+                }
                 const n = normalizeParameter(row.param);
                 return (
-                  <TableRow key={row.param.id || i}>
-                    <TableCell>{n.parameterName}</TableCell>
+                  <TableRow key={paramOptionId(row.param) || i}>
+                    <TableCell>{paramOptionName(row.param)}</TableCell>
                     <TableCell>{n.target || n.targetValue}</TableCell>
                     <TableCell>{n.lsl}/{n.usl}</TableCell>
                     <TableCell><Input value={row.observed} onChange={(e) => setBulkRows((rows) => rows.map((r, j) => j === i ? { ...r, observed: e.target.value } : r))} /></TableCell>

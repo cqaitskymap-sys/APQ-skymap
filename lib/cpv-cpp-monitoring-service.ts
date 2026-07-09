@@ -19,6 +19,7 @@ import {
   buildCppResultId,
   evaluateCppStatus,
   evaluateCppRiskLevel,
+  parameterMatchesCppProcessStage,
   type CppResultFormData,
   type CppResultRecord,
 } from '@/lib/cpv-cpp-monitoring';
@@ -174,6 +175,7 @@ export async function fetchCppResultById(id: string): Promise<CppResultRecord | 
 export async function fetchCppParametersForProduct(
   productName: string,
   cpvProductId?: string,
+  processStage?: string,
 ): Promise<Parameter[]> {
   try {
     const all = await fetchParameters();
@@ -195,8 +197,14 @@ export async function fetchCppParametersForProduct(
       const link = p.productLink || p.product || '';
       return !link || link === productName || link === 'All Products';
     });
-    if (byProduct.length) return byProduct;
-    return cpp;
+    let list = byProduct.length ? byProduct : cpp;
+    if (processStage) {
+      list = list.filter((p) => {
+        const n = normalizeParameter(p);
+        return parameterMatchesCppProcessStage(n.parameterName, processStage, n.processStage);
+      });
+    }
+    return list;
   } catch {
     return [];
   }

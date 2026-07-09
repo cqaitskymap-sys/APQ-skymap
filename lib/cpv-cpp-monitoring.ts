@@ -199,3 +199,148 @@ export function buildChartSeries(results: CppResultRecord[]) {
 
   return { complianceTrend, parameterNonCompliance, stageNonCompliance, batchHealth, riskDistribution };
 }
+
+function normalizeCppProcessStageLabel(stage: string): string {
+  return stage.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+export function cppProcessStagesMatch(a: string, b: string): boolean {
+  return normalizeCppProcessStageLabel(a) === normalizeCppProcessStageLabel(b);
+}
+
+/** Default mapping of CPP parameter names to applicable process stages. */
+export const CPP_PARAMETER_STAGE_MAP: Record<string, readonly string[]> = {
+  // Dispensing
+  'Temperature (°C)': ['Dispensing', 'Environmental Monitoring'],
+  'Relative Humidity (%)': ['Dispensing', 'Environmental Monitoring'],
+  // Sterilization
+  'Cleaned MP Hold Time (hr)': ['Sterilization'],
+  'Sterilization Temperature — MP (°C)': ['Sterilization'],
+  'Sterilization Hold Time — MP (min)': ['Sterilization'],
+  'Hold Time of Sterilized — MP (hr)': ['Sterilization'],
+  'Sterilization Temperature — MV (°C)': ['Sterilization'],
+  'Sterilization Hold Time — MV (min)': ['Sterilization'],
+  'Hold Time of Sterilized — MV (hr)': ['Sterilization'],
+  'Sterilization Temperature — HV/BV (°C)': ['Sterilization'],
+  'Sterilization Hold Time — HV/BV (min)': ['Sterilization'],
+  'Hold Time of Sterilized — HV/BV (hr)': ['Sterilization'],
+  'Sterilization Temperature': ['Sterilization'],
+  'Sterilization Time': ['Sterilization'],
+  'Sterile Hold Time': ['Sterilization', 'Filling'],
+  // Vial Washing
+  'Compressed Air Pressure (MPa)': ['Vial Washing'],
+  'Recycled WFI-I Pressure (MPa)': ['Vial Washing'],
+  'Recycled WFI-II Pressure (MPa)': ['Vial Washing'],
+  'Fresh WFI Pressure (MPa)': ['Vial Washing'],
+  // Depyrogenation
+  'Preheat Zone DP (Pa)': ['Depyrogenation'],
+  'Preheat Zone Temperature (°C)': ['Depyrogenation'],
+  'Heating Zone DP (Pa)': ['Depyrogenation'],
+  'Heating Zone Temperature (°C)': ['Depyrogenation'],
+  'Cooling Zone DP (Pa)': ['Depyrogenation'],
+  'Cooling Zone Temperature (°C)': ['Depyrogenation'],
+  'Tunnel Temperature Zone 1': ['Depyrogenation'],
+  'Tunnel Temperature Zone 2': ['Depyrogenation'],
+  'Tunnel Temperature Zone 3': ['Depyrogenation'],
+  // Mixing
+  'Mixing RPM': ['Mixing'],
+  'Mixing Time (min)': ['Mixing'],
+  'Mixing Time': ['Mixing'],
+  'Mixing Volume (L)': ['Mixing'],
+  'Mixing Temperature': ['Mixing'],
+  'Bulk Hold Time (hr)': ['Mixing', 'Filtration'],
+  'Bulk Hold Time': ['Mixing', 'Filtration'],
+  'Bulk Yield': ['Mixing', 'Filtration'],
+  // Filtration
+  'Filter Make': ['Filtration'],
+  'Primary Integrity — Pre (BPT) (mbar)': ['Filtration'],
+  'Primary Integrity — Post (BPT) (mbar)': ['Filtration'],
+  'Secondary Integrity — Pre (BPT) (mbar)': ['Filtration'],
+  'Secondary Integrity — Post (BPT) (mbar)': ['Filtration'],
+  'Filtration Pressure (bar) — Min': ['Filtration'],
+  'Filtration Pressure (bar) — Max': ['Filtration'],
+  'Filtration Pressure': ['Filtration'],
+  'Filtration Time (min)': ['Filtration'],
+  'Filtration Time': ['Filtration'],
+  'Hold Tank Volume (L)': ['Filtration'],
+  'Solution Hold Time (min)': ['Filtration'],
+  'Filtration Yield (%)': ['Filtration'],
+  'Filtration Yield': ['Filtration'],
+  // Filling
+  'Fill Volume (mL)': ['Filling'],
+  'Fill Volume': ['Filling'],
+  'N₂ Pressure Pre-Fill (kg/cm²)': ['Filling'],
+  'Nitrogen Pressure': ['Filling'],
+  'Machine Speed (ampoules/min)': ['Filling'],
+  'Filling Speed': ['Filling'],
+  'NVPC — 0.5 µm (particles/m³)': ['Filling'],
+  'NVPC — 5 µm (particles/m³)': ['Filling'],
+  'Units Filled (Nos.)': ['Filling'],
+  'Filling Time (hr)': ['Filling'],
+  'Max Filled Nos. (calc.)': ['Filling'],
+  'Filling Yield (%)': ['Filling'],
+  'Filling Yield': ['Filling'],
+  // Packing / Environmental
+  'Packing Yield': ['Packing'],
+  'Room Temperature': ['Environmental Monitoring'],
+  'Relative Humidity': ['Environmental Monitoring'],
+  'Differential Pressure': ['Environmental Monitoring'],
+  'WFI Pressure': ['Utility Monitoring'],
+  'Compressed Air Pressure': ['Utility Monitoring', 'Vial Washing'],
+  'Hold Time': ['Mixing', 'Filtration', 'Sterilization', 'Filling'],
+};
+
+function stagesForCppParameterName(parameterName: string): string[] | null {
+  const exact = CPP_PARAMETER_STAGE_MAP[parameterName];
+  if (exact) return [...exact];
+
+  const lower = parameterName.toLowerCase();
+  for (const [key, stages] of Object.entries(CPP_PARAMETER_STAGE_MAP)) {
+    const keyLower = key.toLowerCase();
+    if (lower === keyLower || lower.includes(keyLower) || keyLower.includes(lower)) {
+      return [...stages];
+    }
+  }
+
+  if (lower.includes('mixing')) return ['Mixing'];
+  if (lower.includes('filtration') || lower.includes('filter') || lower.includes('integrity')) return ['Filtration'];
+  if (lower.includes('steril')) return ['Sterilization'];
+  if (lower.includes('preheat') || lower.includes('heating zone') || lower.includes('cooling zone')) return ['Depyrogenation'];
+  if (lower.includes('wfi') && lower.includes('pressure')) return ['Vial Washing'];
+  if (lower.includes('fill volume') || lower.includes('filling speed') || lower.includes('machine speed')
+    || lower.includes('nvpc') || lower.includes('units filled') || (lower.includes('fill') && !lower.includes('filter'))) {
+    return ['Filling'];
+  }
+  if (lower.includes('packing') || (lower.includes('pack') && !lower.includes('package'))) return ['Packing'];
+  if (lower.includes('tunnel') || lower.includes('depyrogen')) return ['Depyrogenation'];
+  if (lower.includes('vial wash')) return ['Vial Washing'];
+  if (lower.includes('sealing') || lower.includes('seal')) return ['Sealing'];
+  if (lower.includes('dispens')) return ['Dispensing'];
+  if (lower.includes('ph adjust')) return ['pH Adjustment'];
+  if (lower.includes('visual inspect')) return ['Visual Inspection'];
+  if (lower.includes('room temp') || lower.includes('humidity') || lower.includes('differential pressure')) {
+    return ['Environmental Monitoring'];
+  }
+  if (lower.includes('compressed air') || lower.includes('wfi') || lower.includes('utility')) {
+    return ['Utility Monitoring'];
+  }
+  if (lower.includes('yield') && lower.includes('bulk')) return ['Mixing', 'Filtration'];
+  if (lower.includes('yield') && lower.includes('filling')) return ['Filling'];
+  if (lower.includes('yield') && lower.includes('packing')) return ['Packing'];
+
+  return null;
+}
+
+export function parameterMatchesCppProcessStage(
+  parameterName: string,
+  processStage: string,
+  parameterProcessStage = '',
+): boolean {
+  if (!processStage) return true;
+  if (parameterProcessStage && cppProcessStagesMatch(parameterProcessStage, processStage)) return true;
+
+  const mappedStages = stagesForCppParameterName(parameterName);
+  if (mappedStages?.some((stage) => cppProcessStagesMatch(stage, processStage))) return true;
+
+  return false;
+}

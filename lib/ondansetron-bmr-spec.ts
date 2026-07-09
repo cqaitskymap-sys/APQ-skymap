@@ -105,32 +105,47 @@ export const ONDANSETRON_INJECTION_BMR_SPEC: BmrSpecSection[] = [
     ],
   },
   {
-    section: 'STERILIZATION & WASHING',
+    section: 'STERILIZATION OF EQUIPMENT',
     parameters: [
-      { srNo: 1, parameter: 'Cleaned MP Hold Time (hr)', limits: { lower: null, upper: 'NMT 24' }, responsibility: 'Production', remarks: 'Machine Parts' },
-      { srNo: 2, parameter: 'Sterilization Temperature — MP (°C)', limits: { lower: 'NLT 121', upper: null }, responsibility: 'Production', remarks: 'Machine Parts' },
-      { srNo: 3, parameter: 'Sterilization Hold Time — MP (min)', limits: { lower: 'NLT 30', upper: null }, responsibility: 'Production', remarks: 'Machine Parts' },
-      { srNo: 4, parameter: 'Sterilization Temperature — MV (°C)', limits: { lower: 'NLT 121', upper: null }, responsibility: 'Production', remarks: 'Mixing Vessel' },
-      { srNo: 5, parameter: 'Sterilization Hold Time — MV (min)', limits: { lower: 'NLT 30', upper: null }, responsibility: 'Production', remarks: 'Mixing Vessel' },
-      { srNo: 6, parameter: 'Sterilization Temperature — HV/BV (°C)', limits: { lower: 'NLT 121', upper: null }, responsibility: 'Production', remarks: 'Holding / Buffer Vessel' },
-      { srNo: 7, parameter: 'Sterilization Hold Time — HV/BV (min)', limits: { lower: 'NLT 30', upper: null }, responsibility: 'Production', remarks: 'Holding / Buffer Vessel' },
-      { srNo: 8, parameter: 'Glass Wash — Compressed Air Pressure (bar)', limits: { lower: 'NLT 2.0', upper: 'NMT 4.0' }, responsibility: 'Production' },
-      { srNo: 9, parameter: 'Glass Wash — Recycled WFI Pressure (bar)', limits: { lower: 'NLT 1.5', upper: 'NMT 3.0' }, responsibility: 'Production' },
-      { srNo: 10, parameter: 'Glass Wash — Fresh WFI Pressure (bar)', limits: { lower: 'NLT 1.5', upper: 'NMT 3.0' }, responsibility: 'Production' },
+      { srNo: 1, parameter: 'Cleaned MP Hold Time (hr)', limits: { lower: null, upper: 'NMT 24' }, responsibility: 'IPQA', remarks: 'Machine Parts (MP)' },
+      { srNo: 2, parameter: 'Sterilization Temperature — MP (°C)', limits: { lower: 'NLT 121', upper: null }, responsibility: 'IPQA', remarks: 'Machine Parts' },
+      { srNo: 3, parameter: 'Sterilization Hold Time — MP (min)', limits: { lower: 'NLT 30', upper: null }, responsibility: 'IPQA', remarks: 'Machine Parts' },
+      { srNo: 4, parameter: 'Hold Time of Sterilized — MP (hr)', limits: { lower: null, upper: 'NMT 24' }, responsibility: 'IPQA', remarks: 'Machine Parts' },
+      { srNo: 5, parameter: 'Sterilization Temperature — MV (°C)', limits: { lower: 'NLT 121', upper: null }, responsibility: 'IPQA', remarks: 'Mixing Vessel' },
+      { srNo: 6, parameter: 'Sterilization Hold Time — MV (min)', limits: { lower: 'NLT 30', upper: null }, responsibility: 'IPQA', remarks: 'Mixing Vessel' },
+      { srNo: 7, parameter: 'Hold Time of Sterilized — MV (hr)', limits: { lower: null, upper: 'NMT 24' }, responsibility: 'IPQA', remarks: 'Mixing Vessel' },
+      { srNo: 8, parameter: 'Sterilization Temperature — HV/BV (°C)', limits: { lower: 'NLT 121', upper: null }, responsibility: 'IPQA', remarks: 'Holding / Buffer Vessel' },
+      { srNo: 9, parameter: 'Sterilization Hold Time — HV/BV (min)', limits: { lower: 'NLT 30', upper: null }, responsibility: 'IPQA', remarks: 'Holding / Buffer Vessel' },
+      { srNo: 10, parameter: 'Hold Time of Sterilized — HV/BV (hr)', limits: { lower: null, upper: 'NMT 24' }, responsibility: 'IPQA', remarks: 'Holding / Buffer Vessel' },
     ],
   },
   {
-    section: 'GLASS CONTAINER DEPYROGENATION & MIXING',
+    section: 'GLASS CONTAINER WASHING',
     parameters: [
-      { srNo: 1, parameter: 'Preheat Zone DP (Pa)', limits: { lower: 'NLT 10', upper: 'NMT 30' }, responsibility: 'Production' },
-      { srNo: 2, parameter: 'Preheat Zone Temperature (°C)', limits: { lower: 'NLT 100', upper: 'NMT 200' }, responsibility: 'Production' },
-      { srNo: 3, parameter: 'Heating Zone DP (Pa)', limits: { lower: 'NLT 10', upper: 'NMT 30' }, responsibility: 'Production' },
-      { srNo: 4, parameter: 'Heating Zone Temperature (°C)', limits: { lower: 'NLT 280', upper: 'NMT 320' }, responsibility: 'Production' },
-      { srNo: 5, parameter: 'Cooling Zone DP (Pa)', limits: { lower: 'NLT 10', upper: 'NMT 30' }, responsibility: 'Production' },
-      { srNo: 6, parameter: 'Cooling Zone Temperature (°C)', limits: { lower: 'NLT 20', upper: 'NMT 80' }, responsibility: 'Production' },
-      { srNo: 7, parameter: 'Mixing RPM', limits: { lower: 'NLT 250', upper: 'NMT 400' }, responsibility: 'IPQA' },
-      { srNo: 8, parameter: 'Mixing Time (min)', limits: { lower: 'NLT 12', upper: 'NMT 18' }, responsibility: 'IPQA', remarks: 'Range per BMR' },
-      { srNo: 9, parameter: 'Bulk Hold Time (hr)', limits: { lower: null, upper: 'NMT 12' }, responsibility: 'IPQA' },
+      { srNo: 1, parameter: 'Compressed Air Pressure (MPa)', limits: { lower: 'NLT 0.20', upper: 'NMT 0.40' }, responsibility: 'IPQA' },
+      { srNo: 2, parameter: 'Recycled WFI-I Pressure (MPa)', limits: { lower: 'NLT 0.15', upper: 'NMT 0.30' }, responsibility: 'IPQA' },
+      { srNo: 3, parameter: 'Recycled WFI-II Pressure (MPa)', limits: { lower: 'NLT 0.15', upper: 'NMT 0.30' }, responsibility: 'IPQA' },
+      { srNo: 4, parameter: 'Fresh WFI Pressure (MPa)', limits: { lower: 'NLT 0.15', upper: 'NMT 0.30' }, responsibility: 'IPQA' },
+    ],
+  },
+  {
+    section: 'GLASS CONTAINER DEPYROGENATION',
+    parameters: [
+      { srNo: 1, parameter: 'Preheat Zone DP (Pa)', limits: { lower: 'NLT 10', upper: 'NMT 30' }, responsibility: 'IPQA' },
+      { srNo: 2, parameter: 'Preheat Zone Temperature (°C)', limits: { lower: 'NLT 100', upper: 'NMT 200' }, responsibility: 'IPQA' },
+      { srNo: 3, parameter: 'Heating Zone DP (Pa)', limits: { lower: 'NLT 10', upper: 'NMT 30' }, responsibility: 'IPQA' },
+      { srNo: 4, parameter: 'Heating Zone Temperature (°C)', limits: { lower: 'NLT 280', upper: 'NMT 320' }, responsibility: 'IPQA' },
+      { srNo: 5, parameter: 'Cooling Zone DP (Pa)', limits: { lower: 'NLT 10', upper: 'NMT 30' }, responsibility: 'IPQA' },
+      { srNo: 6, parameter: 'Cooling Zone Temperature (°C)', limits: { lower: 'NLT 20', upper: 'NMT 80' }, responsibility: 'IPQA' },
+    ],
+  },
+  {
+    section: 'MIXING',
+    parameters: [
+      { srNo: 1, parameter: 'Mixing RPM', limits: { lower: 'NLT 250', upper: 'NMT 400' }, responsibility: 'IPQA' },
+      { srNo: 2, parameter: 'Mixing Time (min)', limits: { lower: 'NLT 12', upper: 'NMT 18' }, responsibility: 'IPQA', remarks: 'Range per BMR' },
+      { srNo: 3, parameter: 'Mixing Volume (L)', limits: { lower: 860, upper: 860 }, responsibility: 'IPQA' },
+      { srNo: 4, parameter: 'Bulk Hold Time (hr)', limits: { lower: null, upper: 'NMT 12' }, responsibility: 'IPQA' },
     ],
   },
   {
@@ -138,19 +153,26 @@ export const ONDANSETRON_INJECTION_BMR_SPEC: BmrSpecSection[] = [
     parameters: [
       { srNo: 1, parameter: 'Description', limits: { lower: 'Clear Solution', upper: 'Clear Solution' }, responsibility: 'IPQA' },
       { srNo: 2, parameter: 'pH', limits: { lower: 3.5, upper: 3.8 }, responsibility: 'IPQA' },
-      { srNo: 3, parameter: 'Assay (%)', limits: { lower: 97, upper: 103 }, responsibility: 'IPQA' },
-      { srNo: 4, parameter: 'Total Viable Count (CFU/100 mL)', limits: { lower: null, upper: 'NMT 10' }, responsibility: 'IPQA', remarks: 'Per sterile bulk spec' },
-      { srNo: 5, parameter: 'Colour Index (AU)', limits: { lower: null, upper: 'NMT 0.200' }, responsibility: 'IPQA' },
+      { srNo: 3, parameter: 'Colour Index (AU)', limits: { lower: null, upper: 'NMT 0.200' }, responsibility: 'IPQA' },
+      { srNo: 4, parameter: 'Weight per mL (g/mL)', limits: { lower: 'NLT 1.00', upper: 'NMT 1.05' }, responsibility: 'IPQA' },
+      { srNo: 5, parameter: 'Assay (%)', limits: { lower: 97, upper: 103 }, responsibility: 'IPQA' },
+      { srNo: 6, parameter: 'Total Viable Count (CFU/100 mL)', limits: { lower: null, upper: 'NMT 10' }, responsibility: 'IPQA', remarks: 'Per sterile bulk spec' },
     ],
   },
   {
     section: 'FILTRATION PROCESS',
     parameters: [
-      { srNo: 1, parameter: 'Filter Make', limits: { lower: 'Sartorius', upper: 'Sartorius' }, responsibility: 'Production' },
-      { srNo: 2, parameter: 'Integrity Test BPT (mbar)', limits: { lower: 'NLT 3172', upper: 'NMT 5000' }, responsibility: 'IPQA' },
-      { srNo: 3, parameter: 'Filtration Pressure (bar) — Min', limits: { lower: 'NLT 2.0', upper: null }, responsibility: 'IPQA', remarks: 'Record at defined frequency throughout filtration' },
-      { srNo: 4, parameter: 'Filtration Pressure (bar) — Max', limits: { lower: null, upper: 'NMT 4.0' }, responsibility: 'IPQA', remarks: 'Upper limit for OOT/OOS' },
-      { srNo: 5, parameter: 'Filtration Yield (%)', limits: { lower: 96, upper: null }, responsibility: 'IPQA' },
+      { srNo: 1, parameter: 'Filter Make', limits: { lower: 'Sartorius', upper: 'Sartorius' }, responsibility: 'IPQA' },
+      { srNo: 2, parameter: 'Primary Integrity — Pre (BPT) (mbar)', limits: { lower: 'NLT 3172', upper: 'NMT 5000' }, responsibility: 'IPQA' },
+      { srNo: 3, parameter: 'Primary Integrity — Post (BPT) (mbar)', limits: { lower: 'NLT 3172', upper: 'NMT 5000' }, responsibility: 'IPQA' },
+      { srNo: 4, parameter: 'Secondary Integrity — Pre (BPT) (mbar)', limits: { lower: 'NLT 3172', upper: 'NMT 5000' }, responsibility: 'IPQA' },
+      { srNo: 5, parameter: 'Secondary Integrity — Post (BPT) (mbar)', limits: { lower: 'NLT 3172', upper: 'NMT 5000' }, responsibility: 'IPQA' },
+      { srNo: 6, parameter: 'Filtration Pressure (bar) — Min', limits: { lower: 'NLT 2.0', upper: null }, responsibility: 'IPQA', remarks: 'Record at defined frequency throughout filtration' },
+      { srNo: 7, parameter: 'Filtration Pressure (bar) — Max', limits: { lower: null, upper: 'NMT 4.0' }, responsibility: 'IPQA', remarks: 'Upper limit for OOT/OOS' },
+      { srNo: 8, parameter: 'Filtration Time (min)', limits: { lower: null, upper: 'NMT 120' }, responsibility: 'IPQA' },
+      { srNo: 9, parameter: 'Hold Tank Volume (L)', limits: { lower: 860, upper: 860 }, responsibility: 'IPQA' },
+      { srNo: 10, parameter: 'Solution Hold Time (min)', limits: { lower: null, upper: 'NMT 720' }, responsibility: 'IPQA' },
+      { srNo: 11, parameter: 'Filtration Yield (%)', limits: { lower: 96, upper: null }, responsibility: 'IPQA' },
     ],
   },
   {
@@ -161,9 +183,10 @@ export const ONDANSETRON_INJECTION_BMR_SPEC: BmrSpecSection[] = [
       { srNo: 3, parameter: 'Machine Speed (ampoules/min)', limits: { lower: 275, upper: 550 }, responsibility: 'IPQA' },
       { srNo: 4, parameter: 'NVPC — 0.5 µm (particles/m³)', limits: { lower: null, upper: 3520 }, responsibility: 'IPQA', remarks: 'Covered in PV protocol' },
       { srNo: 5, parameter: 'NVPC — 5 µm (particles/m³)', limits: { lower: null, upper: 20 }, responsibility: 'IPQA', remarks: 'Covered in PV protocol' },
-      { srNo: 6, parameter: 'Filling Time (hr)', limits: { lower: null, upper: 'NMT 24' }, responsibility: 'IPQA' },
-      { srNo: 7, parameter: 'Max Filled Nos. (calc.)', limits: { lower: null, upper: 792_000 }, responsibility: 'IPQA', remarks: '≤ speed × 60 × filling hrs (550×60×24)' },
-      { srNo: 8, parameter: 'Filling Yield (%)', limits: { lower: 97, upper: 100 }, responsibility: 'IPQA' },
+      { srNo: 6, parameter: 'Units Filled (Nos.)', limits: { lower: null, upper: 400_000 }, responsibility: 'IPQA' },
+      { srNo: 7, parameter: 'Filling Time (hr)', limits: { lower: null, upper: 'NMT 24' }, responsibility: 'IPQA' },
+      { srNo: 8, parameter: 'Max Filled Nos. (calc.)', limits: { lower: null, upper: 792_000 }, responsibility: 'IPQA', remarks: '≤ speed × 60 × filling hrs (550×60×24)' },
+      { srNo: 9, parameter: 'Filling Yield (%)', limits: { lower: 97, upper: 100 }, responsibility: 'IPQA' },
     ],
   },
   {
@@ -261,12 +284,110 @@ export function getBmrSpecParameter(parameterName: string): (BmrSpecParameter & 
 
 export function getAllBmrCppParameters(): string[] {
   const sections = [
-    'DISPENSING', 'STERILIZATION & WASHING', 'GLASS CONTAINER DEPYROGENATION & MIXING',
-    'FILTRATION PROCESS', 'FILLING PROCESS',
+    'DISPENSING',
+    'STERILIZATION OF EQUIPMENT',
+    'GLASS CONTAINER WASHING',
+    'GLASS CONTAINER DEPYROGENATION',
+    'MIXING',
+    'FILTRATION PROCESS',
+    'FILLING PROCESS',
   ];
   return ONDANSETRON_INJECTION_BMR_SPEC
     .filter((s) => sections.includes(s.section))
     .flatMap((s) => s.parameters.map((p) => p.parameter));
+}
+
+/** Maps CPP process stage → BMR spec sections (Ondansetron Injection). */
+export const CPP_STAGE_TO_BMR_SECTIONS: Record<string, string[]> = {
+  Dispensing: ['DISPENSING'],
+  Sterilization: ['STERILIZATION OF EQUIPMENT'],
+  'Vial Washing': ['GLASS CONTAINER WASHING'],
+  Depyrogenation: ['GLASS CONTAINER DEPYROGENATION'],
+  Mixing: ['MIXING'],
+  Filtration: ['FILTRATION PROCESS'],
+  Filling: ['FILLING PROCESS'],
+};
+
+export interface OndansetronCppOption {
+  id: string;
+  parameterName: string;
+  parameterCode: string;
+  section: string;
+  responsibility: string;
+  specificationText: string;
+  target: number;
+  lsl: number;
+  usl: number;
+  unit: string;
+  resultType: 'Numeric' | 'Text';
+  criticality: 'Critical' | 'Major' | 'Minor';
+  processStage: string;
+}
+
+function cppCriticality(name: string): OndansetronCppOption['criticality'] {
+  const n = name.toLowerCase();
+  if (n.includes('fill volume') || n.includes('sterilization temp')) return 'Critical';
+  if (n.includes('integrity') || n.includes('filtration pressure')) return 'Major';
+  return 'Major';
+}
+
+function cppProcessStageForSection(section: string): string {
+  for (const [stage, sections] of Object.entries(CPP_STAGE_TO_BMR_SECTIONS)) {
+    if (sections.includes(section)) return stage;
+  }
+  return 'Mixing';
+}
+
+export function getOndansetronCppOptionsForStage(processStage: string): OndansetronCppOption[] {
+  const sections = CPP_STAGE_TO_BMR_SECTIONS[processStage] || [];
+  const options: OndansetronCppOption[] = [];
+
+  for (const sec of ONDANSETRON_INJECTION_BMR_SPEC) {
+    if (!sections.includes(sec.section)) continue;
+    for (const p of sec.parameters) {
+      const parsed = parseBmrLimits(p.limits.lower, p.limits.upper);
+      const alias = ONDANSETRON_PARAMETER_SPECS[p.parameter]
+        || ONDANSETRON_PARAMETER_SPECS[p.parameter.replace(/\s*\([^)]+\)/, '')];
+      const unitMatch = p.parameter.match(/\(([^)]+)\)/);
+      const unit = alias?.unit ?? parsed?.unit ?? unitMatch?.[1] ?? '';
+      const code = p.parameter.toUpperCase().replace(/[^A-Z0-9]+/g, '_').slice(0, 24);
+      options.push({
+        id: `bmr-cpp-${code}`,
+        parameterName: p.parameter,
+        parameterCode: `CPP_${code}`,
+        section: sec.section,
+        responsibility: p.responsibility,
+        specificationText: parsed?.specification ?? `${p.limits.lower ?? '—'} / ${p.limits.upper ?? '—'}`,
+        target: alias?.target ?? parsed?.target ?? 0,
+        lsl: alias?.lsl ?? parsed?.lsl ?? 0,
+        usl: alias?.usl ?? parsed?.usl ?? 0,
+        unit,
+        resultType: parsed ? 'Numeric' : 'Text',
+        criticality: cppCriticality(p.parameter),
+        processStage: cppProcessStageForSection(sec.section),
+      });
+    }
+  }
+  return options;
+}
+
+export function resolveOndansetronCppDefaults(parameterName: string): Partial<OndansetronCppOption> | null {
+  const alias = ONDANSETRON_PARAMETER_SPECS[parameterName];
+  const bmr = getBmrSpecParameter(parameterName);
+  if (!alias && !bmr) return null;
+  const parsed = bmr ? parseBmrLimits(bmr.limits.lower, bmr.limits.upper) : null;
+  const unitMatch = parameterName.match(/\(([^)]+)\)/);
+  return {
+    parameterName,
+    responsibility: bmr?.responsibility ?? 'IPQA',
+    specificationText: parsed?.specification ?? '',
+    target: alias?.target ?? parsed?.target ?? 0,
+    lsl: alias?.lsl ?? parsed?.lsl ?? 0,
+    usl: alias?.usl ?? parsed?.usl ?? 0,
+    unit: alias?.unit ?? parsed?.unit ?? unitMatch?.[1] ?? '',
+    processStage: bmr ? cppProcessStageForSection(bmr.section) : 'Mixing',
+    criticality: cppCriticality(parameterName),
+  };
 }
 
 export function getAllBmrIpcParameters(): string[] {
@@ -293,19 +414,32 @@ export function getCppDefaults(parameterName: string): ParsedNumericLimit | null
 
 /** Ondansetron-specific CPV parameter limits aligned with BMR spec. */
 export const ONDANSETRON_PARAMETER_SPECS: Record<string, { target: number; lsl: number; usl: number; unit: string }> = {
+  'Temperature (°C)': { target: 22, lsl: 0, usl: 25, unit: '°C' },
+  'Relative Humidity (%)': { target: 40, lsl: 0, usl: 55, unit: '%' },
   'Fill Volume': { target: 2.15, lsl: 2.1, usl: 2.2, unit: 'mL' },
+  'Fill Volume (mL)': { target: 2.15, lsl: 2.1, usl: 2.2, unit: 'mL' },
   'Mixing Time': { target: 15, lsl: 12, usl: 18, unit: 'min' },
+  'Mixing Time (min)': { target: 15, lsl: 12, usl: 18, unit: 'min' },
   'Mixing RPM': { target: 325, lsl: 250, usl: 400, unit: 'RPM' },
   'Bulk Hold Time': { target: 6, lsl: 0, usl: 12, unit: 'hr' },
+  'Bulk Hold Time (hr)': { target: 6, lsl: 0, usl: 12, unit: 'hr' },
   'Filtration Pressure': { target: 3.0, lsl: 2.0, usl: 4.0, unit: 'bar' },
+  'Filtration Pressure (bar) — Min': { target: 2.0, lsl: 2.0, usl: 4.0, unit: 'bar' },
+  'Filtration Pressure (bar) — Max': { target: 4.0, lsl: 2.0, usl: 4.0, unit: 'bar' },
   'Filtration Yield': { target: 98, lsl: 96, usl: 100, unit: '%' },
+  'Filtration Yield (%)': { target: 98, lsl: 96, usl: 100, unit: '%' },
   'Filling Yield': { target: 98.5, lsl: 97, usl: 100, unit: '%' },
+  'Filling Yield (%)': { target: 98.5, lsl: 97, usl: 100, unit: '%' },
   'Nitrogen Pressure': { target: 2.75, lsl: 2.0, usl: 3.5, unit: 'kg/cm²' },
+  'N₂ Pressure Pre-Fill (kg/cm²)': { target: 2.75, lsl: 2.0, usl: 3.5, unit: 'kg/cm²' },
   'Filling Speed': { target: 412.5, lsl: 275, usl: 550, unit: 'ampoules/min' },
+  'Machine Speed (ampoules/min)': { target: 412.5, lsl: 275, usl: 550, unit: 'ampoules/min' },
   'Room Temperature': { target: 22, lsl: 0, usl: 25, unit: '°C' },
   'Relative Humidity': { target: 40, lsl: 0, usl: 55, unit: '%' },
   'Sterilization Temperature': { target: 121, lsl: 121, usl: 130, unit: '°C' },
+  'Sterilization Temperature — MP (°C)': { target: 121, lsl: 121, usl: 130, unit: '°C' },
   'Sterilization Time': { target: 30, lsl: 30, usl: 60, unit: 'min' },
+  'Sterilization Hold Time — MP (min)': { target: 30, lsl: 30, usl: 60, unit: 'min' },
 };
 
 export const ONDANSETRON_CQA_SPECS: Record<string, { target: number; lsl: number; usl: number; unit: string }> = {

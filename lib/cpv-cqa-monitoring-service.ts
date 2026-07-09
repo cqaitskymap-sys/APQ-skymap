@@ -17,6 +17,7 @@ import {
   buildCqaResultId,
   evaluateCqaStatus,
   evaluateCqaRiskLevel,
+  parameterMatchesCqaTestStage,
   type CqaResultFormData,
   type CqaResultRecord,
 } from '@/lib/cpv-cqa-monitoring';
@@ -181,6 +182,7 @@ export async function fetchCqaParametersForProduct(
   productName: string,
   cpvProductId?: string,
   microbiologyOnly = false,
+  testStage?: string,
 ): Promise<Parameter[]> {
   try {
     const all = await fetchParameters();
@@ -199,12 +201,25 @@ export async function fetchCqaParametersForProduct(
       const link = p.productLink || p.product || '';
       return !link || link === productName || link === 'All Products';
     });
-    const list = byProduct.length ? byProduct : cqa;
+    let list = byProduct.length ? byProduct : cqa;
     if (microbiologyOnly) {
-      return list.filter((p) => {
+      list = list.filter((p) => {
         const name = normalizeParameter(p).parameterName;
         return ['Sterility', 'Bacterial Endotoxin', 'Endotoxin'].some((k) => name.toLowerCase().includes(k.toLowerCase()))
           || name.toLowerCase().includes('microbial');
+      });
+    }
+    if (testStage) {
+      list = list.filter((p) => {
+        const n = normalizeParameter(p);
+        const raw = p as Parameter & { testStage?: string; test_stage?: string };
+        const explicitStage = raw.testStage || raw.test_stage || '';
+        return parameterMatchesCqaTestStage(
+          n.parameterName,
+          testStage,
+          n.processStage,
+          explicitStage,
+        );
       });
     }
     return list;

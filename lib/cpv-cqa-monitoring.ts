@@ -260,3 +260,93 @@ export function isMicrobiologyCqaParameter(name: string): boolean {
   return n.includes('sterility') || n.includes('endotoxin') || n.includes('microbial')
     || n.includes('microbiology') || MICROBIOLOGY_CQA_PARAMETERS.some((p) => p.toLowerCase() === n);
 }
+
+function normalizeCqaTestStageLabel(stage: string): string {
+  return stage.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+/** Compare CQA test stage labels (e.g. "Finished Product" vs "Finished Product Testing"). */
+export function cqaTestStagesMatch(a: string, b: string): boolean {
+  const left = normalizeCqaTestStageLabel(a);
+  const right = normalizeCqaTestStageLabel(b);
+  if (!left || !right) return false;
+  if (left === right) return true;
+  const stripTesting = (s: string) => s.replace(/ testing$/, '');
+  return stripTesting(left) === stripTesting(right);
+}
+
+/** Default mapping of CQA parameter names to applicable test stages. */
+export const CQA_PARAMETER_STAGE_MAP: Record<string, readonly string[]> = {
+  Description: ['Finished Product Testing'],
+  Colour: ['Finished Product Testing'],
+  Clarity: ['In-Process Testing', 'Finished Product Testing'],
+  Identification: ['Identification Testing', 'Finished Product Testing'],
+  pH: ['In-Process Testing', 'Finished Product Testing', 'Stability Testing'],
+  'Extractable Volume': ['Finished Product Testing'],
+  Assay: ['Assay Testing', 'Finished Product Testing', 'Stability Testing'],
+  'Related Substances': ['Related Substance Testing', 'Finished Product Testing'],
+  Sterility: ['Sterility Testing', 'Microbiology Testing', 'Finished Product Testing'],
+  'Bacterial Endotoxin': ['Endotoxin Testing', 'Microbiology Testing', 'Finished Product Testing'],
+  'Particulate Matter >=10µm': ['Particulate Matter Testing', 'Finished Product Testing'],
+  'Particulate Matter >=25µm': ['Particulate Matter Testing', 'Finished Product Testing'],
+  'Methyl Paraben Assay': ['Preservative Testing', 'Finished Product Testing'],
+  'Propyl Paraben Assay': ['Preservative Testing', 'Finished Product Testing'],
+  'Preservative Content': ['Preservative Testing', 'Finished Product Testing'],
+  'Visible Particles': ['Particulate Matter Testing', 'Finished Product Testing'],
+  'Sub Visible Particles': ['Particulate Matter Testing', 'Finished Product Testing'],
+  'Water Content': ['In-Process Testing', 'Finished Product Testing', 'Stability Testing'],
+  Appearance: ['In-Process Testing', 'Finished Product Testing'],
+  'Total Viable Count': ['Microbiology Testing'],
+  'Colour Index': ['In-Process Testing', 'Finished Product Testing'],
+  'Ondansetron Imp. D': ['Related Substance Testing', 'Finished Product Testing'],
+  'Any Secondary Impurity': ['Related Substance Testing', 'Finished Product Testing'],
+  'Sum of All Impurities': ['Related Substance Testing', 'Finished Product Testing'],
+};
+
+function stagesForParameterName(parameterName: string): string[] | null {
+  const exact = CQA_PARAMETER_STAGE_MAP[parameterName];
+  if (exact) return [...exact];
+
+  const lower = parameterName.toLowerCase();
+  for (const [key, stages] of Object.entries(CQA_PARAMETER_STAGE_MAP)) {
+    const keyLower = key.toLowerCase();
+    if (lower === keyLower || lower.includes(keyLower) || keyLower.includes(lower)) {
+      return [...stages];
+    }
+  }
+
+  if (lower.includes('sterility')) return ['Sterility Testing', 'Microbiology Testing', 'Finished Product Testing'];
+  if (lower.includes('endotoxin')) return ['Endotoxin Testing', 'Microbiology Testing', 'Finished Product Testing'];
+  if (lower.includes('assay')) return ['Assay Testing', 'Finished Product Testing', 'Stability Testing'];
+  if (lower.includes('particulate') || lower.includes('particle')) {
+    return ['Particulate Matter Testing', 'Finished Product Testing'];
+  }
+  if (lower.includes('paraben') || lower.includes('preservative')) {
+    return ['Preservative Testing', 'Finished Product Testing'];
+  }
+  if (lower.includes('identification')) return ['Identification Testing', 'Finished Product Testing'];
+  if (lower.includes('related') || lower.includes('impurity') || lower.includes('imp.')) {
+    return ['Related Substance Testing', 'Finished Product Testing'];
+  }
+  if (lower.includes('microbial') || lower.includes('microbiology') || lower.includes('viable count')) {
+    return ['Microbiology Testing'];
+  }
+
+  return null;
+}
+
+export function parameterMatchesCqaTestStage(
+  parameterName: string,
+  testStage: string,
+  processStage = '',
+  explicitTestStage = '',
+): boolean {
+  if (!testStage) return true;
+  if (explicitTestStage && cqaTestStagesMatch(explicitTestStage, testStage)) return true;
+  if (processStage && cqaTestStagesMatch(processStage, testStage)) return true;
+
+  const mappedStages = stagesForParameterName(parameterName);
+  if (mappedStages?.some((stage) => cqaTestStagesMatch(stage, testStage))) return true;
+
+  return false;
+}

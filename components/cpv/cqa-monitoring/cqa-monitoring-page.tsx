@@ -157,7 +157,7 @@ export function CqaMonitoringPage() {
     productId: string,
     testStage: string,
   ): Promise<CqaParamOption[]> => {
-    const dbParams = await fetchCqaParametersForProduct(productName, productId, isMicroOnly);
+    const dbParams = await fetchCqaParametersForProduct(productName, productId, isMicroOnly, testStage);
     if (isOndansetronProduct(productName)) {
       const bmrOptions = getOndansetronCqaOptionsForStage(testStage);
       if (!dbParams.length) return bmrOptions;
@@ -171,6 +171,9 @@ export function CqaMonitoringPage() {
   const openCreate = () => {
     setEditing(null);
     setFormProductName('');
+    setFormProductId('');
+    setFormParams([]);
+    setFormBatches([]);
     setForm({
       testDate: new Date().toISOString(),
       analyst: profile?.full_name || '',
