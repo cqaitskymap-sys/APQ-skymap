@@ -98,6 +98,7 @@ function normalizeCppResult(raw: Record<string, unknown>): CppResultRecord {
     batchNumber,
     manufacturingDate: str(raw.manufacturingDate || raw.manufacturing_date),
     processStage: str(raw.processStage || raw.process_stage),
+    processArea: str(raw.processArea || raw.process_area),
     parameterId: str(raw.parameterId || raw.parameter_id),
     parameterCode,
     parameterName: str(raw.parameterName || raw.parameter_name),
@@ -176,6 +177,7 @@ export async function fetchCppParametersForProduct(
   productName: string,
   cpvProductId?: string,
   processStage?: string,
+  processArea = '',
 ): Promise<Parameter[]> {
   try {
     const all = await fetchParameters();
@@ -201,7 +203,12 @@ export async function fetchCppParametersForProduct(
     if (processStage) {
       list = list.filter((p) => {
         const n = normalizeParameter(p);
-        return parameterMatchesCppProcessStage(n.parameterName, processStage, n.processStage);
+        return parameterMatchesCppProcessStage(
+          n.parameterName,
+          processStage,
+          n.processStage,
+          processArea,
+        );
       });
     }
     return list;

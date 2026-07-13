@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { Plus, Search, Download, Eye, Pencil, UserCheck, UserX } from 'lucide-react';
+import { Plus, Search, Download, Eye, Pencil, UserCheck, UserX, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/admin/dashboard/page-header';
 import { StatusBadge } from '@/components/admin/dashboard/status-badge';
@@ -28,12 +28,14 @@ import { canEditRoles } from '@/lib/permissions';
 import { RECORD_STATUSES } from '@/lib/admin/constants';
 import type { AdminRole } from '@/lib/admin/schemas';
 import { fetchRoles, setRoleStatus, exportRolesCsv } from '@/lib/admin/role-service';
+import { deleteAdminRecord } from '@/lib/admin/admin-service';
+import { ADMIN_COLLECTIONS } from '@/lib/admin/constants';
 
 const PAGE_SIZE = 10;
 
 export function RolesListPage() {
   const { user, profile } = useAuth();
-  const { role } = useAdminPermissions();
+  const { role, canDelete } = useAdminPermissions();
   const canEdit = canEditRoles(role);
 
   const [roles, setRoles] = useState<AdminRole[]>([]);
@@ -43,6 +45,7 @@ export function RolesListPage() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [page, setPage] = useState(0);
   const [confirm, setConfirm] = useState<{ role: AdminRole; activate: boolean } | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<AdminRole | null>(null);
 
   const auditMeta = {
     userId: user?.uid || 'system',
@@ -100,6 +103,32 @@ export function RolesListPage() {
       toast.error(result.error || 'Action failed');
     }
     setConfirm(null);
+  };
+
+  const runDelete = async () => {
+    if (!deleteConfirm?.id) return;
+    if (deleteConfirm.roleId === 'super_admin') {
+      toast.error('Super Admin role cannot be deleted');
+      setDeleteConfirm(null);
+      return;
+    }
+    try {
+      const ok = await deleteAdminRecord(ADMIN_COLLECTIONS.roles, deleteConfirm.id, {
+        userId: auditMeta.userId,
+        userName: auditMeta.userName,
+        module: 'Role & Permission',
+      });
+      if (ok) {
+        toast.success('Role deleted');
+        load();
+      } else {
+        toast.error('Delete failed');
+      }
+    } catch {
+      toast.error('Delete failed');
+    } finally {
+      setDeleteConfirm(null);
+    }
   };
 
   if (loading) {
@@ -181,6 +210,11 @@ export function RolesListPage() {
                                   ? <Button variant="ghost" size="icon" onClick={() => setConfirm({ role: row, activate: false })}><UserX className="h-4 w-4 text-amber-600" /></Button>
                                   : <Button variant="ghost" size="icon" onClick={() => setConfirm({ role: row, activate: true })}><UserCheck className="h-4 w-4 text-green-600" /></Button>
                               )}
+                              {canDelete && row.roleId !== 'super_admin' && (
+                                <Button variant="ghost" size="icon" onClick={() => setDeleteConfirm(row)}>
+                                  <Trash2 className="h-4 w-4 text-red-600" />
+                                </Button>
+                              )}
                             </>
                           )}
                         </div>
@@ -204,6 +238,9 @@ export function RolesListPage() {
                   <div className="flex gap-2 pt-2">
                     <Button asChild size="sm" variant="outline"><Link href={`/admin/roles/${row.id}`}>View</Link></Button>
                     {canEdit && <Button asChild size="sm" variant="outline"><Link href={`/admin/roles/${row.id}/edit`}>Edit</Link></Button>}
+                    {canDelete && row.roleId !== 'super_admin' && (
+                      <Button size="sm" variant="destructive" onClick={() => setDeleteConfirm(row)}>Delete</Button>
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -232,6 +269,21 @@ export function RolesListPage() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={runConfirm} className="bg-blue-600">Confirm</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!deleteConfirm} onOpenChange={() => setDeleteConfirm(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Role</AlertDialogTitle>
+            <AlertDialogDescription>
+              {`Delete "${deleteConfirm?.roleName}"? This action cannot be undone.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={runDelete} className="bg-red-600 hover:bg-red-700">Delete</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

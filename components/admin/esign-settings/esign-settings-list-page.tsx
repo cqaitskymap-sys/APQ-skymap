@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { Plus, Search, Download, Eye, Pencil, UserCheck, UserX, Database } from 'lucide-react';
+import { Plus, Search, Download, Eye, Pencil, UserCheck, UserX, Database, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/admin/dashboard/page-header';
 import { KpiCard } from '@/components/admin/dashboard/kpi-card';
@@ -35,12 +35,14 @@ import {
   exportEsignSettingsCsv, logEsignSettingsExport, seedDefaultEsignSettings,
 } from '@/lib/admin/esign-settings-service';
 import { fetchEsignRecords, getEsignRecordsSummary } from '@/lib/admin/esign-service';
+import { deleteAdminRecord } from '@/lib/admin/admin-service';
+import { ADMIN_COLLECTIONS } from '@/lib/admin/constants';
 
 const PAGE_SIZE = 10;
 
 export function EsignSettingsListPage() {
   const { user, profile } = useAuth();
-  const { role } = useAdminPermissions();
+  const { role, canDelete } = useAdminPermissions();
   const canEdit = canEditEsignSettings(role);
   const canRecommend = canRecommendEsignChanges(role);
 
@@ -55,6 +57,7 @@ export function EsignSettingsListPage() {
   const [confirm, setConfirm] = useState<{ setting: EsignSettings; activate: boolean } | null>(null);
   const [seeding, setSeeding] = useState(false);
   const [recordStats, setRecordStats] = useState({ totalRecords: 0, failedAttempts: 0 });
+  const [deleteConfirm, setDeleteConfirm] = useState<EsignSettings | null>(null);
 
   const auditMeta = {
     userId: user?.uid || 'system',
@@ -129,6 +132,27 @@ export function EsignSettingsListPage() {
       load();
     } else toast.error(result.error || 'Action failed');
     setConfirm(null);
+  };
+
+  const runDelete = async () => {
+    if (!deleteConfirm?.id) return;
+    try {
+      const ok = await deleteAdminRecord(ADMIN_COLLECTIONS.esignSettings, deleteConfirm.id, {
+        userId: auditMeta.userId,
+        userName: auditMeta.userName,
+        module: 'E-Signature Settings',
+      });
+      if (ok) {
+        toast.success('E-sign setting deleted');
+        load();
+      } else {
+        toast.error('Delete failed');
+      }
+    } catch {
+      toast.error('Delete failed');
+    } finally {
+      setDeleteConfirm(null);
+    }
   };
 
   if (loading) return <div><PageHeader title="E-Signature Settings" basePath="/admin" /><LoadingSkeleton rows={2} /></div>;
@@ -254,6 +278,11 @@ export function EsignSettingsListPage() {
                                     <UserCheck className="h-4 w-4 text-green-600" />
                                   </Button>
                                 )}
+                              {canDelete && (
+                                <Button variant="ghost" size="icon" onClick={() => setDeleteConfirm(row)}>
+                                  <Trash2 className="h-4 w-4 text-red-600" />
+                                </Button>
+                              )}
                             </>
                           )}
                         </div>
@@ -287,6 +316,7 @@ export function EsignSettingsListPage() {
                         <Link href={`/admin/esign-settings/${row.id}/edit`}>Edit</Link>
                       </Button>
                     )}
+                    {canDelete && <Button size="sm" variant="destructive" onClick={() => setDeleteConfirm(row)}>Delete</Button>}
                   </div>
                 </CardContent>
               </Card>
@@ -317,6 +347,21 @@ export function EsignSettingsListPage() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={runConfirm} className="bg-indigo-600">Confirm</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!deleteConfirm} onOpenChange={() => setDeleteConfirm(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete E-Sign Setting</AlertDialogTitle>
+            <AlertDialogDescription>
+              {`Delete "${deleteConfirm?.settingCode}"? This action cannot be undone.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={runDelete} className="bg-red-600 hover:bg-red-700">Delete</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

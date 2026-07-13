@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { Plus, Search, Download, Eye, Pencil, UserCheck, UserX } from 'lucide-react';
+import { Plus, Search, Download, Eye, Pencil, UserCheck, UserX, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/admin/dashboard/page-header';
 import { StatusBadge } from '@/components/admin/dashboard/status-badge';
@@ -30,7 +30,7 @@ import { canEditDesignations } from '@/lib/permissions';
 import { DESIGNATION_LEVELS, RECORD_STATUSES } from '@/lib/admin/constants';
 import type { Designation } from '@/lib/admin/schemas';
 import {
-  fetchDesignations, setDesignationStatus, exportDesignationsCsv, logDesignationExport,
+  fetchDesignations, setDesignationStatus, deleteDesignation, exportDesignationsCsv, logDesignationExport,
 } from '@/lib/admin/designation-service';
 import { fetchDepartments } from '@/lib/admin/department-service';
 
@@ -38,7 +38,7 @@ const PAGE_SIZE = 10;
 
 export function DesignationsListPage() {
   const { user, profile } = useAuth();
-  const { role } = useAdminPermissions();
+  const { role, canDelete } = useAdminPermissions();
   const canEdit = canEditDesignations(role);
 
   const [designations, setDesignations] = useState<Designation[]>([]);
@@ -51,6 +51,7 @@ export function DesignationsListPage() {
   const [levelFilter, setLevelFilter] = useState('all');
   const [page, setPage] = useState(0);
   const [confirm, setConfirm] = useState<{ des: Designation; activate: boolean } | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<Designation | null>(null);
 
   const auditMeta = {
     userId: user?.uid || 'system',
@@ -119,6 +120,18 @@ export function DesignationsListPage() {
       toast.error(result.error || 'Action failed');
     }
     setConfirm(null);
+  };
+
+  const runDelete = async () => {
+    if (!deleteConfirm?.id) return;
+    const result = await deleteDesignation(deleteConfirm.id, deleteConfirm, auditMeta);
+    if (result.success) {
+      toast.success('Designation deleted');
+      load();
+    } else {
+      toast.error(result.error || 'Delete failed');
+    }
+    setDeleteConfirm(null);
   };
 
   if (loading) {
@@ -224,6 +237,11 @@ export function DesignationsListPage() {
                                 ? <Button variant="ghost" size="icon" onClick={() => setConfirm({ des: row, activate: false })}><UserX className="h-4 w-4 text-amber-600" /></Button>
                                 : <Button variant="ghost" size="icon" onClick={() => setConfirm({ des: row, activate: true })}><UserCheck className="h-4 w-4 text-green-600" /></Button>
                               }
+                              {canDelete && (
+                                <Button variant="ghost" size="icon" onClick={() => setDeleteConfirm(row)}>
+                                  <Trash2 className="h-4 w-4 text-red-600" />
+                                </Button>
+                              )}
                             </>
                           )}
                         </div>
@@ -253,6 +271,7 @@ export function DesignationsListPage() {
                   <div className="flex gap-2 pt-2">
                     <Button asChild size="sm" variant="outline"><Link href={`/admin/designations/${row.id}`}>View</Link></Button>
                     {canEdit && <Button asChild size="sm" variant="outline"><Link href={`/admin/designations/${row.id}/edit`}>Edit</Link></Button>}
+                    {canDelete && <Button size="sm" variant="destructive" onClick={() => setDeleteConfirm(row)}>Delete</Button>}
                   </div>
                 </CardContent>
               </Card>
@@ -283,6 +302,21 @@ export function DesignationsListPage() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={runConfirm} className="bg-blue-600">Confirm</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!deleteConfirm} onOpenChange={() => setDeleteConfirm(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Designation</AlertDialogTitle>
+            <AlertDialogDescription>
+              {`Delete "${deleteConfirm?.designationName}"? This will remove it from active records.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={runDelete} className="bg-red-600 hover:bg-red-700">Delete</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

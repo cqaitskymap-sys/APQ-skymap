@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { Plus, Search, Download, Eye, Pencil, UserCheck, UserX } from 'lucide-react';
+import { Plus, Search, Download, Eye, Pencil, UserCheck, UserX, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/admin/dashboard/page-header';
 import { StatusBadge } from '@/components/admin/dashboard/status-badge';
@@ -29,14 +29,14 @@ import { canEditDepartments } from '@/lib/permissions';
 import { DEPARTMENT_TYPES, RECORD_STATUSES } from '@/lib/admin/constants';
 import type { Department } from '@/lib/admin/schemas';
 import {
-  fetchDepartments, setDepartmentStatus, exportDepartmentsCsv, logDepartmentExport,
+  fetchDepartments, setDepartmentStatus, deleteDepartment, exportDepartmentsCsv, logDepartmentExport,
 } from '@/lib/admin/department-service';
 
 const PAGE_SIZE = 10;
 
 export function DepartmentsListPage() {
   const { user, profile } = useAuth();
-  const { role } = useAdminPermissions();
+  const { role, canDelete } = useAdminPermissions();
   const canEdit = canEditDepartments(role);
 
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -48,6 +48,7 @@ export function DepartmentsListPage() {
   const [siteFilter, setSiteFilter] = useState('all');
   const [page, setPage] = useState(0);
   const [confirm, setConfirm] = useState<{ dept: Department; activate: boolean } | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<Department | null>(null);
 
   const auditMeta = {
     userId: user?.uid || 'system',
@@ -120,6 +121,18 @@ export function DepartmentsListPage() {
       toast.error(result.error || 'Action failed');
     }
     setConfirm(null);
+  };
+
+  const runDelete = async () => {
+    if (!deleteConfirm?.id) return;
+    const result = await deleteDepartment(deleteConfirm.id, deleteConfirm, auditMeta);
+    if (result.success) {
+      toast.success('Department deleted');
+      load();
+    } else {
+      toast.error(result.error || 'Delete failed');
+    }
+    setDeleteConfirm(null);
   };
 
   if (loading) {
@@ -227,6 +240,11 @@ export function DepartmentsListPage() {
                                 ? <Button variant="ghost" size="icon" onClick={() => setConfirm({ dept: row, activate: false })}><UserX className="h-4 w-4 text-amber-600" /></Button>
                                 : <Button variant="ghost" size="icon" onClick={() => setConfirm({ dept: row, activate: true })}><UserCheck className="h-4 w-4 text-green-600" /></Button>
                               }
+                              {canDelete && (
+                                <Button variant="ghost" size="icon" onClick={() => setDeleteConfirm(row)}>
+                                  <Trash2 className="h-4 w-4 text-red-600" />
+                                </Button>
+                              )}
                             </>
                           )}
                         </div>
@@ -253,6 +271,7 @@ export function DepartmentsListPage() {
                   <div className="flex gap-2 pt-2">
                     <Button asChild size="sm" variant="outline"><Link href={`/admin/departments/${row.id}`}>View</Link></Button>
                     {canEdit && <Button asChild size="sm" variant="outline"><Link href={`/admin/departments/${row.id}/edit`}>Edit</Link></Button>}
+                    {canDelete && <Button size="sm" variant="destructive" onClick={() => setDeleteConfirm(row)}>Delete</Button>}
                   </div>
                 </CardContent>
               </Card>
@@ -283,6 +302,21 @@ export function DepartmentsListPage() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={runConfirm} className="bg-blue-600">Confirm</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!deleteConfirm} onOpenChange={() => setDeleteConfirm(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Department</AlertDialogTitle>
+            <AlertDialogDescription>
+              {`Delete "${deleteConfirm?.departmentName}"? This will remove it from active records.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={runDelete} className="bg-red-600 hover:bg-red-700">Delete</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

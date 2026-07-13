@@ -271,6 +271,28 @@ export async function setParameterStatus(
   }
 }
 
+export async function deleteParameter(
+  id: string,
+  param: Parameter,
+  meta: ParameterAuditMeta,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    await updateAdminRecord(ADMIN_COLLECTIONS.parameters, id, {
+      isDeleted: true,
+      status: 'Inactive',
+    }, {
+      userId: meta.userId,
+      userName: meta.userName,
+      module: 'Parameter Master',
+      oldValue: JSON.stringify(param),
+    });
+    await logParameterAudit('DELETE_PARAMETER', id, meta, param, { isDeleted: true, status: 'Inactive' });
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: (e as Error).message };
+  }
+}
+
 export async function fetchParameterAuditTrail(recordId: string) {
   try {
     const [trail, logs] = await Promise.all([

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
-  Plus, Search, Download, Eye, Pencil, UserX, UserCheck, Lock, Unlock, Key, Filter,
+  Plus, Search, Download, Eye, Pencil, UserX, UserCheck, Lock, Unlock, Key, Filter, Trash2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/admin/dashboard/page-header';
@@ -34,6 +34,8 @@ import type { AdminUser } from '@/lib/admin/schemas';
 import {
   fetchUsers, setUserStatus, lockUser, resetUserPassword, exportUsersCsv,
 } from '@/lib/admin/user-service';
+import { deleteAdminRecord } from '@/lib/admin/admin-service';
+import { ADMIN_COLLECTIONS } from '@/lib/admin/constants';
 
 const PAGE_SIZE = 10;
 
@@ -44,7 +46,7 @@ type ConfirmAction = {
 
 export function UsersListPage() {
   const { user, profile } = useAuth();
-  const { role } = useAdminPermissions();
+  const { role, canDelete } = useAdminPermissions();
   const canEdit = canEditUsers(role);
 
   const [users, setUsers] = useState<AdminUser[]>([]);
@@ -57,6 +59,7 @@ export function UsersListPage() {
   const [page, setPage] = useState(0);
   const [confirm, setConfirm] = useState<ConfirmAction>(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState<AdminUser | null>(null);
 
   const auditMeta = {
     userId: user?.uid || 'system',
@@ -152,6 +155,32 @@ export function UsersListPage() {
     } finally {
       setActionLoading(false);
       setConfirm(null);
+    }
+  };
+
+  const runDelete = async () => {
+    if (!deleteConfirm?.id) return;
+    if (deleteConfirm.id === user?.uid || deleteConfirm.userId === user?.uid) {
+      toast.error('You cannot delete your own account');
+      setDeleteConfirm(null);
+      return;
+    }
+    try {
+      const ok = await deleteAdminRecord(ADMIN_COLLECTIONS.users, deleteConfirm.id, {
+        userId: auditMeta.userId,
+        userName: auditMeta.userName,
+        module: 'User Management',
+      });
+      if (ok) {
+        toast.success('User deleted');
+        load();
+      } else {
+        toast.error('Delete failed');
+      }
+    } catch {
+      toast.error('Delete failed');
+    } finally {
+      setDeleteConfirm(null);
     }
   };
 
@@ -285,6 +314,11 @@ export function UsersListPage() {
                                 ? <Button variant="ghost" size="icon" onClick={() => setConfirm({ type: 'unlock', user: row })}><Unlock className="h-4 w-4" /></Button>
                                 : <Button variant="ghost" size="icon" onClick={() => setConfirm({ type: 'lock', user: row })}><Lock className="h-4 w-4" /></Button>}
                               <Button variant="ghost" size="icon" onClick={() => setConfirm({ type: 'reset', user: row })}><Key className="h-4 w-4" /></Button>
+                              {canDelete && (
+                                <Button variant="ghost" size="icon" onClick={() => setDeleteConfirm(row)}>
+                                  <Trash2 className="h-4 w-4 text-red-600" />
+                                </Button>
+                              )}
                             </>
                           )}
                         </div>
@@ -320,6 +354,7 @@ export function UsersListPage() {
                       {canEdit && (
                         <Button asChild size="sm" variant="outline"><Link href={`/admin/users/${row.id}/edit`}>Edit</Link></Button>
                       )}
+                      {canDelete && <Button size="sm" variant="destructive" onClick={() => setDeleteConfirm(row)}>Delete</Button>}
                     </div>
                   </CardContent>
                 </Card>
@@ -355,6 +390,21 @@ export function UsersListPage() {
             <AlertDialogAction onClick={runConfirm} disabled={actionLoading} className="bg-blue-600">
               Confirm
             </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!deleteConfirm} onOpenChange={() => setDeleteConfirm(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete User</AlertDialogTitle>
+            <AlertDialogDescription>
+              {`Delete "${deleteConfirm?.fullName}" (${deleteConfirm?.email})? This action cannot be undone.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={runDelete} className="bg-red-600 hover:bg-red-700">Delete</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

@@ -12,6 +12,9 @@ export type PermissionAction = typeof PERMISSION_ACTIONS[number];
 /** Maps Firebase auth roles to internal admin role IDs */
 const LEGACY_ROLE_MAP: Record<string, AdminRoleId> = {
   super_admin: 'super_admin',
+  'super admin': 'super_admin',
+  'super-admin': 'super_admin',
+  superadmin: 'super_admin',
   admin: 'admin',
   qa: 'qa_manager',
   qc: 'qc_manager',
@@ -44,7 +47,16 @@ export const ROLE_DEFINITIONS: { id: UserRole; label: string; description: strin
 
 export function normalizeRole(role?: string | null): AdminRoleId {
   if (!role) return 'viewer';
-  return (LEGACY_ROLE_MAP[role] || role) as AdminRoleId;
+  const trimmed = role.trim();
+  const lowered = trimmed.toLowerCase();
+  const normalized = lowered.replace(/[\s-]+/g, '_');
+  const collapsed = normalized.replace(/_/g, '');
+
+  return (LEGACY_ROLE_MAP[trimmed]
+    || LEGACY_ROLE_MAP[lowered]
+    || LEGACY_ROLE_MAP[normalized]
+    || LEGACY_ROLE_MAP[collapsed]
+    || normalized) as AdminRoleId;
 }
 
 function buildDefaultPermissions(roleId: AdminRoleId): Record<AdminModule, Record<PermissionAction, boolean>> {

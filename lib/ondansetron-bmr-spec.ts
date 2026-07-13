@@ -309,12 +309,19 @@ export function getAllBmrCppParameters(): string[] {
 
 /** Maps CPP process stage → BMR spec sections (Ondansetron Injection). */
 export const CPP_STAGE_TO_BMR_SECTIONS: Record<string, string[]> = {
+  'Environment Monitoring': ['DISPENSING'],
   Dispensing: ['DISPENSING'],
+  'Sterilization of Equipments': ['STERILIZATION OF EQUIPMENT'],
   Sterilization: ['STERILIZATION OF EQUIPMENT'],
-  'Vial Washing': ['GLASS CONTAINER WASHING'],
-  Depyrogenation: ['GLASS CONTAINER DEPYROGENATION'],
+  'Batch Manufacturing': ['MIXING'],
   Mixing: ['MIXING'],
+  'Glass Container Washing': ['GLASS CONTAINER WASHING'],
+  'Vial Washing': ['GLASS CONTAINER WASHING'],
+  'Glass Container Depyrogenation': ['GLASS CONTAINER DEPYROGENATION'],
+  Depyrogenation: ['GLASS CONTAINER DEPYROGENATION'],
+  'Filtration Process': ['FILTRATION PROCESS'],
   Filtration: ['FILTRATION PROCESS'],
+  'Filling Process': ['FILLING PROCESS'],
   Filling: ['FILLING PROCESS'],
 };
 

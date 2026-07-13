@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { Plus, Search, Download, Eye, Pencil, UserCheck, UserX, Upload } from 'lucide-react';
+import { Plus, Search, Download, Eye, Pencil, UserCheck, UserX, Upload, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/admin/dashboard/page-header';
 import { LoadingSkeleton } from '@/components/admin/dashboard/loading-skeleton';
@@ -30,6 +30,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { useAuth } from '@/contexts/auth-context';
 import { useAdminPermissions } from '@/hooks/use-admin-permissions';
 import { canEditProducts, canImportProducts } from '@/lib/permissions';
+import { deleteAdminRecord } from '@/lib/admin/admin-service';
+import { ADMIN_COLLECTIONS } from '@/lib/admin/constants';
 import { DOSAGE_FORMS, MARKET_OPTIONS, PRODUCT_STATUSES } from '@/lib/admin/constants';
 import type { AdminProduct } from '@/lib/admin/schemas';
 import {
@@ -40,7 +42,7 @@ const PAGE_SIZE = 10;
 
 export function ProductsListPage() {
   const { user, profile } = useAuth();
-  const { role } = useAdminPermissions();
+  const { role, canDelete } = useAdminPermissions();
   const canEdit = canEditProducts(role);
   const canImport = canImportProducts(role);
 
@@ -56,6 +58,7 @@ export function ProductsListPage() {
   const [pasteOpen, setPasteOpen] = useState(false);
   const [pasteText, setPasteText] = useState('');
   const [importing, setImporting] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState<AdminProduct | null>(null);
 
   const auditMeta = {
     userId: user?.uid || 'system',
@@ -149,6 +152,27 @@ export function ProductsListPage() {
       load();
     } else toast.error(result.error || 'Action failed');
     setConfirm(null);
+  };
+
+  const runDelete = async () => {
+    if (!deleteConfirm?.id) return;
+    try {
+      const ok = await deleteAdminRecord(ADMIN_COLLECTIONS.products, deleteConfirm.id, {
+        userId: auditMeta.userId,
+        userName: auditMeta.userName,
+        module: 'Product Master',
+      });
+      if (ok) {
+        toast.success('Product deleted');
+        load();
+      } else {
+        toast.error('Delete failed');
+      }
+    } catch {
+      toast.error('Delete failed');
+    } finally {
+      setDeleteConfirm(null);
+    }
   };
 
   if (loading) return <div><PageHeader title="Product Master" basePath="/admin" /><LoadingSkeleton rows={2} /></div>;
@@ -250,6 +274,11 @@ export function ProductsListPage() {
                                 ? <Button variant="ghost" size="icon" onClick={() => setConfirm({ product: row, activate: false })}><UserX className="h-4 w-4 text-amber-600" /></Button>
                                 : <Button variant="ghost" size="icon" onClick={() => setConfirm({ product: row, activate: true })}><UserCheck className="h-4 w-4 text-green-600" /></Button>
                               }
+                              {canDelete && (
+                                <Button variant="ghost" size="icon" onClick={() => setDeleteConfirm(row)}>
+                                  <Trash2 className="h-4 w-4 text-red-600" />
+                                </Button>
+                              )}
                             </>
                           )}
                         </div>
@@ -274,6 +303,7 @@ export function ProductsListPage() {
                   <div className="flex gap-2 pt-2">
                     <Button asChild size="sm" variant="outline"><Link href={`/admin/products/${row.id}`}>View</Link></Button>
                     {canEdit && <Button asChild size="sm" variant="outline"><Link href={`/admin/products/${row.id}/edit`}>Edit</Link></Button>}
+                    {canDelete && <Button size="sm" variant="destructive" onClick={() => setDeleteConfirm(row)}>Delete</Button>}
                   </div>
                 </CardContent>
               </Card>
@@ -304,6 +334,21 @@ export function ProductsListPage() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={runConfirm} className="bg-blue-600">Confirm</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!deleteConfirm} onOpenChange={() => setDeleteConfirm(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Product</AlertDialogTitle>
+            <AlertDialogDescription>
+              {`Delete "${deleteConfirm?.productName}"? This action cannot be undone.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={runDelete} className="bg-red-600 hover:bg-red-700">Delete</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

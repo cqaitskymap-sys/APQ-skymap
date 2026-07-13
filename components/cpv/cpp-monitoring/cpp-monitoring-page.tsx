@@ -9,7 +9,9 @@ import { useAuth } from '@/contexts/auth-context';
 import { cpvPermissions } from '@/lib/cpv';
 import {
   summarizeCppResults, buildChartSeries, CPP_PROCESS_STAGES, CPP_RESULT_STATUSES,
-  type CppResultFormData, type CppResultRecord,
+  cppStageHasAreas, getCppAreasForStage, getCppHierarchyOptionsForStageArea,
+  cppProcessStagesMatch,
+  type CppResultFormData, type CppResultRecord, type CppHierarchyParameterOption,
 } from '@/lib/cpv-cpp-monitoring';
 import {
   fetchCppResults, fetchCppBatchesForProduct,
@@ -52,14 +54,18 @@ import type { ColumnDef } from '@/components/admin/admin-data-table';
 
 const CHART_COLORS = ['#2563eb', '#059669', '#d97706', '#dc2626', '#7c3aed'];
 
-type CppParamOption = Parameter | OndansetronCppOption;
+type CppParamOption = Parameter | OndansetronCppOption | CppHierarchyParameterOption;
 
 function isBmrCppOption(p: CppParamOption): p is OndansetronCppOption {
   return 'specificationText' in p && String(p.id).startsWith('bmr-cpp-');
 }
 
+function isHierarchyCppOption(p: CppParamOption): p is CppHierarchyParameterOption {
+  return String(p.id).startsWith('cpp-hier-');
+}
+
 function paramOptionId(p: CppParamOption): string {
-  if (isBmrCppOption(p)) return p.id;
+  if (isBmrCppOption(p) || isHierarchyCppOption(p)) return p.id;
   return p.id || p.parameterId || buildParameterId(p.parameterCode);
 }
 
@@ -111,6 +117,7 @@ export function CppMonitoringPage() {
   const [bulkProductId, setBulkProductId] = useState('');
   const [bulkBatchId, setBulkBatchId] = useState('');
   const [bulkStage, setBulkStage] = useState<string>(CPP_PROCESS_STAGES[0]);
+  const [bulkArea, setBulkArea] = useState('');
   const [bulkRows, setBulkRows] = useState<Array<{ param: CppParamOption; observed: string; remarks: string }>>([]);
 
   const actor = { id: user?.uid || 'system', name: profile?.full_name || 'System', role: role || '' };
@@ -136,7 +143,7 @@ export function CppMonitoringPage() {
     return results.filter((r) => {
       if (productFilter !== 'all' && r.productName !== productFilter) return false;
       if (batchFilter !== 'all' && r.batchNumber !== batchFilter) return false;
-      if (stageFilter !== 'all' && r.processStage !== stageFilter) return false;
+      if (stageFilter !== 'all' && !cppProcessStagesMatch(r.processStage, stageFilter)) return false;
       if (statusFilter !== 'all' && r.status !== statusFilter) return false;
       if (riskFilter !== 'all' && r.riskLevel !== riskFilter) return false;
       if (!q) return true;
@@ -155,16 +162,29 @@ export function CppMonitoringPage() {
     productName: string,
     productId: string,
     processStage: string,
+    processArea = '',
   ): Promise<CppParamOption[]> => {
-    const dbParams = await fetchCppParametersForProduct(productName, productId, processStage);
+    const resolveDefaults = isOndansetronProduct(productName)
+      ? (bmrName: string) => resolveOndansetronCppDefaults(bmrName)
+      : undefined;
+    const hierarchyOptions = getCppHierarchyOptionsForStageArea(processStage, processArea, resolveDefaults);
+
+    const dbParams = await fetchCppParametersForProduct(productName, productId, processStage, processArea);
+    const hierarchyNames = new Set(hierarchyOptions.map((o) => o.parameterName.toLowerCase()));
+
     if (isOndansetronProduct(productName)) {
       const bmrOptions = getOndansetronCppOptionsForStage(processStage);
-      if (!dbParams.length) return bmrOptions;
+      const filteredBmr = bmrOptions.filter((o) => !hierarchyNames.has(o.parameterName.toLowerCase()));
+      if (!dbParams.length) return [...hierarchyOptions, ...filteredBmr];
       const dbNames = new Set(dbParams.map((p) => normalizeParameter(p).parameterName.toLowerCase()));
-      const extras = bmrOptions.filter((o) => !dbNames.has(o.parameterName.toLowerCase()));
-      return [...dbParams, ...extras];
+      const extras = filteredBmr.filter((o) => !dbNames.has(o.parameterName.toLowerCase()));
+      const dbExtras = dbParams.filter((p) => !hierarchyNames.has(normalizeParameter(p).parameterName.toLowerCase()));
+      return [...hierarchyOptions, ...dbParams.filter((p) => hierarchyNames.has(normalizeParameter(p).parameterName.toLowerCase())), ...dbExtras, ...extras];
     }
-    return dbParams;
+
+    if (!dbParams.length) return hierarchyOptions;
+    const extras = dbParams.filter((p) => !hierarchyNames.has(normalizeParameter(p).parameterName.toLowerCase()));
+    return [...hierarchyOptions, ...extras];
   }, []);
 
   const openCreate = () => {
@@ -177,6 +197,7 @@ export function CppMonitoringPage() {
       observationDateTime: new Date().toISOString(),
       recordedBy: profile?.full_name || '',
       processStage: CPP_PROCESS_STAGES[0],
+      processArea: '',
       resultType: 'Numeric',
       criticality: 'Major',
       frequency: 'Per Batch',
@@ -199,9 +220,10 @@ export function CppMonitoringPage() {
       dosageForm: p.dosageForm,
     }));
     const stage = form.processStage || CPP_PROCESS_STAGES[0];
+    const area = form.processArea || '';
     const [batches, params] = await Promise.all([
       fetchCppBatchesForProduct(p.productName),
-      resolveFormParameters(p.productName, productId, stage),
+      resolveFormParameters(p.productName, productId, stage, area),
     ]);
     setFormBatches(batches);
     setFormParams(params);
@@ -217,9 +239,11 @@ export function CppMonitoringPage() {
   };
 
   const onFormStageChange = async (stage: string) => {
+    const areas = getCppAreasForStage(stage);
     setForm((f) => ({
       ...f,
       processStage: stage,
+      processArea: areas[0] ?? '',
       parameterId: '',
       parameterCode: '',
       parameterName: '',
@@ -232,9 +256,37 @@ export function CppMonitoringPage() {
     if (formProductId) {
       const p = products.find((x) => x.id === formProductId);
       if (p) {
-        const params = await resolveFormParameters(p.productName, formProductId, stage);
+        const area = areas[0] ?? '';
+        const params = await resolveFormParameters(p.productName, formProductId, stage, area);
         setFormParams(params);
       }
+    } else {
+      setFormParams(getCppHierarchyOptionsForStageArea(stage, areas[0] ?? ''));
+    }
+  };
+
+  const onFormAreaChange = async (area: string) => {
+    setForm((f) => ({
+      ...f,
+      processArea: area,
+      parameterId: '',
+      parameterCode: '',
+      parameterName: '',
+      parameterCategory: '',
+      unit: '',
+      lowerLimit: undefined,
+      upperLimit: undefined,
+      targetValue: undefined,
+    }));
+    const stage = form.processStage || CPP_PROCESS_STAGES[0];
+    if (formProductId) {
+      const p = products.find((x) => x.id === formProductId);
+      if (p) {
+        const params = await resolveFormParameters(p.productName, formProductId, stage, area);
+        setFormParams(params);
+      }
+    } else {
+      setFormParams(getCppHierarchyOptionsForStageArea(stage, area));
     }
   };
 
@@ -249,6 +301,25 @@ export function CppMonitoringPage() {
         parameterCode: p.parameterCode,
         parameterName: p.parameterName,
         parameterCategory: p.section,
+        lowerLimit: p.lsl,
+        upperLimit: p.usl,
+        targetValue: p.target,
+        unit: p.unit,
+        resultType: p.resultType === 'Text' ? 'Text' : 'Numeric',
+        criticality: p.criticality,
+        processStage: f.processStage || p.processStage || CPP_PROCESS_STAGES[0],
+      }));
+      return;
+    }
+
+    if (isHierarchyCppOption(p)) {
+      setForm((f) => ({
+        ...f,
+        parameterId: paramId,
+        parameterCode: p.parameterCode,
+        parameterName: p.parameterName,
+        parameterCategory: p.processArea || p.processStage,
+        processArea: p.processArea || f.processArea || '',
         lowerLimit: p.lsl,
         upperLimit: p.usl,
         targetValue: p.target,
@@ -308,7 +379,10 @@ export function CppMonitoringPage() {
     setBulkProductId(productId);
     const p = products.find((x) => x.id === productId);
     if (!p) return;
-    const params = await resolveFormParameters(p.productName, productId, bulkStage);
+    const areas = getCppAreasForStage(bulkStage);
+    const area = areas[0] ?? '';
+    setBulkArea(area);
+    const params = await resolveFormParameters(p.productName, productId, bulkStage, area);
     setBulkRows(params.map((param) => ({ param, observed: '', remarks: '' })));
     setBulkOpen(true);
   };
@@ -328,10 +402,40 @@ export function CppMonitoringPage() {
           batchNumber: batch.batchNumber,
           manufacturingDate: batch.manufacturingDate,
           processStage: bulkStage,
+          processArea: bulkArea,
           parameterId: n.id,
           parameterCode: n.parameterCode,
           parameterName: n.parameterName,
           parameterCategory: n.section,
+          observedValue: Number(row.observed),
+          targetValue: n.target,
+          lowerLimit: n.lsl,
+          upperLimit: n.usl,
+          unit: n.unit,
+          resultType: (n.resultType === 'Text' ? 'Text' : 'Numeric') as CppResultFormData['resultType'],
+          frequency: 'Per Batch',
+          criticality: n.criticality,
+          observationDateTime: new Date().toISOString(),
+          recordedBy: profile?.full_name || '',
+          reviewedBy: '',
+          reviewDate: '',
+          remarks: row.remarks,
+        };
+      }
+      if (isHierarchyCppOption(row.param)) {
+        const n = row.param;
+        return {
+          cpvProductId: bulkProductId,
+          productName: p.productName,
+          productCode: p.productCode,
+          batchNumber: batch.batchNumber,
+          manufacturingDate: batch.manufacturingDate,
+          processStage: bulkStage,
+          processArea: n.processArea || bulkArea,
+          parameterId: n.id,
+          parameterCode: n.parameterCode,
+          parameterName: n.parameterName,
+          parameterCategory: n.processArea || n.processStage,
           observedValue: Number(row.observed),
           targetValue: n.target,
           lowerLimit: n.lsl,
@@ -357,6 +461,7 @@ export function CppMonitoringPage() {
         batchNumber: batch.batchNumber,
         manufacturingDate: batch.manufacturingDate,
         processStage: bulkStage,
+        processArea: bulkArea,
         parameterId: row.param.id || '',
         parameterCode: n.parameterCode,
         parameterName: n.parameterName,
@@ -389,6 +494,7 @@ export function CppMonitoringPage() {
     { key: 'batchNumber', header: 'Batch' },
     { key: 'parameterName', header: 'Parameter' },
     { key: 'processStage', header: 'Stage' },
+    { key: 'processArea', header: 'Area' },
     { key: 'observedValue', header: 'Observed' },
     { key: 'status', header: 'Status', render: (r) => <StatusBadge status={r.status} /> },
     { key: 'riskLevel', header: 'Risk', render: (r) => <RiskBadge level={r.riskLevel} /> },
@@ -560,13 +666,33 @@ export function CppMonitoringPage() {
                 <SelectContent>{CPP_PROCESS_STAGES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
               </Select>
             </div>
+            {cppStageHasAreas(form.processStage || '') && (
+              <div><Label>Area *</Label>
+                <Select value={form.processArea || ''} onValueChange={(v) => void onFormAreaChange(v)}>
+                  <SelectTrigger className="mt-1"><SelectValue placeholder="Select area" /></SelectTrigger>
+                  <SelectContent>
+                    {getCppAreasForStage(form.processStage || '').map((a) => (
+                      <SelectItem key={a} value={a}>{a}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div><Label>Parameter *</Label>
               <Select
                 value={form.parameterId || ''}
                 onValueChange={onFormParamChange}
-                disabled={Boolean(editing) || !formProductId}
+                disabled={Boolean(editing) || !formProductId || (cppStageHasAreas(form.processStage || '') && !form.processArea)}
               >
-                <SelectTrigger className="mt-1"><SelectValue placeholder={formProductId ? 'Parameter' : 'Select product first'} /></SelectTrigger>
+                <SelectTrigger className="mt-1">
+                  <SelectValue placeholder={
+                    !formProductId
+                      ? 'Select product first'
+                      : cppStageHasAreas(form.processStage || '') && !form.processArea
+                        ? 'Select area first'
+                        : 'Parameter'
+                  } />
+                </SelectTrigger>
                 <SelectContent>
                   {formParams.map((p) => (
                     <SelectItem key={paramOptionId(p)} value={paramOptionId(p)}>{paramOptionName(p)}</SelectItem>
@@ -610,7 +736,7 @@ export function CppMonitoringPage() {
                 if (p) {
                   const batches = await fetchCppBatchesForProduct(p.productName);
                   setFormBatches(batches);
-                  const params = await resolveFormParameters(p.productName, v, bulkStage);
+                  const params = await resolveFormParameters(p.productName, v, bulkStage, bulkArea);
                   setBulkRows(params.map((param) => ({ param, observed: '', remarks: '' })));
                 }
               }}>
@@ -627,9 +753,12 @@ export function CppMonitoringPage() {
             <div><Label>Process Stage</Label>
               <Select value={bulkStage} onValueChange={async (v) => {
                 setBulkStage(v);
+                const areas = getCppAreasForStage(v);
+                const area = areas[0] ?? '';
+                setBulkArea(area);
                 const p = products.find((x) => x.id === bulkProductId);
                 if (p) {
-                  const params = await resolveFormParameters(p.productName, bulkProductId, v);
+                  const params = await resolveFormParameters(p.productName, bulkProductId, v, area);
                   setBulkRows(params.map((param) => ({ param, observed: '', remarks: '' })));
                 }
               }}>
@@ -637,12 +766,31 @@ export function CppMonitoringPage() {
                 <SelectContent>{CPP_PROCESS_STAGES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
               </Select>
             </div>
+            {cppStageHasAreas(bulkStage) && (
+              <div><Label>Area</Label>
+                <Select value={bulkArea} onValueChange={async (v) => {
+                  setBulkArea(v);
+                  const p = products.find((x) => x.id === bulkProductId);
+                  if (p) {
+                    const params = await resolveFormParameters(p.productName, bulkProductId, bulkStage, v);
+                    setBulkRows(params.map((param) => ({ param, observed: '', remarks: '' })));
+                  }
+                }}>
+                  <SelectTrigger className="mt-1"><SelectValue placeholder="Select area" /></SelectTrigger>
+                  <SelectContent>
+                    {getCppAreasForStage(bulkStage).map((a) => (
+                      <SelectItem key={a} value={a}>{a}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
           <Table>
             <TableHeader><TableRow><TableHead>Parameter</TableHead><TableHead>Target</TableHead><TableHead>LCL/UCL</TableHead><TableHead>Observed</TableHead><TableHead>Remarks</TableHead></TableRow></TableHeader>
             <TableBody>
               {bulkRows.map((row, i) => {
-                if (isBmrCppOption(row.param)) {
+                if (isBmrCppOption(row.param) || isHierarchyCppOption(row.param)) {
                   const n = row.param;
                   return (
                     <TableRow key={paramOptionId(row.param) || i}>

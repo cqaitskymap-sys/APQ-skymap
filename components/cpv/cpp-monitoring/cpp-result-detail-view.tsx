@@ -85,6 +85,7 @@ export function CppResultDetailView({ id }: { id: string }) {
           {[
             ['CPP Result ID', record.cppResultId],
             ['Process Stage', record.processStage],
+            ['Area', record.processArea],
             ['Criticality', record.criticality],
             ['Observation', record.observationDateTime],
             ['Recorded By', record.recordedBy],

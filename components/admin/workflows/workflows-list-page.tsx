@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { Plus, Search, Download, Eye, Pencil, UserCheck, UserX, Copy, Database } from 'lucide-react';
+import { Plus, Search, Download, Eye, Pencil, UserCheck, UserX, Copy, Database, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/admin/dashboard/page-header';
 import { KpiCard } from '@/components/admin/dashboard/kpi-card';
@@ -37,12 +37,14 @@ import {
   fetchWorkflows, getWorkflowSummaryCounts, setWorkflowStatus,
   exportWorkflowsCsv, logWorkflowExport, copyWorkflow, seedDefaultWorkflows,
 } from '@/lib/admin/workflow-service';
+import { deleteAdminRecord } from '@/lib/admin/admin-service';
+import { ADMIN_COLLECTIONS } from '@/lib/admin/constants';
 
 const PAGE_SIZE = 10;
 
 export function WorkflowsListPage() {
   const { user, profile } = useAuth();
-  const { role } = useAdminPermissions();
+  const { role, canDelete } = useAdminPermissions();
   const canEdit = canEditWorkflows(role);
   const canActivate = canActivateWorkflows(role);
   const canRecommend = canRecommendWorkflowChanges(role);
@@ -60,6 +62,7 @@ export function WorkflowsListPage() {
   const [copyCode, setCopyCode] = useState('');
   const [copyName, setCopyName] = useState('');
   const [seeding, setSeeding] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState<Workflow | null>(null);
 
   const auditMeta = {
     userId: user?.uid || 'system',
@@ -143,6 +146,27 @@ export function WorkflowsListPage() {
     setCopySource(null);
     setCopyCode('');
     setCopyName('');
+  };
+
+  const runDelete = async () => {
+    if (!deleteConfirm?.id) return;
+    try {
+      const ok = await deleteAdminRecord(ADMIN_COLLECTIONS.workflows, deleteConfirm.id, {
+        userId: auditMeta.userId,
+        userName: auditMeta.userName,
+        module: 'Workflow Configuration',
+      });
+      if (ok) {
+        toast.success('Workflow deleted');
+        load();
+      } else {
+        toast.error('Delete failed');
+      }
+    } catch {
+      toast.error('Delete failed');
+    } finally {
+      setDeleteConfirm(null);
+    }
   };
 
   if (loading) return <div><PageHeader title="Workflow Configuration" basePath="/admin" /><LoadingSkeleton rows={2} /></div>;
@@ -255,6 +279,11 @@ export function WorkflowsListPage() {
                                   ? <Button variant="ghost" size="icon" onClick={() => setConfirm({ wf: row, activate: false })}><UserX className="h-4 w-4 text-amber-600" /></Button>
                                   : <Button variant="ghost" size="icon" onClick={() => setConfirm({ wf: row, activate: true })}><UserCheck className="h-4 w-4 text-green-600" /></Button>
                               )}
+                              {canDelete && (
+                                <Button variant="ghost" size="icon" onClick={() => setDeleteConfirm(row)}>
+                                  <Trash2 className="h-4 w-4 text-red-600" />
+                                </Button>
+                              )}
                             </>
                           )}
                         </div>
@@ -280,6 +309,7 @@ export function WorkflowsListPage() {
                   <div className="flex gap-2 pt-2">
                     <Button asChild size="sm" variant="outline"><Link href={`/admin/workflows/${row.id}`}>View</Link></Button>
                     {canEdit && <Button asChild size="sm" variant="outline"><Link href={`/admin/workflows/${row.id}/edit`}>Edit</Link></Button>}
+                    {canDelete && <Button size="sm" variant="destructive" onClick={() => setDeleteConfirm(row)}>Delete</Button>}
                   </div>
                 </CardContent>
               </Card>
@@ -333,6 +363,21 @@ export function WorkflowsListPage() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={runCopy} className="bg-blue-600">Copy Workflow</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!deleteConfirm} onOpenChange={() => setDeleteConfirm(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Workflow</AlertDialogTitle>
+            <AlertDialogDescription>
+              {`Delete "${deleteConfirm?.workflowName}"? This action cannot be undone.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={runDelete} className="bg-red-600 hover:bg-red-700">Delete</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

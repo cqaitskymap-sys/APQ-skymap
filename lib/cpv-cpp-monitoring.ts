@@ -1,11 +1,310 @@
 import { z } from 'zod';
-import { PROCESS_STAGES, CRITICALITY_OPTIONS, RESULT_TYPES } from '@/lib/admin/constants';
+import { CRITICALITY_OPTIONS, RESULT_TYPES } from '@/lib/admin/constants';
 
 export const CPP_RESULTS_COLLECTION = 'cpp_results';
 export const CPP_LEGACY_COLLECTION = 'cpv_cpp';
 export const CPP_MODULE_NAME = 'CPP Monitoring';
 
-export const CPP_PROCESS_STAGES = PROCESS_STAGES;
+/** Canonical CPP process stages (Continued Process Verification). */
+export const CPP_PROCESS_STAGES = [
+  'Environment Monitoring',
+  'Sterilization of Equipments',
+  'Batch Manufacturing',
+  'Filtration Process',
+  'Glass Container Washing',
+  'Glass Container Depyrogenation',
+  'Filling Process',
+  'Leak Test',
+] as const;
+
+export type CppProcessStage = (typeof CPP_PROCESS_STAGES)[number];
+
+export interface CppStageAreaConfig {
+  area: string;
+  parameters: readonly string[];
+}
+
+export interface CppStageConfig {
+  stage: CppProcessStage;
+  areas?: readonly CppStageAreaConfig[];
+  parameters?: readonly string[];
+}
+
+/** Stage → Area → Parameter hierarchy for CPP monitoring. */
+export const CPP_MONITORING_HIERARCHY: readonly CppStageConfig[] = [
+  {
+    stage: 'Environment Monitoring',
+    areas: [
+      {
+        area: 'Dispensing Area',
+        parameters: ['Temperature', 'Relative Humidity', 'Differential Pressure'],
+      },
+      {
+        area: 'Manufacturing Area',
+        parameters: ['Temperature', 'Relative Humidity', 'Differential Pressure'],
+      },
+      {
+        area: 'Filling Area',
+        parameters: ['Temperature', 'Relative Humidity', 'Differential Pressure'],
+      },
+    ],
+  },
+  {
+    stage: 'Sterilization of Equipments',
+    areas: [
+      {
+        area: 'Machine Parts (MP)',
+        parameters: [
+          'Cleaned MP Hold Time (hrs)',
+          'Sterilization Temp. (°C) MP',
+          'Sterilization Hold Time (min) MP',
+          'Hold Time of Sterilized (Hrs) MP',
+        ],
+      },
+      {
+        area: 'Mixing Vessel (MV)',
+        parameters: [
+          'Sterilization Temp. (°C) MV',
+          'Sterilization Hold Time (min) MV',
+          'Hold Time of Sterilized (Hrs) MV',
+        ],
+      },
+      {
+        area: 'Holding Vessel / Buffer Vessel (HV/BV)',
+        parameters: [
+          'Sterilization Temp. (°C) HV/BV',
+          'Sterilization Hold Time (min) HV/BV',
+          'Hold Time of Sterilized (Hrs) HV/BV',
+        ],
+      },
+    ],
+  },
+  {
+    stage: 'Batch Manufacturing',
+    parameters: [
+      'Stirrer Speed (RPM)',
+      'Mixing Time (min)',
+      'Volume of Bulk Solution (L)',
+      'Bulk Hold Time (Hrs)',
+    ],
+  },
+  {
+    stage: 'Filtration Process',
+    parameters: [
+      'Make',
+      'Primary Integrity — Pre (BPT) (mbar)',
+      'Primary Integrity — Post (BPT) (mbar)',
+      'Secondary Integrity — Pre (BPT) (mbar)',
+      'Secondary Integrity — Post (BPT) (mbar)',
+      'Filtration Pressure (bar) — Min',
+      'Filtration Pressure (bar) — Max',
+      'Filtration Time (min)',
+      'Hold Tank Volume (L)',
+      'Solution Hold Time (min)',
+    ],
+  },
+  {
+    stage: 'Glass Container Washing',
+    parameters: [
+      'Compressed Air Pressure (MPa)',
+      'Recycled WFI-I Pressure (MPa)',
+      'Recycled WFI-II Pressure (MPa)',
+      'Fresh WFI Pressure (MPa)',
+    ],
+  },
+  {
+    stage: 'Glass Container Depyrogenation',
+    areas: [
+      {
+        area: 'Differential Pressure (Pa)',
+        parameters: ['Preheating Zone', 'Sterilization Zone', 'Cooling Zone'],
+      },
+      {
+        area: 'Temperature (°C)',
+        parameters: ['Preheating Zone', 'Sterilization Zone', 'Cooling Zone'],
+      },
+    ],
+  },
+  {
+    stage: 'Filling Process',
+    parameters: [
+      'Fill Vol. (mL)',
+      'N₂ Pressure Pre-Fill',
+      'Filling M/C Speed',
+      'NVPC 0.5 µm / ft³ (Max)',
+      'NVPC 5 µm / ft³ (Max)',
+      'Units Filled',
+      'Filling Hr',
+    ],
+  },
+  {
+    stage: 'Leak Test',
+    parameters: ['Vacuum Hold Time'],
+  },
+] as const;
+
+/** Maps hierarchy parameter labels to BMR / admin parameter names for limit lookup. */
+export const CPP_HIERARCHY_BMR_ALIASES: Record<string, string> = {
+  Temperature: 'Temperature (°C)',
+  'Relative Humidity': 'Relative Humidity (%)',
+  'Differential Pressure': 'Differential Pressure',
+  'Cleaned MP Hold Time (hrs)': 'Cleaned MP Hold Time (hr)',
+  'Sterilization Temp. (°C) MP': 'Sterilization Temperature — MP (°C)',
+  'Sterilization Hold Time (min) MP': 'Sterilization Hold Time — MP (min)',
+  'Hold Time of Sterilized (Hrs) MP': 'Hold Time of Sterilized — MP (hr)',
+  'Sterilization Temp. (°C) MV': 'Sterilization Temperature — MV (°C)',
+  'Sterilization Hold Time (min) MV': 'Sterilization Hold Time — MV (min)',
+  'Hold Time of Sterilized (Hrs) MV': 'Hold Time of Sterilized — MV (hr)',
+  'Sterilization Temp. (°C) HV/BV': 'Sterilization Temperature — HV/BV (°C)',
+  'Sterilization Hold Time (min) HV/BV': 'Sterilization Hold Time — HV/BV (min)',
+  'Hold Time of Sterilized (Hrs) HV/BV': 'Hold Time of Sterilized — HV/BV (hr)',
+  'Stirrer Speed (RPM)': 'Mixing RPM',
+  'Volume of Bulk Solution (L)': 'Mixing Volume (L)',
+  'Bulk Hold Time (Hrs)': 'Bulk Hold Time (hr)',
+  Make: 'Filter Make',
+  'Fill Vol. (mL)': 'Fill Volume (mL)',
+  'N₂ Pressure Pre-Fill': 'N₂ Pressure Pre-Fill (kg/cm²)',
+  'Filling M/C Speed': 'Machine Speed (ampoules/min)',
+  'NVPC 0.5 µm / ft³ (Max)': 'NVPC — 0.5 µm (particles/m³)',
+  'NVPC 5 µm / ft³ (Max)': 'NVPC — 5 µm (particles/m³)',
+  'Units Filled': 'Units Filled (Nos.)',
+  'Filling Hr': 'Filling Time (hr)',
+  'Preheating Zone': 'Preheat Zone DP (Pa)',
+  'Sterilization Zone': 'Heating Zone DP (Pa)',
+  'Cooling Zone': 'Cooling Zone DP (Pa)',
+};
+
+/** Depyrogenation temperature-area zone aliases (area + parameter → BMR name). */
+export const CPP_DEPYRO_TEMP_ZONE_ALIASES: Record<string, string> = {
+  'Preheating Zone': 'Preheat Zone Temperature (°C)',
+  'Sterilization Zone': 'Heating Zone Temperature (°C)',
+  'Cooling Zone': 'Cooling Zone Temperature (°C)',
+};
+
+export interface CppHierarchyParameterOption {
+  id: string;
+  parameterName: string;
+  parameterCode: string;
+  processStage: string;
+  processArea: string;
+  unit: string;
+  target: number;
+  lsl: number;
+  usl: number;
+  resultType: 'Numeric' | 'Text';
+  criticality: 'Critical' | 'Major' | 'Minor';
+  specificationText: string;
+}
+
+function normalizeCppLabel(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+export function getCppStageConfig(stage: string): CppStageConfig | undefined {
+  return CPP_MONITORING_HIERARCHY.find((s) => normalizeCppLabel(s.stage) === normalizeCppLabel(stage));
+}
+
+export function cppStageHasAreas(stage: string): boolean {
+  const config = getCppStageConfig(stage);
+  return Boolean(config?.areas?.length);
+}
+
+export function getCppAreasForStage(stage: string): string[] {
+  const config = getCppStageConfig(stage);
+  return config?.areas?.map((a) => a.area) ?? [];
+}
+
+export function getCppParametersForStageArea(stage: string, processArea = ''): string[] {
+  const config = getCppStageConfig(stage);
+  if (!config) return [];
+  if (config.areas?.length) {
+    if (!processArea) return [];
+    const areaConfig = config.areas.find((a) => normalizeCppLabel(a.area) === normalizeCppLabel(processArea));
+    return areaConfig ? [...areaConfig.parameters] : [];
+  }
+  return config.parameters ? [...config.parameters] : [];
+}
+
+function hierarchyBmrAlias(parameterName: string, processStage: string, processArea: string): string {
+  if (
+    processStage === 'Glass Container Depyrogenation'
+    && processArea === 'Temperature (°C)'
+    && CPP_DEPYRO_TEMP_ZONE_ALIASES[parameterName]
+  ) {
+    return CPP_DEPYRO_TEMP_ZONE_ALIASES[parameterName];
+  }
+  if (
+    processStage === 'Glass Container Depyrogenation'
+    && processArea === 'Differential Pressure (Pa)'
+  ) {
+    const zoneMap: Record<string, string> = {
+      'Preheating Zone': 'Preheat Zone DP (Pa)',
+      'Sterilization Zone': 'Heating Zone DP (Pa)',
+      'Cooling Zone': 'Cooling Zone DP (Pa)',
+    };
+    return zoneMap[parameterName] ?? parameterName;
+  }
+  return CPP_HIERARCHY_BMR_ALIASES[parameterName] ?? parameterName;
+}
+
+function buildHierarchyParameterCode(stage: string, area: string, parameterName: string): string {
+  const parts = [stage, area, parameterName]
+    .filter(Boolean)
+    .join('_')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  return `CPP_${parts}`.slice(0, 48);
+}
+
+export function getCppHierarchyOptionsForStageArea(
+  processStage: string,
+  processArea = '',
+  resolveDefaults?: (bmrName: string) => Partial<{
+    target: number;
+    lsl: number;
+    usl: number;
+    unit: string;
+    specificationText: string;
+    criticality: 'Critical' | 'Major' | 'Minor';
+    resultType: 'Numeric' | 'Text';
+  }> | null,
+): CppHierarchyParameterOption[] {
+  const parameters = getCppParametersForStageArea(processStage, processArea);
+  if (!parameters.length) return [];
+
+  return parameters.map((parameterName) => {
+    const bmrName = hierarchyBmrAlias(parameterName, processStage, processArea);
+    const defaults = resolveDefaults?.(bmrName) ?? null;
+    const unitMatch = parameterName.match(/\(([^)]+)\)/);
+    return {
+      id: `cpp-hier-${buildHierarchyParameterCode(processStage, processArea, parameterName)}`,
+      parameterName,
+      parameterCode: buildHierarchyParameterCode(processStage, processArea, parameterName),
+      processStage,
+      processArea,
+      unit: defaults?.unit ?? unitMatch?.[1] ?? '',
+      target: defaults?.target ?? 0,
+      lsl: defaults?.lsl ?? 0,
+      usl: defaults?.usl ?? 0,
+      resultType: defaults?.resultType ?? 'Numeric',
+      criticality: defaults?.criticality ?? 'Major',
+      specificationText: defaults?.specificationText ?? '',
+    };
+  });
+}
+
+/** Legacy process stage labels mapped to canonical CPP stages. */
+export const CPP_LEGACY_STAGE_ALIASES: Record<string, string> = {
+  Dispensing: 'Environment Monitoring',
+  'Environmental Monitoring': 'Environment Monitoring',
+  Sterilization: 'Sterilization of Equipments',
+  Mixing: 'Batch Manufacturing',
+  Filtration: 'Filtration Process',
+  'Vial Washing': 'Glass Container Washing',
+  Depyrogenation: 'Glass Container Depyrogenation',
+  Filling: 'Filling Process',
+};
 
 export const DEFAULT_CPP_PARAMETERS = [
   'Bulk Yield', 'Filling Yield', 'Packing Yield', 'Mixing Time', 'Mixing RPM',
@@ -31,6 +330,7 @@ export const cppResultFormSchema = z.object({
   batchNumber: requiredText,
   manufacturingDate: requiredText,
   processStage: requiredText,
+  processArea: z.string().trim().default(''),
   parameterId: z.string().trim().default(''),
   parameterCode: requiredText,
   parameterName: requiredText,
@@ -204,8 +504,37 @@ function normalizeCppProcessStageLabel(stage: string): string {
   return stage.trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
+export function normalizeCppProcessStage(stage: string): string {
+  const normalized = normalizeCppProcessStageLabel(stage);
+  for (const [legacy, canonical] of Object.entries(CPP_LEGACY_STAGE_ALIASES)) {
+    if (normalizeCppProcessStageLabel(legacy) === normalized) return canonical;
+  }
+  const match = CPP_PROCESS_STAGES.find((s) => normalizeCppProcessStageLabel(s) === normalized);
+  return match ?? stage;
+}
+
 export function cppProcessStagesMatch(a: string, b: string): boolean {
-  return normalizeCppProcessStageLabel(a) === normalizeCppProcessStageLabel(b);
+  return normalizeCppProcessStageLabel(normalizeCppProcessStage(a))
+    === normalizeCppProcessStageLabel(normalizeCppProcessStage(b));
+}
+
+export function cppAreasMatch(a: string, b: string): boolean {
+  return normalizeCppLabel(a) === normalizeCppLabel(b);
+}
+
+export function parameterMatchesCppHierarchy(
+  parameterName: string,
+  processStage: string,
+  processArea = '',
+): boolean {
+  const stage = normalizeCppProcessStage(processStage);
+  const params = getCppParametersForStageArea(stage, processArea);
+  if (!params.length && !cppStageHasAreas(stage)) {
+    return getCppParametersForStageArea(stage).some(
+      (p) => normalizeCppLabel(p) === normalizeCppLabel(parameterName),
+    );
+  }
+  return params.some((p) => normalizeCppLabel(p) === normalizeCppLabel(parameterName));
 }
 
 /** Default mapping of CPP parameter names to applicable process stages. */
@@ -335,9 +664,13 @@ export function parameterMatchesCppProcessStage(
   parameterName: string,
   processStage: string,
   parameterProcessStage = '',
+  processArea = '',
 ): boolean {
   if (!processStage) return true;
   if (parameterProcessStage && cppProcessStagesMatch(parameterProcessStage, processStage)) return true;
+
+  const canonicalStage = normalizeCppProcessStage(processStage);
+  if (parameterMatchesCppHierarchy(parameterName, canonicalStage, processArea)) return true;
 
   const mappedStages = stagesForCppParameterName(parameterName);
   if (mappedStages?.some((stage) => cppProcessStagesMatch(stage, processStage))) return true;

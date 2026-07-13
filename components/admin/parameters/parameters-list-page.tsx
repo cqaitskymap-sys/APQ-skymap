@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { Plus, Search, Download, Eye, Pencil, UserCheck, UserX, Upload, Database } from 'lucide-react';
+import { Plus, Search, Download, Eye, Pencil, UserCheck, UserX, Upload, Database, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/admin/dashboard/page-header';
 import { KpiCard } from '@/components/admin/dashboard/kpi-card';
@@ -38,7 +38,7 @@ import {
 } from '@/lib/admin/constants';
 import type { Parameter } from '@/lib/admin/schemas';
 import {
-  fetchParameters, getParameterSummaryCounts, setParameterStatus,
+  fetchParameters, getParameterSummaryCounts, setParameterStatus, deleteParameter,
   exportParametersCsv, logParameterExport, importParametersFromFile, seedDefaultParameters,
 } from '@/lib/admin/parameter-service';
 
@@ -46,7 +46,7 @@ const PAGE_SIZE = 10;
 
 export function ParametersListPage() {
   const { user, profile } = useAuth();
-  const { role } = useAdminPermissions();
+  const { role, canDelete } = useAdminPermissions();
   const canEdit = canEditParameters(role) || canEditQcParameters(role) || canEditUtilityParameters(role);
   const canImport = canImportParameters(role);
   const canActivate = canActivateParameters(role);
@@ -63,6 +63,7 @@ export function ParametersListPage() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [page, setPage] = useState(0);
   const [confirm, setConfirm] = useState<{ param: Parameter; activate: boolean } | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<Parameter | null>(null);
   const [seeding, setSeeding] = useState(false);
 
   const auditMeta = {
@@ -151,6 +152,18 @@ export function ParametersListPage() {
       load();
     } else toast.error(result.error || 'Action failed');
     setConfirm(null);
+  };
+
+  const runDelete = async () => {
+    if (!deleteConfirm?.id) return;
+    const result = await deleteParameter(deleteConfirm.id, deleteConfirm, auditMeta);
+    if (result.success) {
+      toast.success('Parameter deleted');
+      load();
+    } else {
+      toast.error(result.error || 'Delete failed');
+    }
+    setDeleteConfirm(null);
   };
 
   if (loading) return <div><PageHeader title="Parameter Master" basePath="/admin" /><LoadingSkeleton rows={2} /></div>;
@@ -289,6 +302,11 @@ export function ParametersListPage() {
                                   ? <Button variant="ghost" size="icon" onClick={() => setConfirm({ param: row, activate: false })}><UserX className="h-4 w-4 text-amber-600" /></Button>
                                   : <Button variant="ghost" size="icon" onClick={() => setConfirm({ param: row, activate: true })}><UserCheck className="h-4 w-4 text-green-600" /></Button>
                               )}
+                              {canDelete && (
+                                <Button variant="ghost" size="icon" onClick={() => setDeleteConfirm(row)}>
+                                  <Trash2 className="h-4 w-4 text-red-600" />
+                                </Button>
+                              )}
                             </>
                           )}
                         </div>
@@ -322,7 +340,12 @@ export function ParametersListPage() {
                     <div className="flex gap-2 pt-2">
                       <Button asChild size="sm" variant="outline"><Link href={`/admin/parameters/${row.id}`}>View</Link></Button>
                       {canEdit && !cppOnly && (
-                        <Button asChild size="sm" variant="outline"><Link href={`/admin/parameters/${row.id}/edit`}>Edit</Link></Button>
+                        <>
+                          <Button asChild size="sm" variant="outline"><Link href={`/admin/parameters/${row.id}/edit`}>Edit</Link></Button>
+                          {canDelete && (
+                            <Button size="sm" variant="destructive" onClick={() => setDeleteConfirm(row)}>Delete</Button>
+                          )}
+                        </>
                       )}
                     </div>
                   </CardContent>
@@ -355,6 +378,21 @@ export function ParametersListPage() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={runConfirm} className="bg-blue-600">Confirm</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!deleteConfirm} onOpenChange={() => setDeleteConfirm(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Parameter</AlertDialogTitle>
+            <AlertDialogDescription>
+              {`Delete "${deleteConfirm?.parameterName}"? This action will remove it from active lists.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={runDelete} className="bg-red-600 hover:bg-red-700">Delete</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

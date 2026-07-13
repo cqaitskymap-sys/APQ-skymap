@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { Plus, Search, Download, Eye, Pencil, Upload, CheckCircle, XCircle, PauseCircle } from 'lucide-react';
+import { Plus, Search, Download, Eye, Pencil, Upload, CheckCircle, XCircle, PauseCircle, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/admin/dashboard/page-header';
 import { KpiCard } from '@/components/admin/dashboard/kpi-card';
@@ -38,6 +38,8 @@ import {
   fetchBatches, getBatchSummaryCounts, setBatchStatusAction,
   exportBatchesCsv, logBatchExport, importBatchesFromFile,
 } from '@/lib/admin/batch-service';
+import { deleteAdminRecord } from '@/lib/admin/admin-service';
+import { ADMIN_COLLECTIONS } from '@/lib/admin/constants';
 
 const PAGE_SIZE = 10;
 
@@ -45,7 +47,7 @@ type StatusAction = { batch: AdminBatch; action: 'release' | 'reject' | 'hold' }
 
 export function BatchesListPage() {
   const { user, profile } = useAuth();
-  const { role } = useAdminPermissions();
+  const { role, canDelete } = useAdminPermissions();
   const canEdit = canEditBatches(role);
   const canCreate = canProductionCreateBatches(role);
   const canImport = canImportBatches(role);
@@ -65,6 +67,7 @@ export function BatchesListPage() {
   const [statusAction, setStatusAction] = useState<StatusAction>(null);
   const [actionReason, setActionReason] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState<AdminBatch | null>(null);
 
   const auditMeta = {
     userId: user?.uid || 'system',
@@ -150,6 +153,32 @@ export function BatchesListPage() {
       setActionReason('');
       load();
     } else toast.error(result.error || 'Action failed');
+  };
+
+  const runDelete = async () => {
+    if (!deleteConfirm?.id) return;
+    if (deleteConfirm.batchStatus === 'Released') {
+      toast.error('Released batch cannot be deleted');
+      setDeleteConfirm(null);
+      return;
+    }
+    try {
+      const ok = await deleteAdminRecord(ADMIN_COLLECTIONS.batches, deleteConfirm.id, {
+        userId: auditMeta.userId,
+        userName: auditMeta.userName,
+        module: 'Batch Master',
+      });
+      if (ok) {
+        toast.success('Batch deleted');
+        load();
+      } else {
+        toast.error('Delete failed');
+      }
+    } catch {
+      toast.error('Delete failed');
+    } finally {
+      setDeleteConfirm(null);
+    }
   };
 
   if (loading) return <div><PageHeader title="Batch Master" basePath="/admin" /><LoadingSkeleton rows={2} /></div>;
@@ -265,6 +294,11 @@ export function BatchesListPage() {
                           {canEdit && row.batchStatus !== 'Released' && (
                             <Button asChild variant="ghost" size="icon"><Link href={`/admin/batches/${row.id}/edit`}><Pencil className="h-4 w-4" /></Link></Button>
                           )}
+                          {canDelete && row.batchStatus !== 'Released' && (
+                            <Button variant="ghost" size="icon" onClick={() => setDeleteConfirm(row)}>
+                              <Trash2 className="h-4 w-4 text-red-600" />
+                            </Button>
+                          )}
                           {canRelease && row.batchStatus !== 'Released' && row.batchStatus !== 'Rejected' && (
                             <>
                               <Button variant="ghost" size="icon" onClick={() => setStatusAction({ batch: row, action: 'release' })}>
@@ -307,6 +341,9 @@ export function BatchesListPage() {
                       <Button asChild size="sm" variant="outline"><Link href={`/admin/batches/${row.id}`}>View</Link></Button>
                       {canEdit && row.batchStatus !== 'Released' && (
                         <Button asChild size="sm" variant="outline"><Link href={`/admin/batches/${row.id}/edit`}>Edit</Link></Button>
+                      )}
+                      {canDelete && row.batchStatus !== 'Released' && (
+                        <Button size="sm" variant="destructive" onClick={() => setDeleteConfirm(row)}>Delete</Button>
                       )}
                     </div>
                   </CardContent>
@@ -353,6 +390,21 @@ export function BatchesListPage() {
             >
               Confirm
             </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!deleteConfirm} onOpenChange={() => setDeleteConfirm(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Batch</AlertDialogTitle>
+            <AlertDialogDescription>
+              {`Delete batch "${deleteConfirm?.batchNumber}"? This action cannot be undone.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={runDelete} className="bg-red-600 hover:bg-red-700">Delete</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

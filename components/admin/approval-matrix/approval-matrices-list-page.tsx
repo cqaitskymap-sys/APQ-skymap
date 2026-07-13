@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { Plus, Search, Download, Eye, Pencil, UserCheck, UserX, Copy, Database } from 'lucide-react';
+import { Plus, Search, Download, Eye, Pencil, UserCheck, UserX, Copy, Database, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/admin/dashboard/page-header';
 import { KpiCard } from '@/components/admin/dashboard/kpi-card';
@@ -38,12 +38,14 @@ import {
   fetchApprovalMatrices, getApprovalMatrixSummaryCounts, setApprovalMatrixStatus,
   exportApprovalMatricesCsv, logApprovalMatrixExport, copyApprovalMatrix, seedDefaultApprovalMatrices,
 } from '@/lib/admin/approval-matrix-service';
+import { deleteAdminRecord } from '@/lib/admin/admin-service';
+import { ADMIN_COLLECTIONS } from '@/lib/admin/constants';
 
 const PAGE_SIZE = 10;
 
 export function ApprovalMatricesListPage() {
   const { user, profile } = useAuth();
-  const { role } = useAdminPermissions();
+  const { role, canDelete } = useAdminPermissions();
   const canEdit = canEditApprovalMatrix(role);
   const canActivate = canActivateApprovalMatrix(role);
   const canRecommend = canRecommendWorkflowChanges(role);
@@ -63,6 +65,7 @@ export function ApprovalMatricesListPage() {
   const [copyCode, setCopyCode] = useState('');
   const [copyName, setCopyName] = useState('');
   const [seeding, setSeeding] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState<ApprovalMatrix | null>(null);
 
   const auditMeta = {
     userId: user?.uid || 'system',
@@ -149,6 +152,27 @@ export function ApprovalMatricesListPage() {
     setCopySource(null);
     setCopyCode('');
     setCopyName('');
+  };
+
+  const runDelete = async () => {
+    if (!deleteConfirm?.id) return;
+    try {
+      const ok = await deleteAdminRecord(ADMIN_COLLECTIONS.approvalMatrix, deleteConfirm.id, {
+        userId: auditMeta.userId,
+        userName: auditMeta.userName,
+        module: 'Approval Matrix',
+      });
+      if (ok) {
+        toast.success('Approval matrix deleted');
+        load();
+      } else {
+        toast.error('Delete failed');
+      }
+    } catch {
+      toast.error('Delete failed');
+    } finally {
+      setDeleteConfirm(null);
+    }
   };
 
   if (loading) return <div><PageHeader title="Approval Matrix" basePath="/admin" /><LoadingSkeleton rows={2} /></div>;
@@ -271,6 +295,11 @@ export function ApprovalMatricesListPage() {
                                   ? <Button variant="ghost" size="icon" onClick={() => setConfirm({ matrix: row, activate: false })}><UserX className="h-4 w-4 text-amber-600" /></Button>
                                   : <Button variant="ghost" size="icon" onClick={() => setConfirm({ matrix: row, activate: true })}><UserCheck className="h-4 w-4 text-green-600" /></Button>
                               )}
+                              {canDelete && (
+                                <Button variant="ghost" size="icon" onClick={() => setDeleteConfirm(row)}>
+                                  <Trash2 className="h-4 w-4 text-red-600" />
+                                </Button>
+                              )}
                             </>
                           )}
                         </div>
@@ -299,6 +328,7 @@ export function ApprovalMatricesListPage() {
                   <div className="flex gap-2 pt-2">
                     <Button asChild size="sm" variant="outline"><Link href={`/admin/approval-matrix/${row.id}`}>View</Link></Button>
                     {canEdit && <Button asChild size="sm" variant="outline"><Link href={`/admin/approval-matrix/${row.id}/edit`}>Edit</Link></Button>}
+                    {canDelete && <Button size="sm" variant="destructive" onClick={() => setDeleteConfirm(row)}>Delete</Button>}
                   </div>
                 </CardContent>
               </Card>
@@ -346,6 +376,21 @@ export function ApprovalMatricesListPage() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={runCopy} className="bg-blue-600">Copy Matrix</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!deleteConfirm} onOpenChange={() => setDeleteConfirm(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Approval Matrix</AlertDialogTitle>
+            <AlertDialogDescription>
+              {`Delete "${deleteConfirm?.matrixName}"? This action cannot be undone.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={runDelete} className="bg-red-600 hover:bg-red-700">Delete</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
