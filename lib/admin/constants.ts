@@ -110,25 +110,6 @@ export const FREQUENCY_OPTIONS = [
 
 export const RESULT_TYPES = ['Numeric', 'Text', 'Pass/Fail', 'Complies/Does Not Comply'] as const;
 
-export const DEFAULT_CPP_PARAMETERS = [
-  'Bulk Yield', 'Filling Yield', 'Packing Yield', 'Mixing Time', 'Mixing RPM',
-  'Mixing Temperature', 'Bulk Hold Time', 'Filtration Pressure', 'Filtration Time',
-  'Sterilization Temperature', 'Sterilization Time', 'Sterile Hold Time',
-  'Filling Speed', 'Fill Volume', 'Nitrogen Pressure', 'Room Temperature',
-  'Relative Humidity', 'Differential Pressure',
-] as const;
-
-export const DEFAULT_CQA_PARAMETERS = [
-  'Description', 'pH', 'Weight per mL', 'Colour Index', 'Viscosity', 'Assay', 'Preservative Content',
-  'Identification', 'Extractable Vol (mL)', 'Particulate Matter', 'Bacterial Endotoxin Test', 'Sterility',
-  'Related Substance', 'API Assay (ODB)', 'Water/ LOD', 'Relative Substance',
-] as const;
-
-export const DEFAULT_UTILITY_PARAMETERS = [
-  'WFI Conductivity', 'WFI TOC', 'WFI Microbial Count', 'Purified Water Conductivity',
-  'Compressed Air Pressure', 'Compressed Air Dew Point', 'Nitrogen Pressure',
-  'HVAC Temperature', 'HVAC RH', 'Differential Pressure',
-] as const;
 export const USER_STATUSES = ['Active', 'Inactive', 'Suspended', 'Locked'] as const;
 export const RECORD_STATUSES = ['Active', 'Inactive'] as const;
 

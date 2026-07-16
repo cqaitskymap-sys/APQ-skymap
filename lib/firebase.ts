@@ -6,11 +6,13 @@ import {
   connectFirestoreEmulator,
   type Firestore,
 } from 'firebase/firestore';
-import { getStorage, type FirebaseStorage } from 'firebase/storage';
+import { getStorage, connectStorageEmulator, type FirebaseStorage } from 'firebase/storage';
 import {
   FirebaseNotConfiguredError,
   getFirebaseSetupMessage,
   isFirebaseConfigured,
+  getFirebaseStorageBucket,
+  normalizeFirebaseEnvValue,
 } from './firebase-config';
 
 export { FirebaseNotConfiguredError, getFirebaseSetupMessage, isFirebaseConfigured } from './firebase-config';
@@ -20,18 +22,20 @@ function getFirebaseConfig(): FirebaseOptions {
     throw new FirebaseNotConfiguredError(getFirebaseSetupMessage());
   }
   const config: FirebaseOptions = {
-    apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY!,
-    authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN!,
-    projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID!,
-    storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET!,
-    messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID!,
-    appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID!,
+    apiKey: normalizeFirebaseEnvValue(process.env.NEXT_PUBLIC_FIREBASE_API_KEY),
+    authDomain: normalizeFirebaseEnvValue(process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN),
+    projectId: normalizeFirebaseEnvValue(process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID),
+    storageBucket: getFirebaseStorageBucket(),
+    messagingSenderId: normalizeFirebaseEnvValue(process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID),
+    appId: normalizeFirebaseEnvValue(process.env.NEXT_PUBLIC_FIREBASE_APP_ID),
   };
-  if (process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL?.trim()) {
-    config.databaseURL = process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL.trim();
+  const databaseUrl = normalizeFirebaseEnvValue(process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL);
+  if (databaseUrl) {
+    config.databaseURL = databaseUrl;
   }
-  if (process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID?.trim()) {
-    config.measurementId = process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID.trim();
+  const measurementId = normalizeFirebaseEnvValue(process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID);
+  if (measurementId) {
+    config.measurementId = measurementId;
   }
   return config;
 }
@@ -79,15 +83,17 @@ function createFirestoreInstance(): Firestore {
   }
 }
 
-function connectEmulators(auth: Auth, db: Firestore) {
+function maybeConnectEmulators() {
   if (emulatorsConnected || typeof window === 'undefined') return;
   if (!isFirebaseEmulatorEnabled()) return;
+  if (!authInstance || !firestoreInstance || !storageInstance) return;
   try {
-    connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
-    connectFirestoreEmulator(db, '127.0.0.1', 8080);
+    connectAuthEmulator(authInstance, 'http://127.0.0.1:9099', { disableWarnings: true });
+    connectFirestoreEmulator(firestoreInstance, '127.0.0.1', 8080);
+    connectStorageEmulator(storageInstance, '127.0.0.1', 9199);
     emulatorsConnected = true;
     if (process.env.NODE_ENV === 'development') {
-      console.info('[Firebase] Using local emulators (auth:9099, firestore:8080)');
+      console.info('[Firebase] Using local emulators (auth:9099, firestore:8080, storage:9199)');
     }
   } catch {
     // Already connected
@@ -105,7 +111,7 @@ export function getFirebaseApp(): FirebaseApp {
 export function getFirebaseAuth(): Auth {
   if (!authInstance) {
     authInstance = getAuth(getFirebaseApp());
-    if (firestoreInstance) connectEmulators(authInstance, firestoreInstance);
+    maybeConnectEmulators();
   }
   return authInstance;
 }
@@ -113,7 +119,7 @@ export function getFirebaseAuth(): Auth {
 export function getFirebaseFirestore(): Firestore {
   if (!firestoreInstance) {
     firestoreInstance = createFirestoreInstance();
-    if (authInstance) connectEmulators(authInstance, firestoreInstance);
+    maybeConnectEmulators();
   }
   return firestoreInstance;
 }
@@ -129,6 +135,7 @@ if (typeof module !== 'undefined' && process.env.NODE_ENV === 'development') {
 export function getFirebaseStorage(): FirebaseStorage {
   if (!storageInstance) {
     storageInstance = getStorage(getFirebaseApp());
+    maybeConnectEmulators();
   }
   return storageInstance;
 }

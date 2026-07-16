@@ -31,8 +31,8 @@ export function EnterpriseTmsNav() {
     <nav className="w-full lg:w-60 shrink-0">
       <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
         <div className="bg-gradient-to-r from-blue-600 to-indigo-700 px-4 py-3 text-white">
-          <p className="text-sm font-bold tracking-wide">Enterprise TMS</p>
-          <p className="text-[10px] opacity-80 mt-0.5">GMP · 21 CFR Part 11 · ALCOA+</p>
+          <p className="text-sm font-bold tracking-wide">LMS</p>
+          <p className="text-[10px] opacity-80 mt-0.5">CO-LMS-URS-001 · 21 CFR Part 11</p>
         </div>
         <ScrollArea className="h-[calc(100vh-220px)]">
           <div className="p-2 space-y-1">

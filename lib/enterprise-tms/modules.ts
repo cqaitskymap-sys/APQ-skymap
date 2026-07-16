@@ -1,22 +1,15 @@
 import type { LucideIcon } from 'lucide-react';
 import {
-  LayoutDashboard, CalendarDays, ClipboardList, Calendar, Grid3X3, FileSearch,
-  Send, Clock, Users, UserCheck, CheckCircle, HelpCircle, PenTool, Award,
-  FileText, ScrollText, GraduationCap, BadgeCheck, ListChecks, RefreshCw,
-  ShieldCheck, BookOpen, AlertTriangle, UserPlus, Wrench, Globe, History,
-  BarChart3, PieChart, Settings, Building2, FileCheck, Link2,
+  LayoutDashboard, Grid3X3, BookOpen, Building2, Briefcase, Clock,
+  Layers, Target, Wrench, FilePlus, Globe, Calendar, Users, UserCheck,
+  PenTool, GraduationCap, History, FileText, FileSearch, Settings,
 } from 'lucide-react';
 
 export type TmsModuleGroup =
-  | 'Overview'
-  | 'Planning'
-  | 'Execution'
-  | 'Evaluation'
-  | 'Records'
-  | 'Trainer Management'
+  | 'Setup'
   | 'Training Programs'
-  | 'Analytics'
-  | 'Administration';
+  | 'Session & Assessment'
+  | 'Records & Admin';
 
 export interface TmsModuleDefinition {
   id: string;
@@ -26,51 +19,217 @@ export interface TmsModuleDefinition {
   group: TmsModuleGroup;
   icon: LucideIcon;
   matchPaths?: string[];
-  compliance?: string[];
+  workflowId?: string;
 }
 
-/** All 35 enterprise TMS modules */
+/** LMS — navigation matches CO-LMS-URS-001 process flow diagrams */
 export const ENTERPRISE_TMS_MODULES: TmsModuleDefinition[] = [
-  { id: 'dashboard', name: 'Training Dashboard', description: 'Real-time KPIs, compliance, overdue & approvals', href: '/training', group: 'Overview', icon: LayoutDashboard, matchPaths: ['/training', '/training/dashboard'] },
-  { id: 'calendar', name: 'Training Calendar', description: 'Events, rooms, trainer availability', href: '/training/calendar', group: 'Overview', icon: CalendarDays, matchPaths: ['/training/calendar', '/training/scheduler', '/training/events'] },
-  { id: 'planner', name: 'Training Planner', description: 'Organizational training planning & kanban', href: '/training/planner', group: 'Planning', icon: ClipboardList },
-  { id: 'annual-plan', name: 'Annual Training Plan', description: 'Yearly department training plans', href: '/training/annual-plan', group: 'Planning', icon: Calendar },
-  { id: 'matrix', name: 'Training Matrix', description: 'Role × SOP × WI × competency mapping', href: '/training/matrix', group: 'Planning', icon: Grid3X3, matchPaths: ['/training/matrix', '/training/training-matrix'] },
-  { id: 'tni', name: 'Training Need Identification', description: 'JD-based TNI → SOP assignment', href: '/training/tni', group: 'Planning', icon: FileSearch },
-  { id: 'training-request', name: 'Training Request', description: 'Employee/HOD training requests', href: '/training/training-request', group: 'Planning', icon: Send },
-  { id: 'schedule', name: 'Training Schedule', description: 'Session scheduling & assignments', href: '/training/scheduling', group: 'Execution', icon: Clock, matchPaths: ['/training/scheduling', '/training/schedule', '/training/assignments'] },
-  { id: 'session', name: 'Training Session', description: 'Live session management', href: '/training/sessions', group: 'Execution', icon: Users },
-  { id: 'attendance', name: 'Training Attendance', description: 'Attendance records & verification', href: '/training/attendance', group: 'Execution', icon: UserCheck, matchPaths: ['/training/attendance', '/training/completion'] },
-  { id: 'evaluation', name: 'Training Evaluation', description: 'Post-training evaluations', href: '/training/effectiveness', group: 'Evaluation', icon: CheckCircle, matchPaths: ['/training/effectiveness'] },
-  { id: 'questionnaire', name: 'Questionnaire', description: 'Question bank, MCQ, auto-evaluation', href: '/training/questionnaire', group: 'Evaluation', icon: HelpCircle },
-  { id: 'assessment', name: 'Assessment', description: 'Written, practical & competency tests', href: '/training/assessment', group: 'Evaluation', icon: PenTool },
-  { id: 'competency', name: 'Competency Assessment', description: 'Skill competency evaluation', href: '/training/competency', group: 'Evaluation', icon: Award },
-  { id: 'practical', name: 'Practical Assessment', description: 'Hands-on practical evaluation', href: '/training/practical-assessment', group: 'Evaluation', icon: Wrench },
-  { id: 'record', name: 'Training Record', description: 'Completed training records', href: '/training/records', group: 'Records', icon: FileText, matchPaths: ['/training/records'] },
-  { id: 'certificate', name: 'Training Certificate', description: 'Issue, renew, verify certificates', href: '/training/certificates', group: 'Records', icon: ScrollText, matchPaths: ['/training/certificates', '/training/certificate-management', '/training/certificate-registry'] },
-  { id: 'ttt', name: 'Train The Trainer', description: 'Trainer development program', href: '/training/train-the-trainer', group: 'Trainer Management', icon: GraduationCap },
-  { id: 'trainer-qualification', name: 'Trainer Qualification', description: 'Trainer experience & qualification', href: '/training/trainer-qualification', group: 'Trainer Management', icon: BadgeCheck },
-  { id: 'trainer-assessment', name: 'Trainer Assessment', description: 'Knowledge, presentation, practical skill', href: '/training/trainer-assessment', group: 'Trainer Management', icon: ListChecks },
-  { id: 'certified-trainers', name: 'Certified Trainer List', description: 'Register of certified trainers', href: '/training/certified-trainers', group: 'Trainer Management', icon: Users },
-  { id: 'trainer-certificate', name: 'Trainer Certificate', description: 'Trainer certification records', href: '/training/trainer-certificate', group: 'Trainer Management', icon: ScrollText },
-  { id: 'trainer-renewal', name: 'Trainer Renewal', description: 'Trainer cert renewal workflow', href: '/training/trainer-renewal', group: 'Trainer Management', icon: RefreshCw },
-  { id: 'effectiveness', name: 'Training Effectiveness', description: '30/60/90 day effectiveness review', href: '/training/effectiveness', group: 'Evaluation', icon: ShieldCheck },
-  { id: 'srd', name: 'Self Reading Declaration', description: 'SOP read & understood declaration', href: '/training/srd', group: 'Training Programs', icon: FileCheck },
-  { id: 'need-based', name: 'Need Based Training', description: 'CAPA, deviation, CC triggered training', href: '/training/need-based', group: 'Training Programs', icon: AlertTriangle },
-  { id: 'refresher', name: 'Refresher Training', description: 'Periodic refresher scheduling', href: '/training/refresher', group: 'Training Programs', icon: RefreshCw, matchPaths: ['/training/refresher', '/training/retraining'] },
-  { id: 'induction', name: 'Induction Training', description: 'HR → Dept → TNI → SOP workflow', href: '/training/induction', group: 'Training Programs', icon: Building2 },
-  { id: 'new-employee', name: 'New Employee Training', description: 'New joiner training program', href: '/training/new-employee', group: 'Training Programs', icon: UserPlus },
-  { id: 'ojt', name: 'On Job Training', description: 'OJT planner, matrix & checklist', href: '/training/ojt-planner', group: 'Training Programs', icon: Wrench },
-  { id: 'external', name: 'External Training', description: 'Seminars, workshops, vendor training', href: '/training/external', group: 'Training Programs', icon: Globe },
-  { id: 'history', name: 'Training History', description: 'Employee training timeline', href: '/training/history', group: 'Records', icon: History, matchPaths: ['/training/history', '/training/employee-history'] },
-  { id: 'reports', name: 'Training Reports', description: 'Compliance & audit reports', href: '/training/reports', group: 'Analytics', icon: FileText, matchPaths: ['/training/reports', '/training/report-center'] },
-  { id: 'analytics', name: 'Training Analytics', description: 'Trends, charts & performance', href: '/training/analytics', group: 'Analytics', icon: BarChart3 },
-  { id: 'settings', name: 'Training Settings', description: 'Automation, thresholds & compliance', href: '/training/settings', group: 'Administration', icon: Settings },
+  {
+    id: 'dashboard',
+    name: 'Dashboard',
+    description: 'Training overview, overdue, pending actions',
+    href: '/training',
+    group: 'Setup',
+    icon: LayoutDashboard,
+    matchPaths: ['/training', '/training/dashboard'],
+  },
+
+  // ── Setup (Content + Matrix diagrams) ──
+  {
+    id: 'content',
+    name: 'Training Content',
+    description: 'Groups, content types, documents, questionnaires, trainer setup, approval',
+    href: '/training/content',
+    group: 'Setup',
+    icon: BookOpen,
+    matchPaths: ['/training/content'],
+    workflowId: 'training-content',
+  },
+  {
+    id: 'matrix',
+    name: 'Training Matrix',
+    description: 'BU / Dept / Induction / JR matrix — create, approve, version',
+    href: '/training/matrix',
+    group: 'Setup',
+    icon: Grid3X3,
+    matchPaths: ['/training/matrix', '/training/training-matrix'],
+    workflowId: 'training-matrix',
+  },
+
+  // ── Training Programs (diagram workflows) ──
+  {
+    id: 'induction',
+    name: 'Induction Training',
+    description: 'Create group → approve → schedule → attendance → trainer ack',
+    href: '/training/induction',
+    group: 'Training Programs',
+    icon: Building2,
+    matchPaths: ['/training/induction'],
+    workflowId: 'induction',
+  },
+  {
+    id: 'jr-assignment',
+    name: 'JR Assignment',
+    description: 'Select employee → JR template → approver → employee accept → JR assigned',
+    href: '/training/jr-assignment',
+    group: 'Training Programs',
+    icon: Briefcase,
+    matchPaths: ['/training/jr-assignment', '/training/job-description'],
+    workflowId: 'jr-assignment',
+  },
+  {
+    id: 'jr-training-schedule',
+    name: 'JR Training Schedule',
+    description: 'Is JR training required? → functional roles → mode → approval → assigned',
+    href: '/training/jr-training-schedule',
+    group: 'Training Programs',
+    icon: Clock,
+    matchPaths: ['/training/jr-training-schedule', '/training/scheduling', '/training/schedule', '/training/assignments'],
+    workflowId: 'jr-training-schedule',
+  },
+  {
+    id: 'multi-target',
+    name: 'Multi Target Training',
+    description: 'Multi-document session → schedule → trainees → approval → complete',
+    href: '/training/multi-target-training',
+    group: 'Training Programs',
+    icon: Layers,
+    matchPaths: ['/training/multi-target-training'],
+    workflowId: 'multi-target-training',
+  },
+  {
+    id: 'target-training',
+    name: 'Target Training',
+    description: 'Document training, remedial, waive off, reassign, close request',
+    href: '/training/target-training',
+    group: 'Training Programs',
+    icon: Target,
+    matchPaths: ['/training/target-training'],
+    workflowId: 'target-training',
+  },
+  {
+    id: 'ojt',
+    name: 'On Job Training',
+    description: 'Select trainees → session details → attachments → OJT created',
+    href: '/training/ojt',
+    group: 'Training Programs',
+    icon: Wrench,
+    matchPaths: ['/training/ojt', '/training/ojt-planner'],
+    workflowId: 'ojt',
+  },
+  {
+    id: 'other-training',
+    name: 'Other Training Record',
+    description: 'Manual training name, details, attachments',
+    href: '/training/other-training',
+    group: 'Training Programs',
+    icon: FilePlus,
+    matchPaths: ['/training/other-training'],
+    workflowId: 'other-training',
+  },
+  {
+    id: 'external',
+    name: 'External Training',
+    description: 'Trainee upload → coordinator approve/reject',
+    href: '/training/external',
+    group: 'Training Programs',
+    icon: Globe,
+    matchPaths: ['/training/external'],
+    workflowId: 'external-training',
+  },
+  {
+    id: 'annual-plan',
+    name: 'Annual Training Calendar',
+    description: 'BU (HR → Approver → QA) or Dept (Coordinator → Approver)',
+    href: '/training/annual-plan',
+    group: 'Training Programs',
+    icon: Calendar,
+    matchPaths: ['/training/annual-plan'],
+    workflowId: 'atc-dept',
+  },
+
+  // ── Session & Assessment (execution diagrams) ──
+  {
+    id: 'session',
+    name: 'Training Session',
+    description: 'Create → HOD approve → conduct → attendance → exam → evaluate',
+    href: '/training/sessions',
+    group: 'Session & Assessment',
+    icon: Users,
+    matchPaths: ['/training/sessions'],
+    workflowId: 'training-session',
+  },
+  {
+    id: 'attendance',
+    name: 'Attendance',
+    description: 'Mark trainee present for classroom / induction sessions',
+    href: '/training/completion',
+    group: 'Session & Assessment',
+    icon: UserCheck,
+    matchPaths: ['/training/completion', '/training/attendance'],
+  },
+  {
+    id: 'assessment',
+    name: 'Assessment',
+    description: 'Written, oral, practical, offline — pass/fail, lock/unlock',
+    href: '/training/assessment',
+    group: 'Session & Assessment',
+    icon: PenTool,
+    matchPaths: ['/training/assessment'],
+    workflowId: 'jr-training-execution',
+  },
+  {
+    id: 'trainer',
+    name: 'Trainer',
+    description: 'Unlock trainee, answer questions, approve/reject suggestions',
+    href: '/training/trainer',
+    group: 'Session & Assessment',
+    icon: GraduationCap,
+    matchPaths: ['/training/trainer'],
+    workflowId: 'trainer-actions',
+  },
+
+  // ── Records & Admin ──
+  {
+    id: 'history',
+    name: 'Training Records',
+    description: 'Employee training history including deactivated users',
+    href: '/training/history',
+    group: 'Records & Admin',
+    icon: History,
+    matchPaths: ['/training/history', '/training/records'],
+  },
+  {
+    id: 'reports',
+    name: 'Training Reports',
+    description: 'Induction, JR, target, overdue — PDF & Excel',
+    href: '/training/reports',
+    group: 'Records & Admin',
+    icon: FileText,
+    matchPaths: ['/training/reports'],
+  },
+  {
+    id: 'audit-trail',
+    name: 'Audit Trail',
+    description: 'Electronic records audit trail',
+    href: '/training/audit-trail',
+    group: 'Records & Admin',
+    icon: FileSearch,
+    matchPaths: ['/training/audit-trail'],
+  },
+  {
+    id: 'settings',
+    name: 'Settings',
+    description: 'Email notifications, reminders, overdue alerts',
+    href: '/training/settings',
+    group: 'Records & Admin',
+    icon: Settings,
+    matchPaths: ['/training/settings'],
+  },
 ];
 
 export const TMS_MODULE_GROUPS: TmsModuleGroup[] = [
-  'Overview', 'Planning', 'Execution', 'Evaluation', 'Records',
-  'Trainer Management', 'Training Programs', 'Analytics', 'Administration',
+  'Setup', 'Training Programs', 'Session & Assessment', 'Records & Admin',
 ];
 
 export function getModulesByGroup(group: TmsModuleGroup): TmsModuleDefinition[] {
@@ -84,32 +243,12 @@ export function getModuleByHref(pathname: string): TmsModuleDefinition | undefin
   });
 }
 
-export const INDUCTION_WORKFLOW_STEPS = [
-  'Employee Joins', 'HR Induction', 'Department Head Receives',
-  'Job Description Assigned', 'Training Need Identification', 'Training Matrix Generated',
-  'Required SOP Assigned', 'Required WI Assigned', 'Required Forms Assigned',
-  'Training Schedule', 'Attendance', 'Questionnaire', 'Assessment',
-  'Practical Evaluation', 'Competency Assessment', 'Approval', 'Certificate', 'Training Completed',
-] as const;
-
-export const AUTOMATION_RULES = [
-  { id: 'auto-sop', label: 'Auto-assign SOP training after approval', enabled: true },
-  { id: 'auto-revised-sop', label: 'Auto-assign revised SOP training', enabled: true },
-  { id: 'auto-refresher', label: 'Auto-generate refresher training', enabled: true },
-  { id: 'auto-induction', label: 'Auto-create induction for new employee', enabled: true },
-  { id: 'auto-tni', label: 'Auto-create TNI from JD', enabled: true },
-  { id: 'auto-trainer', label: 'Auto-assign trainer', enabled: true },
-  { id: 'auto-notify-emp', label: 'Auto-notify employee', enabled: true },
-  { id: 'auto-notify-hod', label: 'Auto-notify HOD', enabled: true },
-  { id: 'auto-notify-qa', label: 'Auto-notify QA', enabled: true },
-  { id: 'auto-certificate', label: 'Auto-generate certificate', enabled: true },
-  { id: 'auto-renewal', label: 'Auto-schedule renewal', enabled: true },
-  { id: 'auto-retraining', label: 'Auto-create retraining', enabled: true },
-  { id: 'auto-archive', label: 'Auto-archive completed training', enabled: true },
-] as const;
-
-export const QMS_INTEGRATIONS = [
-  'Employee Master', 'Department', 'Designation', 'Role', 'SOP', 'Work Instruction',
-  'Forms', 'Change Control', 'CAPA', 'Deviation', 'Audit', 'Risk',
-  'Document Management', 'Equipment', 'Validation', 'HRMS',
-] as const;
+// Re-export workflow constants for backward compatibility
+export {
+  INDUCTION_WORKFLOW_STEPS,
+  JR_ASSIGNMENT_WORKFLOW_STEPS,
+  TARGET_TRAINING_TYPES,
+  AUTOMATION_RULES,
+  QMS_INTEGRATIONS,
+  LMS_USER_ROLES,
+} from '@/lib/enterprise-tms/workflows';

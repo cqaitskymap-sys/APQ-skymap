@@ -1,5 +1,6 @@
 import { ref, uploadBytes, getDownloadURL, deleteObject, type UploadMetadata } from 'firebase/storage';
-import { getFirebaseStorage, isFirebaseConfigured } from './firebase';
+import { getFirebaseAuth, getFirebaseStorage, isFirebaseConfigured } from './firebase';
+import { getFirebaseStorageBucket } from './firebase-config';
 import { updateDocument, type DocumentAuditContext } from './firestore';
 
 export { isFirebaseConfigured } from './firebase';
@@ -63,6 +64,48 @@ export function isAllowedFileType(mimeType: string): boolean {
   return getFileCategory(mimeType) !== null;
 }
 
+const STORAGE_SETUP_HINT =
+  'Enable Firebase Storage in the Firebase Console (Build → Storage → Get started), confirm NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET matches the bucket name shown there, then run: npm run deploy:storage';
+
+export function formatStorageError(error: unknown): string {
+  const code = (error as { code?: string })?.code;
+  const message = error instanceof Error ? error.message : String(error);
+  const serverResponse = (error as { customData?: { serverResponse?: string } })?.customData?.serverResponse ?? '';
+
+  if (code === 'storage/unauthorized' || code === 'storage/unauthenticated') {
+    return 'You must be signed in to upload files. Sign out and sign in again, then retry.';
+  }
+  if (message.includes('permission') || message.includes('403')) {
+    return `Upload denied by storage rules. ${STORAGE_SETUP_HINT}`;
+  }
+  if (
+    code === 'storage/unknown'
+    || code === 'storage/bucket-not-found'
+    || message.includes('404')
+    || serverResponse.includes('404')
+    || message.toLowerCase().includes('cors')
+    || message.toLowerCase().includes('preflight')
+  ) {
+    return `Firebase Storage bucket is not reachable (often Storage is not enabled yet). ${STORAGE_SETUP_HINT}`;
+  }
+  if (code === 'storage/canceled') {
+    return 'Upload was canceled.';
+  }
+  if (code === 'storage/quota-exceeded') {
+    return 'Storage quota exceeded.';
+  }
+  if (message) return message;
+  return 'File upload failed.';
+}
+
+async function ensureStorageAuth(): Promise<void> {
+  const authUser = getFirebaseAuth().currentUser;
+  if (!authUser) {
+    throw new Error('You must be signed in to upload files.');
+  }
+  await authUser.getIdToken(true);
+}
+
 export async function uploadFile(options: UploadFileOptions): Promise<FileMetadata | null> {
   if (!isFirebaseConfigured()) {
     console.warn('uploadFile skipped: Firebase not configured');
@@ -72,9 +115,10 @@ export async function uploadFile(options: UploadFileOptions): Promise<FileMetada
   const { moduleName, documentId, file, fileName, uploadedBy, metadataCollection, audit } = options;
 
   try {
+    await ensureStorageAuth();
     const storage = getFirebaseStorage();
     const path = getStoragePath(moduleName, documentId, fileName);
-    const storageRef = ref(getFirebaseStorage(), path);
+    const storageRef = ref(storage, path);
 
     const mimeType = file instanceof File ? file.type : 'application/octet-stream';
     if (!isAllowedFileType(mimeType)) {
@@ -113,8 +157,9 @@ export async function uploadFile(options: UploadFileOptions): Promise<FileMetada
 
     return fileMeta;
   } catch (error) {
-    console.error('uploadFile failed:', error);
-    throw error;
+    const formatted = formatStorageError(error);
+    console.error('uploadFile failed:', formatted, error);
+    throw new Error(formatted);
   }
 }
 
@@ -126,9 +171,10 @@ export async function deleteFile(
   if (!isFirebaseConfigured()) return false;
 
   try {
+    await ensureStorageAuth();
     const storage = getFirebaseStorage();
     const path = getStoragePath(moduleName, documentId, fileName);
-    await deleteObject(ref(getFirebaseStorage(), path));
+    await deleteObject(ref(storage, path));
     return true;
   } catch (error) {
     console.error('deleteFile failed:', error);

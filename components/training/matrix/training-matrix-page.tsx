@@ -23,6 +23,8 @@ import { ErrorCard } from '@/components/admin/dashboard/error-card';
 import { ResponsiveDataTable } from '@/components/cpv/product-master/responsive-data-table';
 import type { ColumnDef } from '@/components/admin/admin-data-table';
 import { TmsPageHeader } from '@/components/training/tms-page-header';
+import { WorkflowDiagram } from '@/components/training/workflow/workflow-diagram';
+import { TRAINING_MATRIX_WORKFLOW } from '@/lib/enterprise-tms/workflows';
 import { ComplianceBadge } from '@/components/training/tms-sub-nav';
 import { useTrainingMatrix } from '@/hooks/use-training-matrix';
 import type { MatrixFilters, TrainingMatrixDefinition, TrainingMatrixRow } from '@/lib/training-matrix-types';
@@ -253,9 +255,9 @@ export function TrainingMatrixPage({ defaultTab = 'dashboard' }: TrainingMatrixP
   return (
     <div className="space-y-6">
       <TmsPageHeader
-        title="Training Matrix Management"
-        description="Define role-wise GMP training requirements and automate assignments"
-        trail={[{ label: 'Training Matrix' }]}
+        title="Training Matrix"
+        description="BU, Department, Induction, JR templates — create, approve, version control"
+        trail={[{ label: 'Setup' }, { label: 'Training Matrix' }]}
         actions={
           <div className="flex flex-wrap gap-2">
             {canManage && !isReadOnly && (
@@ -287,6 +289,8 @@ export function TrainingMatrixPage({ defaultTab = 'dashboard' }: TrainingMatrixP
           </div>
         }
       />
+
+      <WorkflowDiagram workflow={TRAINING_MATRIX_WORKFLOW} activeStepId="1" compact />
 
       <div className="flex flex-wrap gap-1.5">
         <Badge variant="outline" className="text-xs">GMP Compliant</Badge>

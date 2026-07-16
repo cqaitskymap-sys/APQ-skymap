@@ -50,8 +50,8 @@ export function AttachmentUploader({
       };
       onChange([...attachments, entry]);
       toast.success('File uploaded');
-    } catch {
-      toast.error('Upload failed');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Upload failed');
     } finally {
       setUploading(false);
       e.target.value = '';

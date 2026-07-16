@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useState } from 'react';
-import { RefreshCw, Plus, ArrowRight, UserCheck } from 'lucide-react';
+import { RefreshCw, Plus, UserCheck, ArrowRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -25,8 +25,9 @@ import { useCompanyTraining } from '@/hooks/use-company-training';
 import {
   createInductionRecord, completeHrInduction, completeDeptHandover,
 } from '@/lib/company-training-service';
+import { WorkflowDiagram } from '@/components/training/workflow/workflow-diagram';
+import { INDUCTION_WORKFLOW } from '@/lib/enterprise-tms/workflows';
 import { TMS_DEPARTMENTS } from '@/lib/training-types';
-import { INDUCTION_STAGES } from '@/lib/company-training-types';
 import type { InductionRecord } from '@/lib/company-training-types';
 
 export function InductionWorkflowPage() {
@@ -118,9 +119,9 @@ export function InductionWorkflowPage() {
   return (
     <div>
       <TmsPageHeader
-        title="Induction Workflow"
-        description="HR conducts induction → handover to Department Head → TC prepares JD → TNI → SOP training"
-        trail={[{ label: 'Company Program', href: '/training/company-program' }, { label: 'Induction' }]}
+        title="Induction Training"
+        description="Create induction group → approval → schedule → conduct → attendance → trainer acknowledgment"
+        trail={[{ label: 'Training Programs' }, { label: 'Induction Training' }]}
         actions={
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={() => refresh()} disabled={refreshing}>
@@ -142,22 +143,7 @@ export function InductionWorkflowPage() {
         <KpiCard label="Total Records" value={records.length} tone="blue" />
       </div>
 
-      {/* Process Flow */}
-      <Card className="mb-6">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Induction Process Stages</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-wrap items-center gap-2">
-            {INDUCTION_STAGES.map((stage, i) => (
-              <span key={stage} className="flex items-center gap-2">
-                <Badge variant="secondary">{stage}</Badge>
-                {i < INDUCTION_STAGES.length - 1 && <ArrowRight className="h-3 w-3 text-muted-foreground" />}
-              </span>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+      <WorkflowDiagram workflow={INDUCTION_WORKFLOW} activeStepId="1" />
 
       <Card>
         <CardHeader>

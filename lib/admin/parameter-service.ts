@@ -4,10 +4,10 @@ import {
   checkUniqueField, logAuditEvent,
 } from './admin-service';
 import {
-  ADMIN_COLLECTIONS, DEFAULT_CPP_PARAMETERS, DEFAULT_CQA_PARAMETERS,
-  DEFAULT_UTILITY_PARAMETERS,
+  ADMIN_COLLECTIONS,
 } from './constants';
 import { CQA_PARAMETER_STAGE_MAP } from '@/lib/cpv-cqa-monitoring';
+import { CPP_MONITORING_HIERARCHY } from '@/lib/cpv-cpp-monitoring';
 import type { Parameter, ParameterFormData } from './schemas';
 
 export interface ParameterAuditMeta {
@@ -25,6 +25,92 @@ export interface ParameterEvaluation {
     capaSuggested?: boolean;
   };
 }
+
+const DEFAULT_CQA_PARAMETER_MASTER = [
+  'Description', 'pH', 'Weight per mL', 'Colour Index', 'Viscosity', 'Assay', 'Preservative Content',
+  'Identification', 'Extractable Vol (mL)', 'Particulate Matter', 'Bacterial Endotoxin Test', 'Sterility',
+  'Related Substance', 'API Assay (ODB)', 'Water/ LOD', 'Relative Substance',
+] as const;
+
+const DEFAULT_UTILITY_PARAMETER_MASTER = [
+  'WFI Conductivity', 'WFI TOC', 'WFI Microbial Count', 'Purified Water Conductivity',
+  'Compressed Air Pressure', 'Compressed Air Dew Point', 'Nitrogen Pressure',
+  'HVAC Temperature', 'HVAC RH', 'Differential Pressure',
+] as const;
+
+const CPP_STAGE_TO_ADMIN_STAGE: Record<string, ParameterFormData['processStage']> = {
+  'Environment Monitoring': 'Environmental Monitoring',
+  'Sterilization of Equipments': 'Sterilization',
+  'Batch Manufacturing': 'Mixing',
+  'Filtration Process': 'Filtration',
+  'Glass Container Washing': 'Vial Washing',
+  'Glass Container Depyrogenation': 'Depyrogenation',
+  'Filling Process': 'Filling',
+  'Leak Test': 'Sealing',
+};
+
+const DEPYRO_ZONE_NAME_MAP: Record<string, { dp: string; temp: string }> = {
+  'Preheating Zone': { dp: 'Preheat Zone DP (Pa)', temp: 'Preheat Zone Temperature (°C)' },
+  'Sterilization Zone': { dp: 'Heating Zone DP (Pa)', temp: 'Heating Zone Temperature (°C)' },
+  'Cooling Zone': { dp: 'Cooling Zone DP (Pa)', temp: 'Cooling Zone Temperature (°C)' },
+};
+
+function normalizeName(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[—–]/g, '-')
+    .replace(/[₂]/g, '2')
+    .replace(/[µ]/g, 'u')
+    .replace(/[³]/g, '3')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function getCppMasterDefaults(): Array<{ name: string; stage: ParameterFormData['processStage'] }> {
+  const out: Array<{ name: string; stage: ParameterFormData['processStage'] }> = [];
+  const seen = new Set<string>();
+
+  for (const stageCfg of CPP_MONITORING_HIERARCHY) {
+    const stage = CPP_STAGE_TO_ADMIN_STAGE[stageCfg.stage] || 'Mixing';
+    if (stageCfg.areas?.length) {
+      for (const areaCfg of stageCfg.areas) {
+        for (const p of areaCfg.parameters) {
+          let name = p;
+          if (stageCfg.stage === 'Glass Container Depyrogenation') {
+            const mapped = DEPYRO_ZONE_NAME_MAP[p];
+            if (mapped) {
+              name = areaCfg.area.includes('Differential Pressure') ? mapped.dp : mapped.temp;
+            }
+          }
+          const key = normalizeName(name);
+          if (!seen.has(key)) {
+            seen.add(key);
+            out.push({ name, stage });
+          }
+        }
+      }
+    } else if (stageCfg.parameters?.length) {
+      for (const p of stageCfg.parameters) {
+        const key = normalizeName(p);
+        if (!seen.has(key)) {
+          seen.add(key);
+          out.push({ name: p, stage });
+        }
+      }
+    }
+  }
+
+  return out;
+}
+
+const CPP_PARAMETER_NAME_ALIASES: Record<string, string> = {
+  [normalizeName('N2 Pressure Pre fill')]: 'N₂ Pressure Pre-Fill',
+  [normalizeName('Filling m/c Speed')]: 'Filling M/C Speed',
+  [normalizeName('NVPC 0.5µm / ft3 (Max)')]: 'NVPC 0.5 µm / ft³ (Max)',
+  [normalizeName('NVPC 5µm/ ft3 (Max)')]: 'NVPC 5 µm / ft³ (Max)',
+  [normalizeName('Units filled')]: 'Units Filled',
+  [normalizeName('Filling hr')]: 'Filling Hr',
+};
 
 async function logParameterAudit(
   action: string,
@@ -337,6 +423,8 @@ export async function importParametersFromFile(
 
   const headers = lines[0].split(',').map((h) => h.replace(/^"|"$/g, '').trim().toLowerCase());
   const idx = (name: string) => headers.findIndex((h) => h.includes(name));
+  const cppDefaults = getCppMasterDefaults();
+  const cppNameSet = new Set(cppDefaults.map((d) => normalizeName(d.name)));
 
   let imported = 0;
   const errors: string[] = [];
@@ -350,15 +438,17 @@ export async function importParametersFromFile(
       continue;
     }
 
+    const normalizedInputName = normalizeName(name);
+    const canonicalName = CPP_PARAMETER_NAME_ALIASES[normalizedInputName] || name;
     const typeRaw = cols[idx('type')] || 'CPP';
-    const parameterType = (DEFAULT_CPP_PARAMETERS.includes(name as typeof DEFAULT_CPP_PARAMETERS[number]) ? 'CPP'
-      : DEFAULT_CQA_PARAMETERS.includes(name as typeof DEFAULT_CQA_PARAMETERS[number]) ? 'CQA'
-      : DEFAULT_UTILITY_PARAMETERS.includes(name as typeof DEFAULT_UTILITY_PARAMETERS[number]) ? 'Utility Parameter'
+    const parameterType = (cppNameSet.has(normalizeName(canonicalName)) ? 'CPP'
+      : DEFAULT_CQA_PARAMETER_MASTER.includes(name as typeof DEFAULT_CQA_PARAMETER_MASTER[number]) ? 'CQA'
+      : DEFAULT_UTILITY_PARAMETER_MASTER.includes(name as typeof DEFAULT_UTILITY_PARAMETER_MASTER[number]) ? 'Utility Parameter'
       : typeRaw) as ParameterFormData['parameterType'];
 
     const data: ParameterFormData = {
       parameterCode: code,
-      parameterName: name,
+      parameterName: canonicalName,
       parameterType,
       parameterCategory: 'Manufacturing',
       productLink: cols[idx('product')] || '',
@@ -436,15 +526,21 @@ export async function seedDefaultParameters(meta: ParameterAuditMeta): Promise<{
   let created = 0;
   let skipped = 0;
 
+  const cppDefaults = getCppMasterDefaults();
   const presets: ParameterFormData[] = [
-    ...DEFAULT_CPP_PARAMETERS.map((n) => presetToForm(n, 'CPP', 'Manufacturing', 'Mixing')),
-    ...DEFAULT_CQA_PARAMETERS.map((n) => presetToForm(
+    ...cppDefaults.map((d) => presetToForm(
+      d.name,
+      'CPP',
+      'Manufacturing',
+      d.stage,
+    )),
+    ...DEFAULT_CQA_PARAMETER_MASTER.map((n) => presetToForm(
       n,
       'CQA',
       'Quality Control',
       (CQA_PARAMETER_STAGE_MAP[n]?.[0] || 'Finished Product Testing') as ParameterFormData['processStage'],
     )),
-    ...DEFAULT_UTILITY_PARAMETERS.map((n) => presetToForm(n, 'Utility Parameter', 'Utility', 'Utility Monitoring')),
+    ...DEFAULT_UTILITY_PARAMETER_MASTER.map((n) => presetToForm(n, 'Utility Parameter', 'Utility', 'Utility Monitoring')),
   ];
 
   for (const preset of presets) {

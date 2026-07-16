@@ -26,6 +26,8 @@ import {
 } from '@/lib/enterprise-tms';
 import { AUTOMATION_RULES, QMS_INTEGRATIONS } from '@/lib/enterprise-tms/modules';
 import { NEED_BASED_TRIGGERS } from '@/lib/enterprise-tms/types';
+import { WorkflowDiagram } from '@/components/training/workflow/workflow-diagram';
+import { EXTERNAL_TRAINING_WORKFLOW } from '@/lib/enterprise-tms/workflows';
 import { EnterpriseListPage } from './enterprise-module-pages';
 
 function useListData<T>(loader: () => Promise<T[]>) {
@@ -170,12 +172,21 @@ export function ExternalTrainingPage() {
   ];
 
   return (
-    <EnterpriseListPage
-      title="External Training" description="Seminars, workshops, vendor & regulatory external training"
-      trail={[{ label: 'Programs' }, { label: 'External' }]}
-      kpis={[{ label: 'Records', value: data.length, tone: 'blue' }, { label: 'Completed', value: data.filter((e) => e.status === 'Completed').length, tone: 'green' }]}
-      columns={columns} data={data} loading={loading}
-    />
+    <div className="space-y-6">
+      <TmsPageHeader
+        title="External Training"
+        description="Trainee uploads external records → Training Coordinator approve/reject"
+        trail={[{ label: 'Training Programs' }, { label: 'External Training' }]}
+      />
+      <WorkflowDiagram workflow={EXTERNAL_TRAINING_WORKFLOW} activeStepId="1" />
+      <div className="grid gap-4 sm:grid-cols-2">
+        <KpiCard label="Records" value={data.length} tone="blue" />
+        <KpiCard label="Completed" value={data.filter((e) => e.status === 'Completed').length} tone="green" />
+      </div>
+      <Card><CardContent className="pt-6">
+        {loading ? 'Loading...' : <ResponsiveDataTable columns={columns} data={data} />}
+      </CardContent></Card>
+    </div>
   );
 }
 

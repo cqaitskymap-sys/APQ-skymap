@@ -11,8 +11,9 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "type-check": "tsc --noEmit",
-    "emulators": "npx firebase emulators:start --only auth,firestore",
+    "emulators": "npx firebase emulators:start --only auth,firestore,storage",
     "deploy:storage": "firebase deploy --only storage",
+    "configure:storage-cors": "node scripts/configure-storage-cors.mjs",
     "setup:admin": "node scripts/setup-default-admin.mjs"
   },
   "dependencies": {
