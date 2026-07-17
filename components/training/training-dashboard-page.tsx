@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import Link from 'next/link';
-import { Download, Eye, FileSpreadsheet, FileText, RefreshCw } from 'lucide-react';
+import { ArrowRight, Download, Eye, FileSpreadsheet, FileText, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -39,22 +39,26 @@ const KPI_ITEMS: {
   suffix?: string;
   tone?: 'blue' | 'green' | 'amber' | 'red';
 }[] = [
-  { label: 'Total Trainings', key: 'totalTrainings', tone: 'blue' },
   { label: 'Assigned Trainings', key: 'assignedTrainings', tone: 'blue' },
   { label: 'Completed Trainings', key: 'completedTrainings', tone: 'green' },
   { label: 'Pending Trainings', key: 'pendingTrainings', tone: 'amber' },
   { label: 'Overdue Trainings', key: 'overdueTrainings', tone: 'red' },
-  { label: 'SOP Trainings', key: 'sopTrainings', tone: 'blue' },
   { label: 'Induction Trainings', key: 'inductionTrainings', tone: 'blue' },
-  { label: 'Refresher Trainings', key: 'refresherTrainings', tone: 'amber' },
   { label: 'Effectiveness Pending', key: 'effectivenessPending', tone: 'amber' },
-  { label: 'Effective Trainings', key: 'effectiveTrainings', tone: 'green' },
-  { label: 'Not Effective', key: 'notEffectiveTrainings', tone: 'red' },
   { label: 'Training Compliance %', key: 'trainingCompliancePercent', suffix: '%', tone: 'green' },
-  { label: 'Department Compliance %', key: 'departmentCompliancePercent', suffix: '%', tone: 'green' },
   { label: 'Users Not Trained', key: 'usersNotTrained', tone: 'red' },
-  { label: 'Due This Week', key: 'trainingDueThisWeek', tone: 'amber' },
 ];
+
+const LMS_WORKFLOWS = [
+  { label: 'Content Setup', href: '/training/training-matrix' },
+  { label: 'Training Templates', href: '/training/matrix' },
+  { label: 'Induction', href: '/training/induction' },
+  { label: 'JD / JR Assignment', href: '/training/tni' },
+  { label: 'JR Training', href: '/training/scheduling' },
+  { label: 'Target Training', href: '/training/need-based' },
+  { label: 'Assessments', href: '/training/assessment' },
+  { label: 'Training Records', href: '/training/history' },
+] as const;
 
 function viewAction(id: string) {
   return (
@@ -193,10 +197,33 @@ export function TrainingManagementDashboardPage() {
       />
 
       <div className="flex flex-wrap gap-1.5">
-        <Badge variant="outline" className="text-xs">Real-time Firestore</Badge>
-        <Badge variant="outline" className="text-xs">GMP Compliant</Badge>
-        <Badge variant="outline" className="text-xs">Audit Ready</Badge>
+        <Badge variant="outline" className="text-xs">CO-LMS-URS-001-00</Badge>
+        <Badge variant="outline" className="text-xs">Controlled Training Records</Badge>
+        <Badge variant="outline" className="text-xs">Audit Trail Enabled</Badge>
       </div>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Employee Training Lifecycle</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap items-center gap-2">
+            {LMS_WORKFLOWS.map((workflow, index) => (
+              <span key={workflow.href} className="flex items-center gap-2">
+                <Link
+                  href={workflow.href}
+                  className="rounded-md border bg-background px-3 py-2 text-xs font-medium transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 dark:hover:bg-blue-950/40"
+                >
+                  {workflow.label}
+                </Link>
+                {index < LMS_WORKFLOWS.length - 1 && (
+                  <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+                )}
+              </span>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
 
       {isReadOnly && (
         <Alert>
@@ -239,7 +266,7 @@ export function TrainingManagementDashboardPage() {
         <EmptyState title="No data" message="Training dashboard data is unavailable." />
       ) : (
         <>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {KPI_ITEMS.map((item) => (
               <KpiCard
                 key={item.key}

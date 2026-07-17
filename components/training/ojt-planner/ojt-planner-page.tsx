@@ -22,8 +22,6 @@ import { ErrorCard } from '@/components/admin/dashboard/error-card';
 import { ResponsiveDataTable } from '@/components/cpv/product-master/responsive-data-table';
 import type { ColumnDef } from '@/components/admin/admin-data-table';
 import { TmsPageHeader } from '@/components/training/tms-page-header';
-import { RoleActionFlow } from '@/components/training/workflow/workflow-diagram';
-import { OJT_WORKFLOW } from '@/lib/enterprise-tms/workflows';
 import { TmsStatusBadge } from '@/components/training/tms-sub-nav';
 import { useCompanyTraining } from '@/hooks/use-company-training';
 import { createOjtPlan, listOjtMatrix } from '@/lib/company-training-service';
@@ -106,25 +104,19 @@ export function OjtPlannerPage() {
   return (
     <div>
       <TmsPageHeader
-        title="On Job Training"
-        description="Select trainees → session details → attachments → OJT created"
-        trail={[{ label: 'Training Programs' }, { label: 'On Job Training' }]}
+        title="On-Job Training Planner & Matrix"
+        description="OJT planning with mentor assignment, task checklist & competency matrix"
+        trail={[{ label: 'Company Program', href: '/training/company-program' }, { label: 'OJT Planner' }]}
         actions={
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={() => refresh()} disabled={refreshing}>
               <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} /> Refresh
             </Button>
             <Button size="sm" onClick={() => setCreateOpen(true)}>
-              <Plus className="h-4 w-4 mr-2" /> Create OJT
+              <Plus className="h-4 w-4 mr-2" /> New OJT Plan
             </Button>
           </div>
         }
-      />
-
-      <RoleActionFlow
-        role="Training Coordinator"
-        steps={OJT_WORKFLOW.steps.slice(0, 3).map((s) => s.label)}
-        outcome="On Job Training Created"
       />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-6">

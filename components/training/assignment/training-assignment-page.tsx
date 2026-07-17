@@ -60,10 +60,9 @@ const KPI_CONFIG = [
 
 interface TrainingAssignmentPageProps {
   defaultTab?: 'dashboard' | 'assignments' | 'bulk' | 'scheduling';
-  hideHeader?: boolean;
 }
 
-export function TrainingAssignmentPage({ defaultTab = 'dashboard', hideHeader }: TrainingAssignmentPageProps) {
+export function TrainingAssignmentPage({ defaultTab = 'dashboard' }: TrainingAssignmentPageProps) {
   const [filters, setFilters] = useState<AssignmentFilters>({});
   const [activeTab, setActiveTab] = useState(defaultTab);
   const [page, setPage] = useState(1);
@@ -293,7 +292,6 @@ export function TrainingAssignmentPage({ defaultTab = 'dashboard', hideHeader }:
 
   return (
     <div className="space-y-6">
-      {!hideHeader && (
       <TmsPageHeader
         title="Training Assignment & Scheduling"
         description="Assign, schedule and track GMP training activities"
@@ -321,17 +319,14 @@ export function TrainingAssignmentPage({ defaultTab = 'dashboard', hideHeader }:
           </div>
         }
       />
-      )}
 
-      {!hideHeader && (
       <div className="flex flex-wrap gap-1.5">
         <Badge variant="outline" className="text-xs">GMP Compliant</Badge>
         <Badge variant="outline" className="text-xs">Matrix-Driven</Badge>
         <Badge variant="outline" className="text-xs">SOP Revision Ready</Badge>
       </div>
-      )}
 
-      {isReadOnly && !hideHeader && <Alert><AlertTitle>Read-Only</AlertTitle><AlertDescription>Auditor view — assignments cannot be modified.</AlertDescription></Alert>}
+      {isReadOnly && <Alert><AlertTitle>Read-Only</AlertTitle><AlertDescription>Auditor view — assignments cannot be modified.</AlertDescription></Alert>}
       {isEmployeeView && <Alert><AlertDescription>Viewing your own training assignments.</AlertDescription></Alert>}
       {isDepartmentView && <Alert><AlertDescription>Viewing department training assignments.</AlertDescription></Alert>}
       {error && <ErrorCard message={error} onRetry={refresh} />}

@@ -12,7 +12,7 @@ interface TmsPageHeaderProps {
 }
 
 const DEFAULT_TRAIL = [
-  { label: 'LMS', href: '/training' },
+  { label: 'Training Management', href: '/training' },
 ];
 
 export function TmsPageHeader({ title, description, actions, trail }: TmsPageHeaderProps) {

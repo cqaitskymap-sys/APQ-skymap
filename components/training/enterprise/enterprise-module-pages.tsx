@@ -14,9 +14,6 @@ import { ResponsiveDataTable } from '@/components/cpv/product-master/responsive-
 import type { ColumnDef } from '@/components/admin/admin-data-table';
 import { useEnterpriseTms } from '@/hooks/use-enterprise-tms';
 import { createAnnualPlan, type AnnualTrainingPlan } from '@/lib/enterprise-tms';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { WorkflowDiagram } from '@/components/training/workflow/workflow-diagram';
-import { ATC_BU_WORKFLOW, ATC_DEPT_WORKFLOW } from '@/lib/enterprise-tms/workflows';
 import { INDUCTION_WORKFLOW_STEPS } from '@/lib/enterprise-tms/modules';
 
 type EnterpriseListPageProps<T extends { id: string }> = {
@@ -99,45 +96,25 @@ export function AnnualTrainingPlanPage() {
   ];
 
   return (
-    <div className="space-y-6 animate-in fade-in">
-      <TmsPageHeader
-        title="Annual Training Calendar"
-        description="Business Unit (HR → Approver → QA) or Department (Coordinator → Approver) — select documents & months"
-        trail={[{ label: 'Training Programs' }, { label: 'Annual Training Calendar' }]}
-        actions={
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => { refresh(); load(); }} disabled={refreshing}>
-              <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} /> Refresh
-            </Button>
-            <Button size="sm" onClick={handleCreate}><Plus className="h-4 w-4 mr-2" /> New Calendar</Button>
-          </div>
-        }
-      />
-
-      <Tabs defaultValue="dept">
-        <TabsList>
-          <TabsTrigger value="bu">Business Unit Calendar</TabsTrigger>
-          <TabsTrigger value="dept">Department Calendar</TabsTrigger>
-        </TabsList>
-        <TabsContent value="bu" className="mt-4 space-y-4">
-          <WorkflowDiagram workflow={ATC_BU_WORKFLOW} activeStepId="1" />
-        </TabsContent>
-        <TabsContent value="dept" className="mt-4 space-y-4">
-          <WorkflowDiagram workflow={ATC_DEPT_WORKFLOW} activeStepId="1" />
-        </TabsContent>
-      </Tabs>
-
-      <div className="grid gap-4 sm:grid-cols-3">
-        <KpiCard label="Total Calendars" value={plans.length} tone="blue" />
-        <KpiCard label="Approved" value={plans.filter((p) => p.status === 'Approved').length} tone="green" />
-        <KpiCard label="Draft" value={plans.filter((p) => p.status === 'Draft').length} tone="amber" />
-      </div>
-
-      <Card className="shadow-sm">
-        <CardContent className="pt-6">
-          {loading ? <LoadingSkeleton rows={4} /> : <ResponsiveDataTable columns={columns} data={plans} />}
-        </CardContent>
-      </Card>
-    </div>
+    <EnterpriseListPage
+      title="Annual Training Plan"
+      description="Department-wise yearly training planning — GMP compliant"
+      trail={[{ label: 'Planning' }, { label: 'Annual Plan' }]}
+      kpis={[
+        { label: 'Total Plans', value: plans.length, tone: 'blue' },
+        { label: 'Approved', value: plans.filter((p) => p.status === 'Approved').length, tone: 'green' },
+        { label: 'Draft', value: plans.filter((p) => p.status === 'Draft').length, tone: 'amber' },
+      ]}
+      columns={columns} data={plans} loading={loading} refreshing={refreshing}
+      onRefresh={refresh}
+      actions={
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={() => { refresh(); load(); }} disabled={refreshing}>
+            <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} /> Refresh
+          </Button>
+          <Button size="sm" onClick={handleCreate}><Plus className="h-4 w-4 mr-2" /> New Plan</Button>
+        </div>
+      }
+    />
   );
 }

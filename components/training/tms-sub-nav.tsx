@@ -1,7 +1,5 @@
 'use client';
 
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
 import { EnterpriseTmsNav } from '@/components/training/enterprise/enterprise-tms-nav';
 
 /** @deprecated Use EnterpriseTmsNav — kept for backward compatibility */

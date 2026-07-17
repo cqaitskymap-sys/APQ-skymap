@@ -1,2 +1,5 @@
-import { JrTrainingSchedulePage } from '@/components/training/workflows/jr-training-schedule-page';
-export default function JrTrainingScheduleRoute() { return <JrTrainingSchedulePage />; }
+import { redirect } from 'next/navigation';
+
+export default function JrTrainingScheduleRoute() {
+  redirect('/training/scheduling');
+}
