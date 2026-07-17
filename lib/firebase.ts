@@ -162,6 +162,8 @@ export interface Profile {
   phone: string;
   avatar_url: string;
   is_active: boolean;
+  access_status?: 'pending' | 'approved' | 'rejected';
+  requested_role?: UserRole;
   last_login: string | null;
   created_at: string;
   updated_at: string;

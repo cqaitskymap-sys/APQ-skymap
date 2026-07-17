@@ -9,6 +9,8 @@
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { defineSecret } from 'firebase-functions/params';
 import * as logger from 'firebase-functions/logger';
+import { getApps, initializeApp } from 'firebase-admin/app';
+import { getFirestore } from 'firebase-admin/firestore';
 
 const cronSecret = defineSecret('EFFECTIVE_DATE_CRON_SECRET');
 const apiUrl = defineSecret('EFFECTIVE_DATE_API_URL');
@@ -260,27 +262,99 @@ export const scheduledDocumentAuditJobs = onSchedule(
   },
 );
 
-const trainingAutoCronSecret = defineSecret('TRAINING_AUTOMATION_CRON_SECRET');
-const trainingAutoApiUrl = defineSecret('TRAINING_AUTOMATION_API_URL');
-
 export const scheduledTrainingAutomationJobs = onSchedule(
   {
     schedule: 'every day 05:00',
     timeZone: 'UTC',
-    secrets: [trainingAutoCronSecret, trainingAutoApiUrl],
   },
   async () => {
-    const url = trainingAutoApiUrl.value() || process.env.TRAINING_AUTOMATION_API_URL;
-    const secret = trainingAutoCronSecret.value() || process.env.TRAINING_AUTOMATION_CRON_SECRET;
-    if (!url) {
-      logger.error('TRAINING_AUTOMATION_API_URL not configured');
-      return;
+    if (getApps().length === 0) initializeApp();
+    const firestore = getFirestore();
+    const now = new Date();
+    const today = now.toISOString().slice(0, 10);
+    const reminderDate = new Date(now);
+    reminderDate.setUTCDate(reminderDate.getUTCDate() + 30);
+    const threshold = reminderDate.toISOString().slice(0, 10);
+    let retrainingUpdated = 0;
+    let certificatesUpdated = 0;
+
+    const retraining = await firestore.collection('retraining_records')
+      .where('due_date', '<=', threshold)
+      .get();
+    for (const snapshot of retraining.docs) {
+      const record = snapshot.data();
+      if (['Completed', 'Closed', 'Cancelled'].includes(String(record.retraining_status))) continue;
+      const overdue = String(record.due_date) < today;
+      const status = overdue ? 'Overdue' : String(record.retraining_status || 'Scheduled');
+      const notificationId = `retraining-${snapshot.id}-${overdue ? 'overdue' : today}`;
+      const batch = firestore.batch();
+      if (overdue && record.retraining_status !== 'Overdue') {
+        batch.update(snapshot.ref, {
+          retraining_status: 'Overdue',
+          status: 'Overdue',
+          updated_at: now.toISOString(),
+          updated_by: 'system',
+          updated_by_name: 'Training Automation',
+        });
+        retrainingUpdated++;
+      }
+      batch.set(firestore.collection('notifications').doc(notificationId), {
+        userId: String(record.employee_id || ''),
+        recipientRole: 'training_coordinator',
+        title: overdue ? 'Retraining Overdue' : 'Retraining Reminder',
+        message: `${String(record.training_topic || 'Training')} is ${overdue ? 'overdue' : `due ${String(record.due_date)}`}`,
+        type: overdue ? 'warning' : 'info',
+        module: 'training',
+        recordId: snapshot.id,
+        isRead: false,
+        createdAt: now.toISOString(),
+        dedupeKey: notificationId,
+        status,
+      }, { merge: false });
+      await batch.commit();
     }
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: secret ? { Authorization: `Bearer ${secret}` } : {},
+
+    const certificates = await firestore.collection('training_certificates')
+      .where('expiry_date', '<=', threshold)
+      .get();
+    for (const snapshot of certificates.docs) {
+      const certificate = snapshot.data();
+      if (certificate.certificate_status === 'Revoked') continue;
+      const expired = String(certificate.expiry_date) < today;
+      const status = expired ? 'Expired' : 'Expiring Soon';
+      if (certificate.certificate_status === status) continue;
+      const notificationId = `certificate-${snapshot.id}-${status.toLowerCase().replace(' ', '-')}`;
+      const batch = firestore.batch();
+      batch.update(snapshot.ref, {
+        certificate_status: status,
+        updated_at: now.toISOString(),
+        updated_by: 'system',
+        updated_by_name: 'Training Automation',
+      });
+      batch.set(firestore.collection('notifications').doc(notificationId), {
+        userId: String(certificate.employee_id || ''),
+        recipientRole: 'training_coordinator',
+        title: `Certificate ${status}`,
+        message: `${String(certificate.certificate_number || snapshot.id)} ${expired ? 'has expired' : `expires ${String(certificate.expiry_date)}`}`,
+        type: expired ? 'warning' : 'info',
+        module: 'training',
+        recordId: snapshot.id,
+        isRead: false,
+        createdAt: now.toISOString(),
+        dedupeKey: notificationId,
+      }, { merge: false });
+      await batch.commit();
+      certificatesUpdated++;
+    }
+
+    await firestore.collection('training_automation_log').add({
+      job: 'daily_training_automation',
+      started_at: now.toISOString(),
+      completed_at: new Date().toISOString(),
+      status: 'Completed',
+      retraining_updated: retrainingUpdated,
+      certificates_updated: certificatesUpdated,
     });
-    const body = await res.json();
-    logger.info('Training automation scheduler completed', body);
+    logger.info('Training automation completed', { retrainingUpdated, certificatesUpdated });
   },
 );

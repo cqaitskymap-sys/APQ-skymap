@@ -6,25 +6,30 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { KpiCard } from '@/components/cpv/cpv-ui';
 import { LoadingSkeleton } from '@/components/admin/dashboard/loading-skeleton';
+import { ErrorCard } from '@/components/admin/dashboard/error-card';
 import { TmsPageHeader } from '@/components/training/tms-page-header';
 import { TmsStatusBadge } from '@/components/training/tms-sub-nav';
 import { ResponsiveDataTable } from '@/components/cpv/product-master/responsive-data-table';
 import type { ColumnDef } from '@/components/admin/admin-data-table';
 import { listTrainingRecords, listAssignments } from '@/lib/training-service';
 import type { TrainingRecord, TrainingAssignment } from '@/lib/training-types';
+import { listInductionRecords, type InductionRecord } from '@/lib/company-training-service';
+import { listRetrainingRecords } from '@/lib/training-retraining-service';
+import type { RetrainingRecord } from '@/lib/training-retraining-types';
 import { EnterpriseListPage } from '@/components/training/enterprise/enterprise-module-pages';
 
 export function AssessmentPage() {
   const [records, setRecords] = useState<TrainingRecord[]>([]);
   const [assignments, setAssignments] = useState<TrainingAssignment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     Promise.all([listTrainingRecords(), listAssignments()]).then(([r, a]) => {
       setRecords(r.filter((rec) => rec.assessment_score != null));
       setAssignments(a.filter((a) => a.assessment_score != null));
-      setLoading(false);
-    });
+    }).catch((cause) => setError(cause instanceof Error ? cause.message : 'Failed to load assessments'))
+      .finally(() => setLoading(false));
   }, []);
 
   const columns: ColumnDef<TrainingRecord>[] = [
@@ -45,7 +50,7 @@ export function AssessmentPage() {
         { label: 'Failed', value: records.filter((r) => r.training_result === 'Fail').length, tone: 'red' },
         { label: 'Assignments Scored', value: assignments.length, tone: 'amber' },
       ]}
-      columns={columns} data={records} loading={loading}
+      columns={columns} data={records} loading={loading} error={error}
     />
   );
 }
@@ -53,12 +58,13 @@ export function AssessmentPage() {
 export function TrainingSessionPage() {
   const [assignments, setAssignments] = useState<TrainingAssignment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     listAssignments().then((a) => {
       setAssignments(a.filter((x) => x.scheduled_date || x.training_mode === 'Classroom'));
-      setLoading(false);
-    });
+    }).catch((cause) => setError(cause instanceof Error ? cause.message : 'Failed to load training sessions'))
+      .finally(() => setLoading(false));
   }, []);
 
   const columns: ColumnDef<TrainingAssignment>[] = [
@@ -80,20 +86,25 @@ export function TrainingSessionPage() {
         { label: 'Sessions', value: assignments.length, tone: 'blue' },
         { label: 'Today', value: assignments.filter((a) => a.scheduled_date === new Date().toISOString().slice(0, 10)).length, tone: 'green' },
       ]}
-      columns={columns} data={assignments} loading={loading}
+      columns={columns} data={assignments} loading={loading} error={error}
     />
   );
 }
 
 export function NewEmployeeTrainingPage() {
-  const rows = [
-    { id: '1', employee_name: 'Suresh Patel', department: 'Production', stage: 'TNI Preparation' },
-    { id: '2', employee_name: 'Kavita Nair', department: 'QA', stage: 'SOP Assignment' },
-  ];
-  const columns: ColumnDef<{ id: string; employee_name: string; department: string; stage: string }>[] = [
+  const [rows, setRows] = useState<InductionRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    listInductionRecords()
+      .then(setRows)
+      .catch((cause) => setError(cause instanceof Error ? cause.message : 'Failed to load new employee training'))
+      .finally(() => setLoading(false));
+  }, []);
+  const columns: ColumnDef<InductionRecord>[] = [
     { key: 'emp', header: 'Employee', render: (r) => r.employee_name },
     { key: 'dept', header: 'Department', render: (r) => r.department },
-    { key: 'stage', header: 'Stage', render: (r) => <TmsStatusBadge status={r.stage} /> },
+    { key: 'stage', header: 'Stage', render: (r) => <TmsStatusBadge status={r.current_stage} /> },
   ];
 
   return (
@@ -104,26 +115,39 @@ export function NewEmployeeTrainingPage() {
       showWorkflow
       kpis={[
         { label: 'New Joiners', value: rows.length, tone: 'blue' },
-        { label: 'In Progress', value: rows.length, tone: 'amber' },
-        { label: 'Completed', value: 0, tone: 'green' },
+        { label: 'In Progress', value: rows.filter((row) => row.status !== 'Completed').length, tone: 'amber' },
+        { label: 'Completed', value: rows.filter((row) => row.status === 'Completed').length, tone: 'green' },
       ]}
       columns={columns}
       data={rows}
-      loading={false}
+      loading={loading}
+      error={error}
     />
   );
 }
 
 export function RefresherTrainingPage() {
+  const [records, setRecords] = useState<RetrainingRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    listRetrainingRecords()
+      .then(setRecords)
+      .catch((cause) => setError(cause instanceof Error ? cause.message : 'Failed to load refresher training'))
+      .finally(() => setLoading(false));
+  }, []);
+  if (loading) return <LoadingSkeleton rows={3} />;
+  if (error) return <ErrorCard message={error} />;
+  const month = new Date().toISOString().slice(0, 7);
   return (
     <div className="space-y-4">
       <TmsPageHeader title="Refresher Training" description="Periodic refresher scheduling & compliance"
         trail={[{ label: 'Programs' }, { label: 'Refresher' }]}
         actions={<Button variant="outline" size="sm" asChild><Link href="/training/retraining">Open Retraining Module</Link></Button>} />
       <div className="grid gap-4 sm:grid-cols-3">
-        <KpiCard label="Due This Month" value={15} tone="amber" />
-        <KpiCard label="Completed" value={42} tone="green" />
-        <KpiCard label="Overdue" value={5} tone="red" />
+        <KpiCard label="Due This Month" value={records.filter((record) => record.due_date?.startsWith(month)).length} tone="amber" />
+        <KpiCard label="Completed" value={records.filter((record) => record.retraining_status === 'Completed').length} tone="green" />
+        <KpiCard label="Overdue" value={records.filter((record) => record.retraining_status === 'Overdue').length} tone="red" />
       </div>
     </div>
   );

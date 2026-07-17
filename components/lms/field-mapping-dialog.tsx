@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
@@ -23,7 +23,7 @@ interface FieldMappingDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   mappings: LmsFieldMapping[];
-  onSave: (mappings: LmsFieldMapping[]) => void;
+  onSave: (mappings: LmsFieldMapping[]) => Promise<void>;
 }
 
 export function FieldMappingDialog({ open, onOpenChange, mappings, onSave }: FieldMappingDialogProps) {
@@ -33,6 +33,15 @@ export function FieldMappingDialog({ open, onOpenChange, mappings, onSave }: Fie
       lmsField: DEFAULT_LMS_FIELDS[i] ?? '',
     })),
   );
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    setLocal(mappings.length ? mappings : DEFAULT_EQMS_FIELDS.map((eqms, index) => ({
+      eqmsField: eqms,
+      lmsField: DEFAULT_LMS_FIELDS[index] ?? '',
+    })));
+  }, [mappings, open]);
 
   const update = (index: number, field: keyof LmsFieldMapping, value: string) => {
     setLocal((prev) => prev.map((m, i) => i === index ? { ...m, [field]: value } : m));
@@ -60,7 +69,17 @@ export function FieldMappingDialog({ open, onOpenChange, mappings, onSave }: Fie
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button onClick={() => { onSave(local); onOpenChange(false); }}>Save Mappings</Button>
+          <Button disabled={saving} onClick={async () => {
+            setSaving(true);
+            try {
+              await onSave(local);
+              onOpenChange(false);
+            } catch {
+              // The parent reports the domain error and the dialog remains open for correction.
+            } finally {
+              setSaving(false);
+            }
+          }}>{saving ? 'Saving…' : 'Save Mappings'}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

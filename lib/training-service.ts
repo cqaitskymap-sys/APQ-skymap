@@ -18,7 +18,9 @@ import {
   calcCompliance, isOverdue, calcPassFail, calcTrainingResult, mapResultToCompletionStatus,
   toTrainingAssignmentStatus,
 } from './training-types';
-import { assignmentSchema, matrixDefinitionSchema, trainingMasterSchema } from './training-schemas';
+import {
+  assignmentSchema, attendanceSchema, completionSchema, matrixDefinitionSchema, trainingMasterSchema,
+} from './training-schemas';
 import type {
   TrainingMasterInput, AssignmentInput, QuestionInput, EffectivenessInput, CompetencyInput,
   AttendanceInput, CompletionInput, BulkAssignmentInput, DepartmentAssignmentInput,
@@ -45,8 +47,8 @@ async function notify(title: string, message: string, recordId: string, roles: s
   try {
     for (const role of roles) {
       await addDoc(collection(getFirebaseFirestore(), TMS_COLLECTIONS.notifications), {
-        title, message, module: 'Training', record_id: recordId, target_role: role,
-        read: false, created_at: now(),
+        title, message, module: 'Training', recordId, recipientRole: role,
+        isRead: false, readStatus: 'Unread', createdAt: now(),
       });
     }
   } catch (e) { console.error('Notification failed:', e); }
@@ -169,10 +171,11 @@ async function notifyCompletion(
       title: 'Your Training Update',
       message: `Your training "${assignment.training_title}" has been ${outcome}.`,
       module: 'Training',
-      record_id: recordId,
-      target_user_id: assignment.employee_id,
-      read: false,
-      created_at: now(),
+      recordId,
+      userId: assignment.employee_id,
+      isRead: false,
+      readStatus: 'Unread',
+      createdAt: now(),
     });
   } catch { /* optional */ }
 }
@@ -376,10 +379,11 @@ async function notifyAssignmentCreated(assignment: TrainingAssignment, master: T
     title: 'New Training Assignment',
     message: `You have been assigned: ${master.training_title}. Due date: ${assignment.due_date}`,
     module: 'Training',
-    record_id: assignment.id,
-    target_user_id: assignment.employee_id,
-    read: false,
-    created_at: now(),
+    recordId: assignment.id,
+    userId: assignment.employee_id,
+    isRead: false,
+    readStatus: 'Unread',
+    createdAt: now(),
   });
 }
 
@@ -390,6 +394,16 @@ export async function createAssignment(
   const parsed = assignmentSchema.parse(input);
   const master = await getTrainingMasterById(parsed.training_master_id);
   if (!master) throw new Error('Training master not found');
+  const duplicate = await getDocs(query(
+    collection(getFirebaseFirestore(), TMS_COLLECTIONS.assignments),
+    where('training_master_id', '==', parsed.training_master_id),
+    where('employee_id', '==', parsed.employee_id),
+  ));
+  const activeDuplicate = duplicate.docs.some((snapshot) =>
+    !['completed', 'cancelled', 'failed'].includes(String(snapshot.data().status).toLowerCase()));
+  if (activeDuplicate) {
+    throw new Error('An active assignment already exists for this employee and training');
+  }
 
   const trainingNumber = await generateAssignmentNumber();
   const record = await buildAssignmentRecord(parsed, master, trainingNumber, actor, options);
@@ -686,8 +700,20 @@ export async function syncOverdueAssignments(): Promise<number> {
 // ─── Attendance ──────────────────────────────────────────────────────────────
 
 export async function recordAttendance(input: AttendanceInput, actor: TmsActor): Promise<TrainingAttendance> {
+  attendanceSchema.parse(input);
   const assignment = await getAssignmentById(input.assignment_id);
   if (!assignment) throw new Error('Training assignment not found');
+  if (assignment.employee_id !== input.employee_id) {
+    throw new Error('Attendance employee does not match the training assignment');
+  }
+  const duplicate = await getDocs(query(
+    collection(getFirebaseFirestore(), TMS_COLLECTIONS.attendance),
+    where('assignment_id', '==', input.assignment_id),
+    limit(1),
+  ));
+  if (!duplicate.empty) {
+    throw new Error('Attendance has already been recorded for this assignment');
+  }
 
   const timestamp = now();
   const record: Omit<TrainingAttendance, 'id'> = {
@@ -770,8 +796,40 @@ export async function completeTraining(
   actor: TmsActor,
   options?: { assessmentRequired?: boolean; passMarks?: number },
 ): Promise<TrainingRecord> {
+  completionSchema.parse(input);
   const assignment = await getAssignmentById(input.assignment_id);
   if (!assignment) throw new Error('Training assignment not found');
+  if (assignment.employee_id !== input.employee_id) {
+    throw new Error('Completion employee does not match the training assignment');
+  }
+  if (['completed', 'cancelled'].includes(String(assignment.status).toLowerCase())) {
+    throw new Error(`Cannot complete an assignment with status "${assignment.status}"`);
+  }
+
+  const existingRecord = await getDocs(query(
+    collection(getFirebaseFirestore(), TMS_COLLECTIONS.records),
+    where('assignment_id', '==', input.assignment_id),
+    limit(1),
+  ));
+  if (!existingRecord.empty) {
+    throw new Error('A completion record already exists for this assignment');
+  }
+
+  const attendanceRequired = !['Read & Understand', 'Self-Study'].includes(input.training_mode);
+  if (attendanceRequired) {
+    const attendance = await getDocs(query(
+      collection(getFirebaseFirestore(), TMS_COLLECTIONS.attendance),
+      where('assignment_id', '==', input.assignment_id),
+      limit(1),
+    ));
+    if (attendance.empty) {
+      throw new Error('Verified attendance must be recorded before training completion');
+    }
+    const attendanceRecord = attendance.docs[0].data() as TrainingAttendance;
+    if (!['Present', 'Late'].includes(String(attendanceRecord.attendance_status)) || !attendanceRecord.trainer_verified) {
+      throw new Error('Training completion requires present attendance verified by the trainer');
+    }
+  }
 
   const master = await getTrainingMasterById(assignment.training_master_id);
   const assessmentRequired = options?.assessmentRequired ?? master?.assessment_required ?? false;

@@ -10,7 +10,7 @@ import {
   type LmsCourse, type LmsUser, type LmsTrainingRecord, type TrainingCertificate,
   type LmsDashboardData, type LmsDashboardKpis, type LmsDashboardCharts,
   type LmsActor, type LmsFilters, calcNextSync, generateConnectionId, generateJobId,
-  type LmsSyncEntity,
+  type LmsSyncEntity, type LmsFieldMapping,
 } from './lms-types';
 import type { LmsConnectionInput } from './lms-schemas';
 import { createLmsAdapter } from './lms-adapters/base-adapter';
@@ -194,6 +194,32 @@ export async function updateConnection(id: string, input: Partial<LmsConnectionI
   if (input.sync_entities) updates.sync_entities = input.sync_entities;
   await updateDoc(doc(db(), LMS_COLLECTIONS.connections, id), updates as DocumentData);
   await audit(actor, 'connection updated', id, existing, updates);
+}
+
+export async function updateConnectionFieldMappings(
+  id: string,
+  mappings: LmsFieldMapping[],
+  actor: LmsActor,
+): Promise<void> {
+  const existing = await getConnection(id);
+  if (!existing) throw new Error('Connection not found');
+  const normalized = mappings.map((mapping) => ({
+    eqmsField: mapping.eqmsField.trim(),
+    lmsField: mapping.lmsField.trim(),
+  }));
+  if (normalized.some((mapping) => !mapping.eqmsField || !mapping.lmsField)) {
+    throw new Error('Both eQMS and LMS fields are required for every mapping');
+  }
+  if (new Set(normalized.map((mapping) => mapping.eqmsField)).size !== normalized.length) {
+    throw new Error('Each eQMS field can only be mapped once');
+  }
+  await updateDoc(doc(db(), LMS_COLLECTIONS.connections, id), {
+    field_mappings: normalized,
+    updated_by: actor.id,
+    updated_by_name: actor.name,
+    updated_at: now(),
+  });
+  await audit(actor, 'field mappings updated', id, existing.field_mappings, normalized);
 }
 
 export async function testConnection(id: string, actor: LmsActor): Promise<{ success: boolean; message: string }> {

@@ -39,7 +39,7 @@ export default function SignupPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [selectedRole, setSelectedRole] = useState('');
-  const { signUp } = useAuth();
+  const { signUp, signOut } = useAuth();
   const router = useRouter();
 
   const { register, handleSubmit, setValue, formState: { errors } } = useForm<FormData>({
@@ -48,14 +48,20 @@ export default function SignupPage() {
 
   const onSubmit = async (data: FormData) => {
     setLoading(true);
-    const { error } = await signUp(data.email, data.password, data.full_name, data.role);
-    if (error) {
-      toast.error('Registration failed', { description: error.message });
-    } else {
-      toast.success('Account created!', { description: 'Redirecting to dashboard...' });
-      router.push('/dashboard');
+    try {
+      const { error } = await signUp(data.email, data.password, data.full_name, data.role);
+      if (error) {
+        toast.error('Registration failed', { description: error.message });
+        return;
+      }
+      await signOut();
+      toast.success('Access request submitted', {
+        description: 'An administrator must approve and activate your account before you can sign in.',
+      });
+      router.push('/auth/login');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 import { normalizeRole } from '@/lib/permissions';
 import {
-  fetchLmsDashboard, listConnections, processDueScheduledSyncs,
+  fetchLmsDashboard, listConnections,
 } from '@/lib/lms-service';
 import { runLmsSync, retryFailedSync, detectConflicts } from '@/lib/lms-sync-service';
 import type { LmsDashboardData, LmsFilters, LmsActor, ConflictRecord } from '@/lib/lms-types';
@@ -31,7 +31,6 @@ export function useLmsIntegration(filters?: LmsFilters) {
     setRefreshing(true);
     setError(null);
     try {
-      if (actor.id) await processDueScheduledSyncs(actor);
       const dashboard = await fetchLmsDashboard(filters);
       setData(dashboard);
     } catch (e) {

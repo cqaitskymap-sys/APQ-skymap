@@ -15,7 +15,7 @@ import { ResponsiveDataTable } from '@/components/cpv/product-master/responsive-
 import type { ColumnDef } from '@/components/admin/admin-data-table';
 import { TmsPageHeader } from '@/components/training/tms-page-header';
 import { useLmsIntegration } from '@/hooks/use-lms';
-import { testConnection } from '@/lib/lms-service';
+import { testConnection, updateConnectionFieldMappings } from '@/lib/lms-service';
 import { formatSyncDuration } from '@/lib/lms-types';
 import type { LmsCourse, TrainingCertificate } from '@/lib/lms-types';
 import { ConnectionCard } from './connection-card';
@@ -285,7 +285,17 @@ export function LmsIntegrationPage() {
         open={mappingOpen}
         onOpenChange={setMappingOpen}
         mappings={data?.connections.find((c) => c.id === selectedConnection)?.field_mappings ?? []}
-        onSave={() => toast.success('Field mappings saved')}
+        onSave={async (mappings) => {
+          if (!selectedConnection) throw new Error('Select an LMS connection first');
+          try {
+            await updateConnectionFieldMappings(selectedConnection, mappings, actor);
+            toast.success('Field mappings saved');
+            await refresh();
+          } catch (cause) {
+            toast.error(cause instanceof Error ? cause.message : 'Failed to save field mappings');
+            throw cause;
+          }
+        }}
       />
 
       <ConflictResolutionDialog

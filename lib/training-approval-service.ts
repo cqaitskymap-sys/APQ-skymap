@@ -13,7 +13,10 @@ import {
   generateWorkflowNumber, generateRequestNumber,
   buildDefaultSteps, roleMatchesApprover,
 } from './training-approval-types';
-import type { CreateApprovalRequestInput, ApprovalActionInput } from './training-approval-schemas';
+import {
+  approvalActionSchema, createApprovalRequestSchema,
+  type CreateApprovalRequestInput, type ApprovalActionInput,
+} from './training-approval-schemas';
 
 function now() { return new Date().toISOString(); }
 function today() { return new Date().toISOString().slice(0, 10); }
@@ -185,6 +188,7 @@ export async function createApprovalRequest(
   input: CreateApprovalRequestInput,
   actor: TrainingApprovalActor,
 ): Promise<ApprovalRequest> {
+  input = createApprovalRequestSchema.parse(input);
   await seedTrainingWorkflowTemplates();
   const stepsConfig = buildDefaultSteps(input.workflow_type);
   const ts = now();
@@ -238,6 +242,7 @@ export async function createApprovalRequest(
       due_date: addDays(today(), step.due_days),
       completed_date: null,
       e_signature_required: step.e_signature_required,
+      comment_required: step.comment_required,
       e_signature_id: null,
       comments: '',
       rejection_reason: '',
@@ -262,26 +267,53 @@ export async function processApprovalAction(
   input: ApprovalActionInput,
   actor: TrainingApprovalActor,
 ): Promise<void> {
+  input = approvalActionSchema.parse(input);
   const reqSnap = await getDoc(doc(db(), TRAINING_APPROVAL_COLLECTIONS.requests, input.request_id));
   if (!reqSnap.exists()) throw new Error('Approval request not found');
   const request = mapRequest(reqSnap.id, reqSnap.data());
 
-  if (['Approved', 'Rejected', 'Closed', 'Cancelled'].includes(request.current_status)) {
+  if (
+    ['Rejected', 'Closed', 'Cancelled'].includes(request.current_status)
+    || (request.current_status === 'Approved' && input.action !== 'Close')
+  ) {
     throw new Error('Request is already finalized');
   }
 
   const steps = await getApprovalSteps(input.request_id);
   const currentStep = steps.find((s) => s.status === 'Pending');
-  if (!currentStep && input.action !== 'Cancel') throw new Error('No pending approval step');
+  if (!currentStep && !['Cancel', 'Close'].includes(input.action)) throw new Error('No pending approval step');
 
   const ts = now();
+  const isPrivilegedAdmin = ['super_admin', 'admin', 'head_qa'].includes(actor.role);
+  if (currentStep && !['Cancel', 'Close'].includes(input.action)) {
+    const isAssignedApprover = roleMatchesApprover(actor.role, currentStep.approver_role)
+      || currentStep.delegated_to === actor.id;
+    if (!isAssignedApprover) throw new Error('You are not authorized to act on this approval step');
+    if (currentStep.comment_required && !input.comments.trim()) {
+      throw new Error('Comments are required for this approval step');
+    }
+  }
+  if (input.action === 'Cancel' && actor.id !== request.initiated_by && !isPrivilegedAdmin) {
+    throw new Error('Only the request initiator or an administrator can cancel this request');
+  }
 
   if (input.action === 'Approve' && currentStep) {
-    if (!roleMatchesApprover(actor.role, currentStep.approver_role)) {
-      throw new Error('You are not authorized to approve this step');
-    }
     if (currentStep.e_signature_required && !input.e_signature_id) {
       throw new Error('Electronic signature required for this approval step');
+    }
+    if (currentStep.e_signature_required && input.e_signature_id) {
+      const signature = await getDoc(doc(db(), TRAINING_APPROVAL_COLLECTIONS.esignRecords, input.e_signature_id));
+      const signatureData = signature.data();
+      if (
+        !signature.exists()
+        || signatureData?.userId !== actor.id
+        || signatureData?.recordId !== input.request_id
+        || signatureData?.authenticationStatus !== 'Success'
+        || signatureData?.status !== 'Signed'
+        || signatureData?.isTest === true
+      ) {
+        throw new Error('Electronic signature is invalid or is not bound to this approval action');
+      }
     }
 
     await updateDoc(doc(db(), TRAINING_APPROVAL_COLLECTIONS.steps, currentStep.id), {
@@ -304,13 +336,13 @@ export async function processApprovalAction(
       });
       await notify('Approval Required', `${request.workflow_type} awaiting ${nextStep.step_name}`, input.request_id, [nextStep.approver_role]);
     } else {
+      await applyFinalApproval(request, actor);
       await updateDoc(reqSnap.ref, {
         current_status: 'Approved',
         approval_decision: 'approved',
         completed_date: ts,
         updated_at: ts, updated_by: actor.id, updated_by_name: actor.name,
       });
-      await applyFinalApproval(request, actor);
       await notify('Request Approved', `${request.reference_number} has been approved`, input.request_id, ['training_coordinator']);
     }
     await audit(actor, 'approved', input.request_id, { step: currentStep.step_name, comments: input.comments });
@@ -343,11 +375,26 @@ export async function processApprovalAction(
 
   if (input.action === 'Escalate' && currentStep) {
     await updateDoc(doc(db(), TRAINING_APPROVAL_COLLECTIONS.steps, currentStep.id), {
-      status: 'Escalated', updated_at: ts,
+      comments: input.comments, updated_at: ts,
     } as DocumentData);
     await updateDoc(reqSnap.ref, { current_status: 'Under Review', priority: 'High', updated_at: ts });
     await notify('Approval Escalated', `${request.reference_number} escalated`, input.request_id, ['head_qa', 'qa_manager']);
     await audit(actor, 'escalated', input.request_id, null);
+  }
+
+  if (input.action === 'Delegate' && currentStep) {
+    await updateDoc(doc(db(), TRAINING_APPROVAL_COLLECTIONS.steps, currentStep.id), {
+      delegated_to: input.delegate_to,
+      comments: input.comments,
+      updated_at: ts,
+    } as DocumentData);
+    await updateDoc(reqSnap.ref, {
+      assigned_approver: input.delegate_to,
+      updated_at: ts,
+      updated_by: actor.id,
+      updated_by_name: actor.name,
+    });
+    await audit(actor, 'delegated', input.request_id, { delegate_to: input.delegate_to });
   }
 
   if (input.action === 'Cancel') {
@@ -356,6 +403,20 @@ export async function processApprovalAction(
       updated_at: ts, updated_by: actor.id, updated_by_name: actor.name,
     });
     await audit(actor, 'cancelled', input.request_id, null);
+  }
+
+  if (input.action === 'Close') {
+    if (request.current_status !== 'Approved' || !isPrivilegedAdmin) {
+      throw new Error('Only an authorized administrator can close an approved request');
+    }
+    await updateDoc(reqSnap.ref, {
+      current_status: 'Closed',
+      completed_date: ts,
+      updated_at: ts,
+      updated_by: actor.id,
+      updated_by_name: actor.name,
+    });
+    await audit(actor, 'closed', input.request_id, { comments: input.comments });
   }
 
   await saveHistory({
@@ -367,24 +428,47 @@ export async function processApprovalAction(
 }
 
 async function applyFinalApproval(request: ApprovalRequest, actor: TrainingApprovalActor): Promise<void> {
-  try {
-    if (request.workflow_type.includes('Completion') || request.workflow_type.includes('Assignment')) {
-      await updateDoc(doc(db(), TRAINING_APPROVAL_COLLECTIONS.assignments, request.reference_id), {
-        status: 'completed', training_status: 'Completed', updated_at: now(),
-      });
-    }
-    if (request.workflow_type.includes('Certificate')) {
-      await addDoc(collection(db(), TRAINING_APPROVAL_COLLECTIONS.certificates), {
-        reference_id: request.reference_id,
-        certificate_number: `CERT-${request.reference_number}`,
-        issued_date: now(),
-        approved_by: actor.name,
-        status: 'Active',
-        created_at: now(),
-      });
-      await audit(actor, 'certificate issued', request.reference_id, { request_id: request.id });
-    }
-  } catch { /* reference may not exist yet */ }
+  const approved = {
+    approval_status: 'Approved',
+    approved_by: actor.id,
+    approved_by_name: actor.name,
+    approved_at: now(),
+    updated_at: now(),
+  };
+  if (request.workflow_type === 'Training Assignment Approval') {
+    await updateDoc(doc(db(), TRAINING_APPROVAL_COLLECTIONS.assignments, request.reference_id), {
+      ...approved,
+      status: 'assigned',
+      training_status: 'Assigned',
+    });
+  } else if (request.workflow_type === 'Training Completion Review') {
+    await updateDoc(doc(db(), TRAINING_APPROVAL_COLLECTIONS.records, request.reference_id), {
+      ...approved,
+      qa_review_status: 'Approved',
+      qa_reviewed_by: actor.name,
+      qa_reviewed_at: now(),
+    });
+  } else if (request.workflow_type === 'Assessment Approval') {
+    await updateDoc(doc(db(), 'training_assessments', request.reference_id), approved);
+  } else if (request.workflow_type === 'Competency Approval') {
+    await updateDoc(doc(db(), 'competency_records', request.reference_id), approved);
+  } else if (request.workflow_type === 'Training Effectiveness Approval') {
+    await updateDoc(doc(db(), TRAINING_APPROVAL_COLLECTIONS.effectiveness, request.reference_id), approved);
+  } else if (
+    request.workflow_type === 'Certificate Approval'
+    || request.workflow_type === 'Certificate Renewal Approval'
+  ) {
+    await updateDoc(doc(db(), TRAINING_APPROVAL_COLLECTIONS.certificates, request.reference_id), {
+      ...approved,
+      certificate_status: 'Active',
+    });
+  } else if (request.workflow_type === 'Retraining Approval') {
+    await updateDoc(doc(db(), TRAINING_APPROVAL_COLLECTIONS.retraining, request.reference_id), approved);
+  }
+  await audit(actor, 'source record approved', request.reference_id, {
+    request_id: request.id,
+    workflow_type: request.workflow_type,
+  });
 }
 
 export async function escalateOverdueApprovals(actor: TrainingApprovalActor): Promise<number> {

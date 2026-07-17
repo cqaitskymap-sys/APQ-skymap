@@ -34,6 +34,13 @@ export const trainingEventSchema = z.object({
   if (data.start_date === data.end_date && data.end_time <= data.start_time) {
     ctx.addIssue({ code: 'custom', message: 'End time must be after start time', path: ['end_time'] });
   }
+  if (data.assigned_employees.length > data.capacity) {
+    ctx.addIssue({
+      code: 'custom',
+      message: `Assigned employees (${data.assigned_employees.length}) exceed capacity (${data.capacity})`,
+      path: ['assigned_employees'],
+    });
+  }
 });
 
 export const trainingRoomSchema = z.object({

@@ -170,13 +170,18 @@ export const completionSchema = z.object({
   training_mode: z.enum(TRAINING_MODES as unknown as [string, ...string[]]).default('Classroom'),
   start_time: z.string().default(''),
   end_time: z.string().default(''),
-  assessment_score: z.coerce.number().nullable().optional(),
+  assessment_score: z.coerce.number().min(0, 'Assessment score cannot be negative').max(100, 'Assessment score cannot exceed 100').nullable().optional(),
   trainer_comments: z.string().default(''),
   employee_comments: z.string().default(''),
   completion_evidence: z.string().default(''),
   trainer_verified: z.boolean().default(false),
 }).superRefine((data, ctx) => {
-  // assessment_score validation handled at submit time when assessment_required
+  if (!data.trainer_verified) {
+    ctx.addIssue({ code: 'custom', message: 'Trainer verification is required', path: ['trainer_verified'] });
+  }
+  if (data.end_time && data.start_time && data.end_time <= data.start_time) {
+    ctx.addIssue({ code: 'custom', message: 'End time must be after start time', path: ['end_time'] });
+  }
 });
 
 export type TrainingMasterInput = z.input<typeof trainingMasterSchema>;

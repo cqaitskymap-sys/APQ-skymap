@@ -5,7 +5,7 @@ import { useAuth } from '@/contexts/auth-context';
 import { normalizeRole } from '@/lib/permissions';
 import {
   fetchApprovalDashboard, createApprovalRequest, processApprovalAction,
-  escalateOverdueApprovals, bulkApprove, bulkReject,
+  bulkApprove, bulkReject,
 } from '@/lib/training-approval-service';
 import type {
   ApprovalDashboardData, ApprovalFilters, TrainingApprovalActor, ApprovalRequest,
@@ -38,7 +38,6 @@ export function useTrainingApproval(filters?: ApprovalFilters) {
     setRefreshing(true);
     setError(null);
     try {
-      await escalateOverdueApprovals(actor);
       const dashboard = await fetchApprovalDashboard(filters);
       if (isEmployeeApprovalView(role)) {
         const own = dashboard.requests.filter((r) => r.initiated_by === actor.id);

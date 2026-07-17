@@ -142,7 +142,6 @@ export async function fetchRetrainingDashboard(input: {
   userDepartment?: string;
   filters?: RetrainingFilters;
 }): Promise<RetrainingDashboardData> {
-  await processRetrainingOverdueAndReminders();
   const all = await listRetrainingRecords();
   const scoped = filterRetrainingByRole(all, input.role, input.userId, input.userDepartment);
   const filtered = applyRetrainingFilters(scoped, input.filters || {});

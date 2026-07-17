@@ -21,7 +21,7 @@ import {
   SUPPORTED_LMS_PLATFORMS, LMS_AUTH_TYPES, LMS_SYNC_MODES,
   LMS_SYNC_FREQUENCIES, LMS_SYNC_ENTITIES,
 } from '@/lib/lms-types';
-import { createConnection, testConnection } from '@/lib/lms-service';
+import { createConnection, testConnection, updateConnection } from '@/lib/lms-service';
 import type { LmsActor } from '@/lib/lms-types';
 
 interface ConnectionWizardProps {
@@ -63,9 +63,10 @@ export function ConnectionWizard({ open, onOpenChange, actor, onSuccess }: Conne
 
   const onSubmit = async (data: LmsConnectionInput) => {
     try {
-      const id = await createConnection(data, actor);
+      const id = createdId ?? await createConnection(data, actor);
+      if (createdId) await updateConnection(createdId, data, actor);
       setCreatedId(id);
-      toast.success('LMS connection created');
+      toast.success(createdId ? 'LMS connection saved' : 'LMS connection created');
       setStep(2);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to create connection');

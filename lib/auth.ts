@@ -55,22 +55,7 @@ function requireDb() {
   return getFirebaseFirestore();
 }
 
-/** Dev/setup: promote Firebase Console users to Super Admin (disable in production). */
-function isFirstAdminBootstrapEnabled(): boolean {
-  return process.env.NEXT_PUBLIC_BOOTSTRAP_FIRST_ADMIN === 'true';
-}
-
-function isBootstrapAdminEmail(email: string): boolean {
-  const configured = process.env.NEXT_PUBLIC_BOOTSTRAP_ADMIN_EMAIL?.trim().toLowerCase();
-  return Boolean(configured && email.trim().toLowerCase() === configured);
-}
-
-function resolveLoginRole(email: string, existingRole?: UserRole | null): UserRole {
-  if (existingRole === 'super_admin' || existingRole === 'admin') return existingRole;
-  if (isBootstrapAdminEmail(email)) return 'super_admin';
-  if (isFirstAdminBootstrapEnabled() && (!existingRole || existingRole === 'viewer')) {
-    return 'super_admin';
-  }
+function resolveLoginRole(existingRole?: UserRole | null): UserRole {
   return existingRole || 'viewer';
 }
 
@@ -112,7 +97,7 @@ export async function signIn(email: string, password: string): Promise<User> {
       const profileSnap = await getDoc(profileRef);
       const loginEmail = result.user.email || email;
       if (!profileSnap.exists()) {
-        const role = resolveLoginRole(loginEmail);
+        const role = resolveLoginRole();
         const profile: Profile = {
           id: result.user.uid,
           email: loginEmail,
@@ -122,12 +107,16 @@ export async function signIn(email: string, password: string): Promise<User> {
           employee_id: '',
           phone: '',
           avatar_url: '',
-          is_active: true,
+          is_active: false,
           last_login: nowIso(),
           created_at: nowIso(),
           updated_at: nowIso(),
         };
-        await setDoc(profileRef, profile);
+        await setDoc(profileRef, {
+          ...profile,
+          requested_role: 'viewer',
+          access_status: 'pending',
+        });
         await setDoc(doc(db, USERS_COLLECTION, result.user.uid), {
           ...profile,
           createdAt: nowIso(),
@@ -137,7 +126,7 @@ export async function signIn(email: string, password: string): Promise<User> {
         }).catch(() => undefined);
       } else {
         const existing = profileSnap.data() as Profile;
-        const role = resolveLoginRole(loginEmail, existing.role);
+        const role = resolveLoginRole(existing.role);
         const updates: Record<string, string> = {
           last_login: nowIso(),
           updated_at: nowIso(),
@@ -177,7 +166,7 @@ export async function signUp(
   email: string,
   password: string,
   fullName: string,
-  role: UserRole = 'viewer',
+  requestedRole: UserRole = 'viewer',
 ): Promise<User> {
   try {
     const auth = requireAuth();
@@ -191,24 +180,21 @@ export async function signUp(
         id: result.user.uid,
         email,
         full_name: fullName,
-        role,
+        role: 'viewer',
         department: '',
         employee_id: '',
         phone: '',
         avatar_url: '',
-        is_active: true,
+        is_active: false,
         last_login: nowIso(),
         created_at: nowIso(),
         updated_at: nowIso(),
       };
 
-      await setDoc(doc(db, PROFILES_COLLECTION, result.user.uid), profile);
-      await setDoc(doc(db, USERS_COLLECTION, result.user.uid), {
+      await setDoc(doc(db, PROFILES_COLLECTION, result.user.uid), {
         ...profile,
-        createdAt: nowIso(),
-        updatedAt: nowIso(),
-        status: 'active',
-        isDeleted: false,
+        requested_role: requestedRole,
+        access_status: 'pending',
       });
 
       await writeAuditTrail({
@@ -216,7 +202,7 @@ export async function signUp(
         documentId: result.user.uid,
         action: 'CREATE',
         oldValue: null,
-        newValue: { email, role },
+        newValue: { email, requestedRole, accessStatus: 'pending' },
         userId: result.user.uid,
         userName: fullName,
         moduleName: 'Auth',

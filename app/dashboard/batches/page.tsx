@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -28,7 +29,12 @@ export default function BatchesPage() {
           <h1 className="text-3xl font-bold tracking-tight">Batch Management</h1>
           <p className="text-muted-foreground">Manufacturing batch records and release documentation</p>
         </div>
-        <Button className="bg-blue-600 hover:bg-blue-500"><Plus className="h-4 w-4 mr-2" />New Batch</Button>
+        <Button asChild className="bg-blue-600 hover:bg-blue-500">
+          <Link href="/admin/batches/create">
+            <Plus className="h-4 w-4 mr-2" />
+            New Batch
+          </Link>
+        </Button>
       </div>
 
       <div className="flex gap-3">

@@ -14,7 +14,10 @@ import {
   type CertificateDashboardData, type CertificateDashboardKpis, type CertificateDashboardCharts,
   type CertificateVerificationLog,
 } from '@/lib/training-certificate-types';
-import type { CreateCertificateInput, RenewCertificateInput, RevokeCertificateInput } from '@/lib/training-certificate-schemas';
+import {
+  createCertificateSchema, renewCertificateSchema, revokeCertificateSchema,
+  type CreateCertificateInput, type RenewCertificateInput, type RevokeCertificateInput,
+} from '@/lib/training-certificate-schemas';
 import {
   filterCertificatesByRole, applyCertificateFilters, computeCertificateDashboard,
 } from '@/lib/training-certificate-records';
@@ -90,8 +93,8 @@ async function notify(title: string, message: string, recordId: string, roles: s
   for (const role of roles) {
     try {
       await addDoc(collection(db(), TMS_COLLECTIONS.notifications), {
-        title, message, module: TRAINING_CERTIFICATE_MODULE, record_id: recordId,
-        target_role: role, read: false, created_at: now(),
+        title, message, module: TRAINING_CERTIFICATE_MODULE, recordId,
+        recipientRole: role, isRead: false, readStatus: 'Unread', createdAt: now(),
       });
     } catch { /* optional */ }
   }
@@ -135,7 +138,6 @@ export async function fetchCertificateDashboard(input: {
   userDepartment?: string;
   filters?: CertificateFilters;
 }): Promise<CertificateDashboardData> {
-  await processCertificateExpiryReminders();
   const all = await listCertificates();
   const scoped = filterCertificatesByRole(all, input.role, input.userId, input.userDepartment);
   const filtered = applyCertificateFilters(scoped, input.filters || {});
@@ -147,6 +149,28 @@ export async function createCertificate(
   actor: CertificateActor,
   autoIssue = false,
 ): Promise<TrainingCertificateRecord> {
+  input = createCertificateSchema.parse(input);
+  const trainingRecord = await getDoc(doc(db(), TMS_COLLECTIONS.records, input.training_record_id));
+  if (!trainingRecord.exists()) throw new Error('Training record not found');
+  const trainingData = trainingRecord.data();
+  if (trainingData.employee_id !== input.employee_id) {
+    throw new Error('Certificate employee does not match the training record');
+  }
+  if (trainingData.training_result !== 'Pass' && trainingData.training_result !== 'Not Applicable') {
+    throw new Error('Certificates can only be created for successfully completed training');
+  }
+  if (trainingData.qa_review_status !== 'Approved') {
+    throw new Error('QA must approve the training completion before certificate creation');
+  }
+  const duplicate = await getDocs(query(
+    collection(db(), CERTIFICATE_COLLECTION),
+    where('training_record_id', '==', input.training_record_id),
+    limit(1),
+  ));
+  if (!duplicate.empty) throw new Error('A certificate already exists for this training record');
+  if (autoIssue && actor.id !== 'system') {
+    throw new Error('Direct certificate issuance is not permitted; approval is required');
+  }
   const certNumber = generateCertificateNumber();
   const verifyCode = generateVerificationCode(certNumber);
   const ts = now();
@@ -178,7 +202,7 @@ export async function createCertificate(
     approved_date: autoIssue ? ts : null,
     digital_signature: null,
     certificate_version: '1.0',
-    certificate_pdf_url: `/api/training/certificates/pdf/${certNumber}`,
+    certificate_pdf_url: null,
     verification_code: verifyCode,
     qr_code_data: generateQrPlaceholder(certNumber, verifyCode),
     remarks: input.remarks,
@@ -251,8 +275,12 @@ export async function renewCertificate(
   input: RenewCertificateInput,
   actor: CertificateActor,
 ): Promise<void> {
+  input = renewCertificateSchema.parse(input);
   const cert = await getCertificateById(input.certificate_id);
   if (!cert) throw new Error('Certificate not found');
+  if (input.new_expiry_date <= cert.expiry_date || input.new_expiry_date <= today()) {
+    throw new Error('New expiry date must be later than the current expiry date and today');
+  }
   const ts = now();
   const newVersion = `${(parseFloat(cert.certificate_version) || 1) + 0.1}`.slice(0, 3);
 
@@ -275,6 +303,10 @@ export async function revokeCertificate(
   input: RevokeCertificateInput,
   actor: CertificateActor,
 ): Promise<void> {
+  input = revokeCertificateSchema.parse(input);
+  const cert = await getCertificateById(input.certificate_id);
+  if (!cert) throw new Error('Certificate not found');
+  if (cert.certificate_status === 'Revoked') throw new Error('Certificate is already revoked');
   await updateDoc(doc(db(), CERTIFICATE_COLLECTION, input.certificate_id), {
     certificate_status: 'Revoked',
     remarks: input.reason,
@@ -347,7 +379,7 @@ export async function autoIssueFromTrainingRecord(
     expiry_date: expiry.toISOString().slice(0, 10),
     renewal_required: true,
     remarks: 'Auto-issued on training completion',
-  }, actor, true);
+  }, actor, false);
 }
 
 export async function processCertificateExpiryReminders(): Promise<number> {

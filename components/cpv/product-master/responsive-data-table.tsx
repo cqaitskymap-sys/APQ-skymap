@@ -1,7 +1,11 @@
 'use client';
 
+import { useMemo, useState } from 'react';
+import { ChevronLeft, ChevronRight, Search } from 'lucide-react';
 import { AdminDataTable, type ColumnDef } from '@/components/admin/admin-data-table';
 import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { StatusBadge } from '@/components/cpv/cpv-ui';
 
 interface ResponsiveDataTableProps<T extends { id?: string }> {
@@ -30,9 +34,32 @@ export function ResponsiveDataTable<T extends { id?: string }>({
   pageSize,
   statusKey,
   statusOptions,
-  mobileTitleKey = 'productName',
-  mobileSubtitleKey = 'productCode',
+  mobileTitleKey,
+  mobileSubtitleKey,
 }: ResponsiveDataTableProps<T>) {
+  const [mobileSearch, setMobileSearch] = useState('');
+  const [mobilePage, setMobilePage] = useState(0);
+  const mobilePageSize = pageSize || 10;
+  const filteredMobileData = useMemo(() => {
+    const query = mobileSearch.trim().toLowerCase();
+    if (!query) return data;
+    return data.filter((row) => {
+      const record = row as Record<string, unknown>;
+      const values = searchKeys?.length
+        ? searchKeys.map((key) => record[String(key)])
+        : Object.values(record);
+      return values.some((value) => String(value ?? '').toLowerCase().includes(query));
+    });
+  }, [data, mobileSearch, searchKeys]);
+  const mobileTotalPages = Math.max(1, Math.ceil(filteredMobileData.length / mobilePageSize));
+  const currentMobilePage = Math.min(mobilePage, mobileTotalPages - 1);
+  const mobileRows = filteredMobileData.slice(
+    currentMobilePage * mobilePageSize,
+    (currentMobilePage + 1) * mobilePageSize,
+  );
+  const titleKey = mobileTitleKey || columns[0]?.key;
+  const subtitleKey = mobileSubtitleKey || columns[1]?.key;
+
   return (
     <div className="space-y-4">
       <div className="hidden md:block">
@@ -50,18 +77,33 @@ export function ResponsiveDataTable<T extends { id?: string }>({
         />
       </div>
       <div className="space-y-3 md:hidden">
+        {!loading && data.length > 0 && (
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              aria-label="Search records"
+              value={mobileSearch}
+              onChange={(event) => {
+                setMobileSearch(event.target.value);
+                setMobilePage(0);
+              }}
+              placeholder="Search records..."
+              className="pl-9"
+            />
+          </div>
+        )}
         {loading ? (
           <p className="text-sm text-muted-foreground">Loading...</p>
-        ) : data.length === 0 ? (
+        ) : filteredMobileData.length === 0 ? (
           <p className="text-center text-sm text-muted-foreground py-8">{emptyMessage || 'No records found'}</p>
         ) : (
-          data.slice(0, pageSize || 10).map((row) => {
-            const title = String((row as Record<string, unknown>)[mobileTitleKey] ?? '—');
-            const subtitle = String((row as Record<string, unknown>)[mobileSubtitleKey] ?? '');
+          mobileRows.map((row, index) => {
+            const title = String((row as Record<string, unknown>)[titleKey] ?? '—');
+            const subtitle = String((row as Record<string, unknown>)[subtitleKey] ?? '');
             const statusVal = String((row as Record<string, unknown>)[statusKey || 'cpvStatus'] ?? '');
             return (
               <Card
-                key={row.id}
+                key={row.id ?? `${currentMobilePage}-${index}`}
                 className="cursor-pointer shadow-sm"
                 onClick={() => onRowClick?.(row)}
               >
@@ -92,6 +134,34 @@ export function ResponsiveDataTable<T extends { id?: string }>({
               </Card>
             );
           })
+        )}
+        {!loading && filteredMobileData.length > 0 && (
+          <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+            <span>{filteredMobileData.length} of {data.length} records</span>
+            <div className="flex items-center gap-2">
+              <Button
+                aria-label="Previous page"
+                variant="outline"
+                size="icon"
+                className="h-8 w-8"
+                disabled={currentMobilePage === 0}
+                onClick={() => setMobilePage((page) => Math.max(0, page - 1))}
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <span>Page {currentMobilePage + 1} of {mobileTotalPages}</span>
+              <Button
+                aria-label="Next page"
+                variant="outline"
+                size="icon"
+                className="h-8 w-8"
+                disabled={currentMobilePage >= mobileTotalPages - 1}
+                onClick={() => setMobilePage((page) => Math.min(mobileTotalPages - 1, page + 1))}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
         )}
       </div>
     </div>

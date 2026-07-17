@@ -20,7 +20,7 @@ interface ProtectedRouteProps {
 }
 
 export function ProtectedRoute({ children, module, requireEdit = false }: ProtectedRouteProps) {
-  const { user, profile, loading } = useAuth();
+  const { user, profile, loading, signOut } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
 
@@ -44,6 +44,26 @@ export function ProtectedRoute({ children, module, requireEdit = false }: Protec
       <div className="flex min-h-screen items-center justify-center bg-background">
         <PremiumFullScreenLoader message="Redirecting to login..." compact />
       </div>
+    );
+  }
+
+  if (profile && (!profile.is_active || profile.access_status === 'pending')) {
+    return (
+      <Card className="mx-auto mt-12 max-w-lg border-amber-200">
+        <CardContent className="space-y-4 p-8 text-center">
+          <ShieldX className="mx-auto h-12 w-12 text-amber-500" />
+          <h2 className="text-xl font-bold">Account approval pending</h2>
+          <p className="text-sm text-muted-foreground">
+            An administrator must verify your identity, department, and role before access is enabled.
+          </p>
+          <Button variant="outline" onClick={async () => {
+            await signOut();
+            router.replace('/auth/login');
+          }}>
+            Sign out
+          </Button>
+        </CardContent>
+      </Card>
     );
   }
 

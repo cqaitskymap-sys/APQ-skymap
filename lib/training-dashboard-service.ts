@@ -3,11 +3,9 @@ import { downloadCsv } from '@/lib/export-utils';
 import { isFirebaseConfigured } from '@/lib/firebase';
 import {
   listAssignments, listEffectiveness, listEmployees, getTrainingMatrix,
-  syncOverdueAssignments, syncDmsTrainingLinks,
 } from '@/lib/training-service';
-import { processCertificateExpiryReminders } from '@/lib/training-certificate-service';
 import type {
-  TrainingAssignment, TrainingEffectiveness, TrainingMatrixRow, TmsActor,
+  TrainingAssignment, TrainingEffectiveness, TrainingMatrixRow,
 } from '@/lib/training-types';
 import {
   emptyTrainingCharts, emptyTrainingKpis, mapAssignmentDashboardStatus,
@@ -303,7 +301,7 @@ async function audit(actor: TrainingDashboardActor, action: string, detail?: unk
 
 export async function fetchTrainingDashboard(
   filters?: TrainingDashboardFilters,
-  actor?: TrainingDashboardActor,
+  _actor?: TrainingDashboardActor,
 ): Promise<TrainingDashboardData> {
   if (!isFirebaseConfigured()) {
     return {
@@ -318,12 +316,6 @@ export async function fetchTrainingDashboard(
   }
 
   try {
-    if (actor?.id) {
-      await syncOverdueAssignments().catch(() => {});
-      await syncDmsTrainingLinks(actor as TmsActor).catch(() => {});
-      await processCertificateExpiryReminders().catch(() => {});
-    }
-
     const [assignmentsRaw, effectiveness, matrix, employees] = await Promise.all([
       listAssignments().catch(() => [] as TrainingAssignment[]),
       listEffectiveness().catch(() => [] as TrainingEffectiveness[]),

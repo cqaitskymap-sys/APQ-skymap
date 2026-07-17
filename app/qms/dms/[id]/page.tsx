@@ -1,6 +1,5 @@
 'use client';
 
-import { use } from 'react';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -8,8 +7,8 @@ import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { DmsDetailView } from '@/components/dms/dms-detail-view';
 import { useDocument } from '@/hooks/use-dms';
 
-export default function DocumentDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
+export default function DocumentDetailPage({ params }: { params: { id: string } }) {
+  const { id } = params;
   const { record, loading, refresh } = useDocument(id);
 
   if (loading) return <LoadingSpinner />;

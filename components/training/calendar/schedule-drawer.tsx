@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
@@ -36,30 +37,54 @@ interface ScheduleDrawerProps {
   initial?: TrainingEvent | null;
 }
 
+function localDateKey(date = new Date()): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function eventFormValues(initial?: TrainingEvent | null): TrainingEventInput {
+  const currentDate = localDateKey();
+  return {
+    training_title: initial?.training_title ?? '',
+    training_type: (initial?.training_type as TrainingEventInput['training_type']) ?? 'GMP',
+    department: initial?.department ?? 'QA',
+    trainer: initial?.trainer ?? '',
+    trainer_id: initial?.trainer_id ?? null,
+    room: initial?.room ?? '',
+    room_id: initial?.room_id ?? null,
+    virtual_meeting_link: initial?.virtual_meeting_link ?? '',
+    mode: (initial?.mode as TrainingEventInput['mode']) ?? 'Classroom',
+    description: initial?.description ?? '',
+    capacity: initial?.capacity ?? 20,
+    assigned_employees: initial?.assigned_employees ?? [],
+    start_date: initial?.start_date ?? currentDate,
+    end_date: initial?.end_date ?? currentDate,
+    start_time: initial?.start_time ?? '09:00',
+    end_time: initial?.end_time ?? '17:00',
+    time_zone: initial?.time_zone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
+    recurring: initial?.recurring ?? false,
+    recurrence_pattern: (initial?.recurrence_pattern as TrainingEventInput['recurrence_pattern']) ?? 'None',
+    reminder_schedule: initial?.reminder_schedule ?? ['7 days', '1 day'],
+    assessment_required: initial?.assessment_required ?? false,
+    certificate_issued: initial?.certificate_issued ?? false,
+    status: (initial?.status as TrainingEventInput['status']) ?? 'Draft',
+  };
+}
+
 export function ScheduleDrawer({
   open, onOpenChange, onSubmit, rooms, trainers, employees, initial,
 }: ScheduleDrawerProps) {
+  const [employeeSearch, setEmployeeSearch] = useState('');
   const form = useForm<TrainingEventInput>({
     resolver: zodResolver(trainingEventSchema),
-    defaultValues: {
-      training_title: '',
-      training_type: 'GMP',
-      department: 'QA',
-      trainer: '',
-      room: '',
-      mode: 'Classroom',
-      capacity: 20,
-      assigned_employees: [],
-      start_date: new Date().toISOString().slice(0, 10),
-      end_date: new Date().toISOString().slice(0, 10),
-      start_time: '09:00',
-      end_time: '17:00',
-      reminder_schedule: ['7 days', '1 day'],
-      status: 'Draft',
-      recurring: false,
-      recurrence_pattern: 'None',
-    },
+    defaultValues: eventFormValues(initial),
   });
+
+  useEffect(() => {
+    if (open) form.reset(eventFormValues(initial));
+  }, [form, initial, open]);
 
   const selectedEmployees = form.watch('assigned_employees') ?? [];
   const reminders = form.watch('reminder_schedule') ?? [];
@@ -67,6 +92,14 @@ export function ScheduleDrawer({
   // Radix Select keys items by `value`; duplicate room/trainer names cause React key warnings.
   const uniqueRooms = Array.from(new Map(rooms.map((r) => [r.room_name, r])).values());
   const uniqueTrainers = Array.from(new Map(trainers.map((t) => [t.full_name, t])).values());
+  const filteredEmployees = useMemo(() => {
+    const query = employeeSearch.trim().toLowerCase();
+    if (!query) return employees;
+    return employees.filter((employee) =>
+      employee.full_name.toLowerCase().includes(query)
+      || employee.department.toLowerCase().includes(query)
+      || employee.employee_id.toLowerCase().includes(query));
+  }, [employeeSearch, employees]);
 
   const toggleEmployee = (id: string) => {
     const current = form.getValues('assigned_employees') ?? [];
@@ -79,12 +112,12 @@ export function ScheduleDrawer({
     try {
       const conflicts = await detectConflicts(data, initial?.id);
       if (conflicts.length > 0) {
-        toast.warning(conflicts.map((c) => c.message).join('; '));
+        throw new Error(`Resolve scheduling conflicts before saving: ${conflicts.map((c) => c.message).join('; ')}`);
       }
       await onSubmit(data);
       toast.success(initial ? 'Event updated' : 'Event scheduled');
       onOpenChange(false);
-      form.reset();
+      form.reset(eventFormValues());
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to save event');
     }
@@ -172,13 +205,23 @@ export function ScheduleDrawer({
           </div>
           <div>
             <Label className="mb-2 block">Assign Employees ({selectedEmployees.length})</Label>
+            <Input
+              className="mb-2"
+              value={employeeSearch}
+              onChange={(event) => setEmployeeSearch(event.target.value)}
+              placeholder="Search employee, ID, or department"
+              aria-label="Search employees"
+            />
             <div className="max-h-32 overflow-y-auto border rounded-md p-2 space-y-1">
-              {employees.slice(0, 50).map((emp) => (
+              {filteredEmployees.map((emp) => (
                 <label key={emp.id} className="flex items-center gap-2 text-sm">
                   <Checkbox checked={selectedEmployees.includes(emp.id)} onCheckedChange={() => toggleEmployee(emp.id)} />
                   {emp.full_name} ({emp.department})
                 </label>
               ))}
+              {filteredEmployees.length === 0 && (
+                <p className="py-3 text-center text-xs text-muted-foreground">No matching employees</p>
+              )}
             </div>
           </div>
           <ReminderPanel selected={reminders} onChange={(r) => form.setValue('reminder_schedule', r)} />

@@ -655,6 +655,144 @@
         { "fieldPath": "vendorType", "order": "ASCENDING" },
         { "fieldPath": "vendorCode", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "training_master",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "department", "order": "ASCENDING" },
+        { "fieldPath": "updated_at", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "training_master",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "updated_at", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "training_assignments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "updated_at", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "training_assignments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "department", "order": "ASCENDING" },
+        { "fieldPath": "updated_at", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "training_assignments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "employee_id", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "training_records",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "department", "order": "ASCENDING" },
+        { "fieldPath": "updated_at", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "training_records",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "employee_id", "order": "ASCENDING" },
+        { "fieldPath": "created_at", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "training_attendance",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "department", "order": "ASCENDING" },
+        { "fieldPath": "updated_at", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "training_matrix",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "department", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "updated_at", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "training_assessments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "training_master_id", "order": "ASCENDING" },
+        { "fieldPath": "record_type", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "training_certificates",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "department", "order": "ASCENDING" },
+        { "fieldPath": "certificate_status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "retraining_records",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "department", "order": "ASCENDING" },
+        { "fieldPath": "retraining_status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "retraining_records",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "trigger_type", "order": "ASCENDING" },
+        { "fieldPath": "created_at", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "lms_courses",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "connection_id", "order": "ASCENDING" },
+        { "fieldPath": "external_id", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "lms_users",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "connection_id", "order": "ASCENDING" },
+        { "fieldPath": "external_id", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "lms_training_records",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "connection_id", "order": "ASCENDING" },
+        { "fieldPath": "external_id", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "audit_trail",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "collectionName", "order": "ASCENDING" },
+        { "fieldPath": "documentId", "order": "ASCENDING" },
+        { "fieldPath": "timestamp", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

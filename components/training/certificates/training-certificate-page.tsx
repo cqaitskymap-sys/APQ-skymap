@@ -336,20 +336,18 @@ export function TrainingCertificatePage({ defaultTab = 'dashboard' }: TrainingCe
             {canApprove && (
               <Button onClick={async () => {
                 try {
-                  if (newCert.training_record_id) {
-                    await autoIssueFromTrainingRecord(newCert.training_record_id, actor);
-                  } else {
-                    const payload = {
-                      ...newCert, result: 'Pass', competency_level: 'Competent', renewal_required: true, remarks: '',
-                      trainer: '', document_number: '', document_version: '', sop_number: '',
-                    };
-                    await createCertificate(payload, actor, true);
-                  }
-                  toast.success('Certificate issued');
+                  if (!newCert.training_record_id) throw new Error('Training Record ID is required');
+                  const certificate = await autoIssueFromTrainingRecord(newCert.training_record_id, actor);
+                  if (!certificate) throw new Error('A passed, QA-approved training record is required');
+                  toast.success(
+                    certificate.approval_status === 'Approved'
+                      ? 'Certificate already exists'
+                      : 'Certificate draft created for approval',
+                  );
                   setCreateOpen(false);
                   refresh();
                 } catch (e) { toast.error(e instanceof Error ? e.message : 'Failed'); }
-              }}>Issue Now</Button>
+              }}>Create from Record</Button>
             )}
           </DialogFooter>
         </DialogContent>

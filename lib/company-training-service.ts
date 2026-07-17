@@ -1,9 +1,12 @@
 import {
-  addDoc, collection, doc, getDocs, limit, orderBy, query, updateDoc,
+  addDoc, collection, doc, getDoc, getDocs, limit, orderBy, query, updateDoc,
 } from 'firebase/firestore';
 import { getFirebaseFirestore, isFirebaseConfigured } from '@/lib/firebase';
 import { withFirestoreFallback, shouldSkipFirestore } from '@/lib/firestore-resilience';
 import { logTrainingAuditRecord } from '@/lib/training-audit-trail-service';
+import {
+  createAssignment, createTrainingMaster, listAssignments, listEmployees, listTrainingMaster,
+} from '@/lib/training-service';
 import {
   COMPANY_TRAINING_MODULE, COMPANY_TRAINING_COLLECTIONS,
   type CompanyTrainingActor, type CompanyTrainingDashboard,
@@ -12,6 +15,7 @@ import {
   type OjtTrainingPlan, type OjtCompetencyMatrixEntry, type SrdDeclaration,
   type InductionStatus, type TniStatus, type OjtStatus, type SrdStatus,
   type EvaluationMethod,
+  SRD_MIN_DESIGNATIONS,
   generateCertNumber, generateInductionNumber, generateTniNumber,
   generateOjtNumber, generateSrdNumber,
 } from '@/lib/company-training-types';
@@ -31,14 +35,15 @@ function now() { return new Date().toISOString(); }
 function today() { return new Date().toISOString().slice(0, 10); }
 function db() { return getFirebaseFirestore(); }
 
-// In-memory fallback when Firebase is not configured
-let memTrainers = [...SEED_TRAINER_CERTIFICATIONS];
-let memInductions = [...SEED_INDUCTION_RECORDS];
-let memTnis = [...SEED_TNI_RECORDS];
-let memJds = [...SEED_JOB_DESCRIPTIONS];
-let memOjtPlans = [...SEED_OJT_PLANS];
-let memOjtMatrix = [...SEED_OJT_MATRIX];
-let memSrds = [...SEED_SRD_DECLARATIONS];
+// Demo records are opt-in so production never presents fabricated GMP records.
+const demoDataEnabled = process.env.NEXT_PUBLIC_ENABLE_DEMO_DATA === 'true';
+let memTrainers = demoDataEnabled ? [...SEED_TRAINER_CERTIFICATIONS] : [];
+let memInductions = demoDataEnabled ? [...SEED_INDUCTION_RECORDS] : [];
+let memTnis = demoDataEnabled ? [...SEED_TNI_RECORDS] : [];
+let memJds = demoDataEnabled ? [...SEED_JOB_DESCRIPTIONS] : [];
+let memOjtPlans = demoDataEnabled ? [...SEED_OJT_PLANS] : [];
+let memOjtMatrix = demoDataEnabled ? [...SEED_OJT_MATRIX] : [];
+let memSrds = demoDataEnabled ? [...SEED_SRD_DECLARATIONS] : [];
 let memAssessments: TrainerAssessmentChecklist[] = [];
 
 async function audit(actor: CompanyTrainingActor, action: string, recordId: string, collection: string, detail?: unknown) {
@@ -303,7 +308,7 @@ export async function createTniFromJd(
     training_needs: trainingNeeds,
     prepared_by: actor.id, prepared_by_name: actor.name,
     reviewed_by: null, reviewed_by_name: null,
-    status: 'Draft', sop_mapped: true, training_assigned: false,
+    status: 'Pending Review', sop_mapped: true, training_assigned: false,
     created_at: now(), updated_at: now(),
   };
 
@@ -318,9 +323,91 @@ export async function createTniFromJd(
 }
 
 export async function approveTni(actor: CompanyTrainingActor, id: string): Promise<void> {
+  if (!['super_admin', 'admin', 'head_qa', 'qa_manager', 'training_coordinator'].includes(actor.role)) {
+    throw new Error('You are not authorized to approve TNI records');
+  }
+  const records = await listTniRecords();
+  const tni = records.find((record) => record.id === id);
+  if (!tni) throw new Error('TNI record not found');
+  if (tni.status !== 'Pending Review') throw new Error(`TNI cannot be approved from status "${tni.status}"`);
+
+  const allEmployees = await listEmployees();
+  const targetEmployees = tni.employee_id
+    ? allEmployees.filter((employee) => employee.id === tni.employee_id || employee.employee_id === tni.employee_id)
+    : allEmployees.filter((employee) =>
+      employee.department === tni.department
+      && (!tni.designation || employee.designation === tni.designation));
+  if (targetEmployees.length === 0) {
+    throw new Error('No matching employee was found for this TNI');
+  }
+
+  const [masters, assignments, jobDescriptions] = await Promise.all([
+    listTrainingMaster(),
+    listAssignments(),
+    listJobDescriptions(),
+  ]);
+  const jd = jobDescriptions.find((item) => item.id === tni.jd_id);
+  const assignedDate = today();
+  const dueDate = new Date();
+  dueDate.setDate(dueDate.getDate() + 30);
+  let assignedCount = 0;
+
+  for (const need of tni.training_needs) {
+    const linkedDocumentId = jd?.linked_sops.find((sop) => sop.sop_number === need.sop_number)?.document_id ?? null;
+    let master = masters.find((item) =>
+      item.department === tni.department
+      && (
+        (linkedDocumentId && item.linked_document_id === linkedDocumentId)
+        || item.training_title === need.sop_title
+      ));
+    if (!master) {
+      master = await createTrainingMaster({
+        training_title: need.sop_title,
+        training_type: 'SOP Training',
+        department: tni.department as Parameters<typeof createTrainingMaster>[0]['department'],
+        category: 'Training of New Joinee',
+        training_duration: '',
+        trainer_name: actor.name,
+        training_material: need.sop_number,
+        assessment_required: need.evaluation_methods.includes('Questionnaire'),
+        passing_percentage: 80,
+        retraining_frequency: 'On revision',
+        status: 'Active',
+        linked_document_id: linkedDocumentId,
+        effectiveness_required: false,
+      }, actor);
+      masters.push(master);
+    }
+
+    for (const employee of targetEmployees) {
+      const duplicate = assignments.some((assignment) =>
+        assignment.training_master_id === master!.id
+        && (assignment.employee_id === employee.id || assignment.employee_id === employee.employee_id)
+        && !['completed', 'cancelled', 'failed'].includes(String(assignment.status).toLowerCase()));
+      if (duplicate) continue;
+      const assignment = await createAssignment({
+        training_master_id: master.id,
+        employee_id: employee.id,
+        employee_name: employee.full_name,
+        department: employee.department,
+        designation: employee.designation,
+        training_topic: need.sop_title,
+        training_type: 'SOP Training',
+        assigned_date: assignedDate,
+        due_date: dueDate.toISOString().slice(0, 10),
+        trainer_name: actor.name,
+        training_mode: 'Classroom',
+        remarks: `Assigned from ${tni.tni_number}`,
+      }, actor, { source: 'TNI', sourceRef: tni.id });
+      assignments.push(assignment);
+      assignedCount++;
+    }
+  }
+
   const patch = {
-    status: 'Approved' as TniStatus,
+    status: 'Training Assigned' as TniStatus,
     reviewed_by: actor.id, reviewed_by_name: actor.name,
+    training_assigned: true,
     updated_at: now(),
   };
   if (isFirebaseConfigured()) {
@@ -328,7 +415,21 @@ export async function approveTni(actor: CompanyTrainingActor, id: string): Promi
   } else {
     memTnis = memTnis.map((r) => r.id === id ? { ...r, ...patch } : r);
   }
-  await audit(actor, 'TNI Approved', id, COMPANY_TRAINING_COLLECTIONS.tniRecords, patch);
+  if (tni.employee_id) {
+    const induction = (await listInductionRecords()).find((record) =>
+      record.employee_id === tni.employee_id && record.status !== 'Completed');
+    if (induction) {
+      await advanceInductionStage(actor, induction.id, 'SOP Assigned', {
+        tni_id: tni.id,
+        tni_number: tni.tni_number,
+        sop_assignments: tni.training_needs.map((need) => need.sop_number),
+      });
+    }
+  }
+  await audit(actor, 'TNI Approved and Training Assigned', id, COMPANY_TRAINING_COLLECTIONS.tniRecords, {
+    ...patch,
+    assignments_created: assignedCount,
+  });
 }
 
 // ─── OJT Planner ─────────────────────────────────────────────────
@@ -396,15 +497,26 @@ export async function updateOjtTaskStatus(
   status: 'Pending' | 'In Progress' | 'Completed' | 'N/A',
   mentorSignOff = false,
 ): Promise<void> {
-  const plan = memOjtPlans.find((p) => p.id === planId);
-  if (!plan) return;
+  let plan = memOjtPlans.find((item) => item.id === planId);
+  if (!plan && isFirebaseConfigured()) {
+    const snapshot = await getDoc(doc(db(), COMPANY_TRAINING_COLLECTIONS.ojtPlans, planId));
+    if (snapshot.exists()) plan = { id: snapshot.id, ...snapshot.data() } as OjtTrainingPlan;
+  }
+  if (!plan) throw new Error('OJT plan not found');
+  const canSign = actor.id === plan.mentor_id
+    || ['super_admin', 'admin', 'head_qa', 'qa_manager', 'training_coordinator'].includes(actor.role);
+  if (!canSign) throw new Error('Only the assigned mentor or QA can update OJT tasks');
+  if (status === 'Completed' && !mentorSignOff) {
+    throw new Error('Mentor sign-off is required to complete an OJT task');
+  }
 
   const tasks = plan.tasks.map((t) =>
     t.task_number === taskNumber
       ? { ...t, status, mentor_sign_off: mentorSignOff, sign_off_date: mentorSignOff ? today() : t.sign_off_date }
       : t,
   );
-  const allDone = tasks.every((t) => t.status === 'Completed' || t.status === 'N/A');
+  const allDone = tasks.every((t) =>
+    t.status === 'N/A' || (t.status === 'Completed' && t.mentor_sign_off));
   const patch = {
     tasks,
     status: (allDone ? 'Completed' : 'In Progress') as OjtStatus,
@@ -439,10 +551,21 @@ export async function createSrdDeclaration(
   actor: CompanyTrainingActor,
   input: Partial<SrdDeclaration>,
 ): Promise<SrdDeclaration> {
+  const employeeId = input.employee_id || actor.id;
+  const canCreateForOthers = ['super_admin', 'admin', 'head_qa', 'qa_manager', 'training_coordinator'].includes(actor.role);
+  if (employeeId !== actor.id && !canCreateForOthers) {
+    throw new Error('You are not authorized to create declarations for another employee');
+  }
+  if (!input.document_number?.trim() || !input.document_title?.trim() || !input.document_version?.trim()) {
+    throw new Error('Document number, title, and version are required');
+  }
+  if (!input.designation || !SRD_MIN_DESIGNATIONS.includes(input.designation as typeof SRD_MIN_DESIGNATIONS[number])) {
+    throw new Error('Self-reading declarations are only permitted for configured eligible designations');
+  }
   const record: SrdDeclaration = {
     id: `srd-${Date.now()}`,
     declaration_number: generateSrdNumber(),
-    employee_id: input.employee_id || actor.id,
+    employee_id: employeeId,
     employee_name: input.employee_name || actor.name,
     department: input.department || '',
     designation: input.designation || '',
@@ -470,6 +593,18 @@ export async function createSrdDeclaration(
 }
 
 export async function signSrdDeclaration(actor: CompanyTrainingActor, id: string): Promise<void> {
+  let declaration = memSrds.find((record) => record.id === id);
+  if (!declaration && isFirebaseConfigured()) {
+    const snapshot = await getDoc(doc(db(), COMPANY_TRAINING_COLLECTIONS.srdDeclarations, id));
+    if (snapshot.exists()) declaration = { id: snapshot.id, ...snapshot.data() } as SrdDeclaration;
+  }
+  if (!declaration) throw new Error('Self-reading declaration not found');
+  if (declaration.employee_id !== actor.id) {
+    throw new Error('You can only sign your own self-reading declaration');
+  }
+  if (declaration.status !== 'Pending Declaration') {
+    throw new Error(`Declaration cannot be signed from status "${declaration.status}"`);
+  }
   const patch = {
     employee_signature: actor.name,
     employee_signed_date: today(),
@@ -485,6 +620,18 @@ export async function signSrdDeclaration(actor: CompanyTrainingActor, id: string
 }
 
 export async function approveSrdDeclaration(actor: CompanyTrainingActor, id: string): Promise<void> {
+  if (!['super_admin', 'admin', 'head_qa', 'qa_manager', 'qa_executive', 'qa'].includes(actor.role)) {
+    throw new Error('Only QA may approve a self-reading declaration');
+  }
+  let declaration = memSrds.find((record) => record.id === id);
+  if (!declaration && isFirebaseConfigured()) {
+    const snapshot = await getDoc(doc(db(), COMPANY_TRAINING_COLLECTIONS.srdDeclarations, id));
+    if (snapshot.exists()) declaration = { id: snapshot.id, ...snapshot.data() } as SrdDeclaration;
+  }
+  if (!declaration) throw new Error('Self-reading declaration not found');
+  if (declaration.status !== 'Declared') {
+    throw new Error('Employee declaration is required before QA approval');
+  }
   const patch = {
     qa_reviewer_id: actor.id, qa_reviewer_name: actor.name,
     qa_review_date: today(), status: 'Approved' as SrdStatus,

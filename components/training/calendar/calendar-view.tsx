@@ -26,7 +26,15 @@ function getWeekDates(base: Date): Date[] {
 }
 
 function dateKey(d: Date): string {
-  return d.toISOString().slice(0, 10);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function parseLocalDate(value: string): Date {
+  const [year, month, day] = value.slice(0, 10).split('-').map(Number);
+  return new Date(year, month - 1, day);
 }
 
 export function CalendarViewComponent({ events, view = 'Month', onSelectEvent, onSelectDate }: CalendarViewProps) {
@@ -36,8 +44,8 @@ export function CalendarViewComponent({ events, view = 'Month', onSelectEvent, o
   const eventsByDate = useMemo(() => {
     const map = new Map<string, TrainingEvent[]>();
     for (const e of events) {
-      const start = new Date(e.start_date);
-      const end = new Date(e.end_date);
+      const start = parseLocalDate(e.start_date);
+      const end = parseLocalDate(e.end_date);
       for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
         const key = dateKey(d);
         if (!map.has(key)) map.set(key, []);
@@ -68,11 +76,11 @@ export function CalendarViewComponent({ events, view = 'Month', onSelectEvent, o
           const dayItems = eventsByDate.get(key) ?? [];
           const isToday = key === dateKey(new Date());
           return (
-            <div key={key} className={`min-h-[100px] border rounded-md p-1 ${isToday ? 'bg-blue-50 border-blue-200' : 'bg-card'}`}>
+            <div key={key} className={`min-h-[100px] border rounded-md p-1 ${isToday ? 'bg-blue-50 border-blue-200 dark:bg-blue-950/30 dark:border-blue-800' : 'bg-card'}`}>
               <p className="text-xs font-medium mb-1">{d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric' })}</p>
               {dayItems.slice(0, 3).map((e) => (
                 <button key={e.id} type="button" onClick={() => onSelectEvent?.(e)}
-                  className="block w-full text-left text-[10px] truncate bg-blue-100 text-blue-800 rounded px-1 mb-0.5">
+                  className="block w-full text-left text-[10px] truncate bg-blue-100 text-blue-800 dark:bg-blue-950/50 dark:text-blue-200 rounded px-1 mb-0.5">
                   {e.start_time} {e.training_title}
                 </button>
               ))}
@@ -100,10 +108,10 @@ export function CalendarViewComponent({ events, view = 'Month', onSelectEvent, o
         <CardHeader className="pb-2 flex flex-row items-center justify-between">
           <CardTitle className="text-sm">Calendar</CardTitle>
           <div className="flex gap-1">
-            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1))}>
+            <Button aria-label="Previous month" variant="ghost" size="icon" className="h-7 w-7" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1))}>
               <ChevronLeft className="h-4 w-4" />
             </Button>
-            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1))}>
+            <Button aria-label="Next month" variant="ghost" size="icon" className="h-7 w-7" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1))}>
               <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
@@ -123,7 +131,7 @@ export function CalendarViewComponent({ events, view = 'Month', onSelectEvent, o
             modifiers={{
               hasEvent: (d) => eventsByDate.has(dateKey(d)),
             }}
-            modifiersClassNames={{ hasEvent: 'bg-blue-100 font-bold' }}
+            modifiersClassNames={{ hasEvent: 'bg-blue-100 dark:bg-blue-950/50 font-bold' }}
           />
         </CardContent>
       </Card>

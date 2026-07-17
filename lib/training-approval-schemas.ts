@@ -18,6 +18,16 @@ export const approvalActionSchema = z.object({
   rejection_reason: z.string().optional(),
   delegate_to: z.string().optional(),
   e_signature_id: z.string().optional(),
+}).superRefine((data, ctx) => {
+  if (data.action === 'Reject' && !(data.rejection_reason || data.comments).trim()) {
+    ctx.addIssue({ code: 'custom', message: 'Rejection reason is required', path: ['rejection_reason'] });
+  }
+  if (data.action === 'Return for Revision' && !data.comments.trim()) {
+    ctx.addIssue({ code: 'custom', message: 'Revision comments are required', path: ['comments'] });
+  }
+  if (data.action === 'Delegate' && !data.delegate_to?.trim()) {
+    ctx.addIssue({ code: 'custom', message: 'Delegate is required', path: ['delegate_to'] });
+  }
 });
 
 export type CreateApprovalRequestInput = z.infer<typeof createApprovalRequestSchema>;

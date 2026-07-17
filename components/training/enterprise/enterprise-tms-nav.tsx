@@ -21,7 +21,9 @@ function isActive(pathname: string, href: string, matchPaths?: string[]): boolea
 
 export function EnterpriseTmsNav() {
   const pathname = usePathname();
+  const routeBase = pathname.startsWith('/qms/training') ? '/qms/training' : '/training';
   const [collapsed, setCollapsed] = useState<Partial<Record<TmsModuleGroup, boolean>>>({});
+  const routeFor = (path: string) => path.replace(/^\/training/, routeBase);
 
   const toggleGroup = (group: TmsModuleGroup) => {
     setCollapsed((prev) => ({ ...prev, [group]: !prev[group] }));
@@ -39,12 +41,16 @@ export function EnterpriseTmsNav() {
             {TMS_MODULE_GROUPS.map((group) => {
               const modules = ENTERPRISE_TMS_MODULES.filter((m) => m.group === group);
               const isOpen = !collapsed[group];
-              const groupActive = modules.some((m) => isActive(pathname, m.href, m.matchPaths));
+              const groupId = `tms-nav-${group.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+              const groupActive = modules.some((module) =>
+                isActive(pathname, routeFor(module.href), module.matchPaths?.map(routeFor)));
               return (
                 <div key={group}>
                   <button
                     type="button"
                     onClick={() => toggleGroup(group)}
+                    aria-expanded={isOpen}
+                    aria-controls={groupId}
                     className={cn(
                       'flex w-full items-center justify-between rounded-md px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wider transition-colors',
                       groupActive ? 'text-blue-700 dark:text-blue-300' : 'text-muted-foreground hover:text-foreground',
@@ -54,14 +60,16 @@ export function EnterpriseTmsNav() {
                     <ChevronDown className={cn('h-3 w-3 transition-transform', isOpen && 'rotate-180')} />
                   </button>
                   {isOpen && (
-                    <div className="ml-1 space-y-0.5 mb-1">
+                    <div id={groupId} className="ml-1 space-y-0.5 mb-1">
                       {modules.map((mod) => {
                         const Icon = mod.icon;
-                        const active = isActive(pathname, mod.href, mod.matchPaths);
+                        const href = routeFor(mod.href);
+                        const active = isActive(pathname, href, mod.matchPaths?.map(routeFor));
                         return (
                           <Link
                             key={mod.id}
-                            href={mod.href}
+                            href={href}
+                            aria-current={active ? 'page' : undefined}
                             className={cn(
                               'flex items-center gap-2 rounded-md px-2 py-1.5 text-xs transition-all',
                               active

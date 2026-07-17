@@ -4,9 +4,15 @@ import {
 import { getFirebaseFirestore, isFirebaseConfigured } from '@/lib/firebase';
 import { withFirestoreFallback, shouldSkipFirestore } from '@/lib/firestore-resilience';
 import { logTrainingAuditRecord } from '@/lib/training-audit-trail-service';
-import { assignFromCapa, assignFromChangeControl } from '@/lib/training-service';
-import { autoCreateFromCapa, autoCreateFromDeviation } from '@/lib/training-retraining-service';
-import { createInductionRecord } from '@/lib/company-training-service';
+import {
+  assignFromCapa, assignFromChangeControl, listAssignments, listCompetency,
+  listEffectiveness, listTrainingRecords,
+} from '@/lib/training-service';
+import {
+  autoCreateFromCapa, autoCreateFromDeviation, listRetrainingRecords,
+} from '@/lib/training-retraining-service';
+import { listCertificates } from '@/lib/training-certificate-service';
+import { createInductionRecord, listOjtPlans } from '@/lib/company-training-service';
 import {
   ENTERPRISE_TMS_MODULE, ENTERPRISE_TMS_COLLECTIONS, DEFAULT_TRAINING_SETTINGS,
   generatePlanNumber, generateRequestNumber, generateNeedBasedNumber,
@@ -84,7 +90,7 @@ function initSeedData() {
     status: 'Expiring Soon', created_at: now(),
   }];
 }
-initSeedData();
+if (process.env.NEXT_PUBLIC_ENABLE_DEMO_DATA === 'true') initSeedData();
 
 // ─── Settings ────────────────────────────────────────────────────
 
@@ -330,39 +336,67 @@ export async function listAutomationLog(): Promise<TrainingAutomationLog[]> {
 // ─── Enterprise Dashboard ──────────────────────────────────────────
 
 export async function fetchEnterpriseTmsDashboard(): Promise<EnterpriseTmsDashboard> {
-  const [needBased, requests, renewals] = await Promise.all([
+  const [needBased, requests, renewals, assignments, records, certificates, effectiveness, competencies, ojt, retraining] = await Promise.all([
     listNeedBasedTraining(), listTrainingRequests(), listTrainerRenewals(),
+    listAssignments(), listTrainingRecords(), listCertificates(), listEffectiveness(),
+    listCompetency(), listOjtPlans(), listRetrainingRecords(),
   ]);
+  const todayStr = today();
+  const expiryThreshold = new Date();
+  expiryThreshold.setDate(expiryThreshold.getDate() + 30);
+  const expiryThresholdStr = expiryThreshold.toISOString().slice(0, 10);
+  const departments = new Map<string, { completed: number; pending: number }>();
+  for (const assignment of assignments) {
+    const department = assignment.department || 'Unassigned';
+    const bucket = departments.get(department) ?? { completed: 0, pending: 0 };
+    if (String(assignment.status).toLowerCase() === 'completed') bucket.completed++;
+    else bucket.pending++;
+    departments.set(department, bucket);
+  }
+  const months = Array.from({ length: 6 }, (_, index) => {
+    const date = new Date();
+    date.setMonth(date.getMonth() - (5 - index), 1);
+    return {
+      key: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`,
+      label: date.toLocaleDateString(undefined, { month: 'short' }),
+    };
+  });
+  const competencyLevels = ['Novice', 'Basic', 'Competent', 'Proficient', 'Expert'];
   return {
-    trainingToday: 3,
-    upcomingTraining: 12,
-    overdue: 5,
+    trainingToday: records.filter((record) => record.training_date === todayStr).length,
+    upcomingTraining: assignments.filter((assignment) =>
+      Boolean(assignment.scheduled_date && assignment.scheduled_date >= todayStr)
+      && !['completed', 'cancelled'].includes(String(assignment.status).toLowerCase())).length,
+    overdue: assignments.filter((assignment) =>
+      assignment.due_date < todayStr
+      && !['completed', 'cancelled'].includes(String(assignment.status).toLowerCase())).length,
     pendingApproval: requests.filter((r) => r.status.startsWith('Pending')).length,
-    certificatesExpiring: 8,
-    trainerExpiry: renewals.filter((r) => r.status === 'Pending').length + 2,
-    effectivenessPending: 6,
+    certificatesExpiring: certificates.filter((certificate) =>
+      Boolean(certificate.expiry_date)
+      && certificate.expiry_date >= todayStr
+      && certificate.expiry_date <= expiryThresholdStr
+      && certificate.certificate_status !== 'Revoked').length,
+    trainerExpiry: renewals.filter((r) => r.status === 'Pending').length,
+    effectivenessPending: effectiveness.filter((item) =>
+      ['Pending', 'pending'].includes(String(item.effectiveness_result))).length,
     needBasedCount: needBased.filter((n) => n.status !== 'Completed').length,
-    ojtActive: 4,
-    refresherDue: 15,
-    departmentTraining: [
-      { department: 'Production', completed: 45, pending: 8 },
-      { department: 'QA', completed: 38, pending: 3 },
-      { department: 'QC', completed: 42, pending: 5 },
-      { department: 'Engineering', completed: 28, pending: 4 },
-    ],
-    trainingTrend: [
-      { month: 'Jan', completed: 32, assigned: 40 },
-      { month: 'Feb', completed: 28, assigned: 35 },
-      { month: 'Mar', completed: 45, assigned: 48 },
-      { month: 'Apr', completed: 38, assigned: 42 },
-      { month: 'May', completed: 52, assigned: 55 },
-      { month: 'Jun', completed: 41, assigned: 44 },
-    ],
-    passFailRatio: { pass: 892, fail: 23 },
-    competencyLevels: [
-      { level: 'Novice', count: 12 }, { level: 'Basic', count: 45 },
-      { level: 'Competent', count: 120 }, { level: 'Proficient', count: 68 }, { level: 'Expert', count: 15 },
-    ],
+    ojtActive: ojt.filter((plan) => !['Completed', 'Cancelled'].includes(String(plan.status))).length,
+    refresherDue: retraining.filter((item) =>
+      !['Completed', 'Closed', 'Cancelled'].includes(String(item.retraining_status))).length,
+    departmentTraining: Array.from(departments, ([department, counts]) => ({ department, ...counts })),
+    trainingTrend: months.map(({ key, label }) => ({
+      month: label,
+      completed: records.filter((record) => record.training_date?.startsWith(key)).length,
+      assigned: assignments.filter((assignment) => assignment.assigned_date?.startsWith(key)).length,
+    })),
+    passFailRatio: {
+      pass: records.filter((record) => record.training_result === 'Pass').length,
+      fail: records.filter((record) => record.training_result === 'Fail').length,
+    },
+    competencyLevels: competencyLevels.map((level) => ({
+      level,
+      count: competencies.filter((item) => item.current_level === level).length,
+    })),
   };
 }
 

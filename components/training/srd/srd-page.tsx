@@ -34,7 +34,12 @@ export function SrdPage() {
   const handleCreate = useCallback(async () => {
     if (!form.document_number) return toast.error('Document number required');
     try {
-      await createSrdDeclaration(actor, form);
+      await createSrdDeclaration(actor, {
+        ...form,
+        employee_id: actor.id,
+        employee_name: actor.name,
+        department: actor.department ?? form.department,
+      });
       toast.success('SRD created — pending employee declaration');
       setCreateOpen(false);
       await refresh();
@@ -75,7 +80,7 @@ export function SrdPage() {
     {
       key: 'actions', header: 'Actions',
       render: (r) => {
-        if (r.status === 'Pending Declaration') {
+        if (r.status === 'Pending Declaration' && r.employee_id === actor.id) {
           return (
             <Button size="sm" variant="outline" onClick={() => handleSign(r.id)}>
               <PenLine className="h-3 w-3 mr-1" /> Sign
@@ -146,8 +151,7 @@ export function SrdPage() {
           <div className="space-y-4">
             <div>
               <Label>Employee Name</Label>
-              <Input value={form.employee_name}
-                onChange={(e) => setForm({ ...form, employee_name: e.target.value })} />
+              <Input value={actor.name} disabled />
             </div>
             <div>
               <Label>Designation</Label>

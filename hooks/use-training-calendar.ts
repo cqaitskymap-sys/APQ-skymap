@@ -5,7 +5,7 @@ import { useAuth } from '@/contexts/auth-context';
 import { normalizeRole } from '@/lib/permissions';
 import {
   fetchCalendarDashboard, createTrainingEvent, updateTrainingEvent,
-  cancelTrainingEvent, logCalendarViewed, processReminders,
+  cancelTrainingEvent, logCalendarViewed,
 } from '@/lib/training-calendar-service';
 import { listEmployees as listTmsEmployees } from '@/lib/training-service';
 import type { CalendarDashboardData, CalendarFilters, CalendarActor, TrainingEvent } from '@/lib/training-calendar-types';
@@ -38,7 +38,6 @@ export function useTrainingCalendar(filters?: CalendarFilters) {
     setRefreshing(true);
     setError(null);
     try {
-      await processReminders();
       const [dashboard, emps] = await Promise.all([
         fetchCalendarDashboard(filters),
         listTmsEmployees(),

@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { KpiCard } from '@/components/cpv/cpv-ui';
 import { LoadingSkeleton } from '@/components/admin/dashboard/loading-skeleton';
+import { ErrorCard } from '@/components/admin/dashboard/error-card';
 import { TmsPageHeader } from '@/components/training/tms-page-header';
 import { TmsStatusBadge } from '@/components/training/tms-sub-nav';
 import { ResponsiveDataTable } from '@/components/cpv/product-master/responsive-data-table';
@@ -24,6 +25,7 @@ type EnterpriseListPageProps<T extends { id: string }> = {
   columns: ColumnDef<T>[];
   data: T[];
   loading?: boolean;
+  error?: string | null;
   onRefresh?: () => void;
   refreshing?: boolean;
   actions?: React.ReactNode;
@@ -31,9 +33,17 @@ type EnterpriseListPageProps<T extends { id: string }> = {
 };
 
 export function EnterpriseListPage<T extends { id: string }>({
-  title, description, trail, kpis, columns, data, loading, onRefresh, refreshing, actions, showWorkflow,
+  title, description, trail, kpis, columns, data, loading, error, onRefresh, refreshing, actions, showWorkflow,
 }: EnterpriseListPageProps<T>) {
   if (loading) return <LoadingSkeleton rows={6} />;
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <TmsPageHeader title={title} description={description} trail={trail} actions={actions} />
+        <ErrorCard message={error} onRetry={onRefresh} />
+      </div>
+    );
+  }
   return (
     <div className="space-y-6 animate-in fade-in">
       <TmsPageHeader title={title} description={description} trail={trail} actions={actions} />
@@ -67,10 +77,18 @@ export function AnnualTrainingPlanPage() {
   const { actor, listAnnualPlans, refreshing, refresh } = useEnterpriseTms();
   const [plans, setPlans] = useState<AnnualTrainingPlan[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    setPlans(await listAnnualPlans());
-    setLoading(false);
+    setLoading(true);
+    setError(null);
+    try {
+      setPlans(await listAnnualPlans());
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Failed to load annual training plans');
+    } finally {
+      setLoading(false);
+    }
   }, [listAnnualPlans]);
 
   useEffect(() => { load(); }, [load]);
@@ -105,8 +123,8 @@ export function AnnualTrainingPlanPage() {
         { label: 'Approved', value: plans.filter((p) => p.status === 'Approved').length, tone: 'green' },
         { label: 'Draft', value: plans.filter((p) => p.status === 'Draft').length, tone: 'amber' },
       ]}
-      columns={columns} data={plans} loading={loading} refreshing={refreshing}
-      onRefresh={refresh}
+      columns={columns} data={plans} loading={loading} error={error} refreshing={refreshing}
+      onRefresh={() => { refresh(); void load(); }}
       actions={
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={() => { refresh(); load(); }} disabled={refreshing}>

@@ -40,7 +40,7 @@ export const ENTERPRISE_TMS_MODULES: TmsModuleDefinition[] = [
   { id: 'induction', name: 'Induction Training', description: 'Employee group, batch, sessions and approval', href: '/training/induction', group: 'Planning & Assignment', icon: Building2 },
   { id: 'job-description', name: 'Job Description & TNI', description: 'Assign JD and identify required training', href: '/training/tni', group: 'Planning & Assignment', icon: BriefcaseBusiness },
   { id: 'jr-assignment', name: 'Job Role & TNI', description: 'Assign job roles and identify required training', href: '/training/tni', group: 'Planning & Assignment', icon: ListTodo },
-  { id: 'jr-schedule', name: 'JR Training Schedule', description: 'Role-based training schedule and approval', href: '/training/scheduling', group: 'Planning & Assignment', icon: Clock },
+  { id: 'jr-schedule', name: 'JR Training Schedule', description: 'Role-based training schedule and approval', href: '/training/jr-training-schedule', group: 'Planning & Assignment', icon: Clock, matchPaths: ['/training/jr-training-schedule', '/training/scheduling'] },
   { id: 'target', name: 'Target Training', description: 'General, remedial, refresher and revision training', href: '/training/need-based', group: 'Planning & Assignment', icon: AlertTriangle },
   { id: 'multi-target', name: 'Multi-Document Assignment', description: 'Assign multiple documents in one action', href: '/training/assignments', group: 'Planning & Assignment', icon: Layers3 },
   { id: 'training-request', name: 'Training Request', description: 'Request need-based training with approval', href: '/training/training-request', group: 'Planning & Assignment', icon: Send },

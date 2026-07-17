@@ -119,6 +119,7 @@ export interface ApprovalStep {
   due_date: string;
   completed_date: string | null;
   e_signature_required: boolean;
+  comment_required?: boolean;
   e_signature_id: string | null;
   comments: string;
   rejection_reason: string;

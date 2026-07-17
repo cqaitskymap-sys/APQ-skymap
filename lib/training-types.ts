@@ -63,7 +63,7 @@ export const ENTERPRISE_TRAINING_TYPES = [
 export const TRAINING_TYPES = [
   'SOP Training', 'GMP Training', 'GDP Training', 'CSV Training', 'Data Integrity Training',
   'Safety Training', 'Process Training', 'Equipment Training', 'Validation Training',
-  'CAPA Training', 'Deviation Training',
+  'CAPA Training', 'Deviation Training', 'Emergency Training',
 ] as const;
 
 export const TRAINING_CATEGORIES = [

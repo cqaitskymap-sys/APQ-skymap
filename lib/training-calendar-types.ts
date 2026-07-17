@@ -18,7 +18,7 @@ export const CALENDAR_COLLECTIONS = {
 export const CALENDAR_TRAINING_TYPES = [
   'GMP', 'GDP', 'Data Integrity', 'CSV', 'SOP', 'Safety', 'Equipment',
   'Validation', 'Quality', 'CAPA', 'Deviation', 'OOS', 'OOT',
-  'Cyber Security', 'Role Based', 'Refresher', 'Retraining',
+  'Cyber Security', 'Role Based', 'Refresher', 'Retraining', 'Emergency Training',
 ] as const;
 
 export const EVENT_STATUSES = [
