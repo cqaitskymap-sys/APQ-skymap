@@ -3,7 +3,8 @@ import { ProcessCapabilityDetailView } from '@/components/cpv/process-capability
 
 export const dynamic = 'force-dynamic';
 
-export default function ProcessCapabilityDetailRoutePage({ params }: { params: { id: string } }) {
+export default async function ProcessCapabilityDetailRoutePage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   return (
     <ProcessCapabilityAccessGuard>
       <ProcessCapabilityDetailView id={params.id} />

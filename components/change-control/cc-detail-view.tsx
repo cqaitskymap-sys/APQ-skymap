@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -59,7 +59,7 @@ export function CcDetailView({ record, onRefresh, defaultTab = 'overview' }: CcD
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  const loadSub = async () => {
+  const loadSub = useCallback(async () => {
     setLoading(true);
     const [imp, rsk, act, eff, ap, att, al] = await Promise.all([
       getImpactAssessment(record.id),
@@ -78,9 +78,9 @@ export function CcDetailView({ record, onRefresh, defaultTab = 'overview' }: CcD
     setAttachments(att);
     setAuditLogs(al);
     setLoading(false);
-  };
+  }, [record.id]);
 
-  useEffect(() => { void loadSub(); }, [record.id]);
+  useEffect(() => { void loadSub(); }, [loadSub]);
 
   const impactForm = useForm<ImpactAssessmentInput>({
     resolver: zodResolver(impactAssessmentSchema),
@@ -91,10 +91,11 @@ export function CcDetailView({ record, onRefresh, defaultTab = 'overview' }: CcD
       computerized_system_impact: '', remarks: '',
     },
   });
+  const { reset: resetImpactForm } = impactForm;
 
   useEffect(() => {
-    if (impact) impactForm.reset(impact);
-  }, [impact]);
+    if (impact) resetImpactForm(impact);
+  }, [impact, resetImpactForm]);
 
   const riskForm = useForm<RiskAssessmentInput>({
     resolver: zodResolver(riskAssessmentSchema),

@@ -3,7 +3,8 @@ import { HoldTimeDetailView } from '@/components/cpv/hold-time-monitoring/hold-t
 
 export const dynamic = 'force-dynamic';
 
-export default function HoldTimeDetailRoutePage({ params }: { params: { id: string } }) {
+export default async function HoldTimeDetailRoutePage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   return (
     <HoldTimeAccessGuard>
       <HoldTimeDetailView id={params.id} />

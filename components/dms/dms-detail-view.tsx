@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -54,7 +54,7 @@ export function DmsDetailView({ record, onRefresh, defaultTab = 'overview' }: Dm
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
 
-  const loadSub = async () => {
+  const loadSub = useCallback(async () => {
     setLoading(true);
     const [att, rev, ap, dist, trn, al] = await Promise.all([
       getAttachments(record.id),
@@ -71,9 +71,9 @@ export function DmsDetailView({ record, onRefresh, defaultTab = 'overview' }: Dm
     setTrainingLinks(trn);
     setAuditLogs(al);
     setLoading(false);
-  };
+  }, [record.id]);
 
-  useEffect(() => { void loadSub(); }, [record.id]);
+  useEffect(() => { void loadSub(); }, [loadSub]);
 
   const approvalForm = useForm<DocumentApprovalInput>({
     resolver: zodResolver(documentApprovalSchema),

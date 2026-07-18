@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -36,12 +36,12 @@ export function RecallDetailView({ record, onRefresh }: { record: RecallRecord; 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  const loadSub = async () => {
+  const loadSub = useCallback(async () => {
     setLoading(true);
     const [d, r, a, al] = await Promise.all([getDistributions(record.id), getRecoveries(record.id), getAttachments(record.id), getAuditLogsForRecall(record.id)]);
     setDistributions(d); setRecoveries(r); setAttachments(a); setAuditLogs(al); setLoading(false);
-  };
-  useEffect(() => { void loadSub(); }, [record.id]);
+  }, [record.id]);
+  useEffect(() => { void loadSub(); }, [loadSub]);
 
   const distForm = useForm<DistributionInput>({ resolver: zodResolver(distributionSchema), defaultValues: { customer_name: '', market_region: record.market_region, quantity_distributed: 0, distribution_date: new Date().toISOString().split('T')[0], contact_details: '' } });
   const recForm = useForm<RecoveryInput>({ resolver: zodResolver(recoverySchema), defaultValues: { recovery_date: new Date().toISOString().split('T')[0], quantity_recovered: 0, recovered_from: '', recovery_status: 'Recovered', remarks: '' } });

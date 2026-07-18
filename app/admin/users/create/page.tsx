@@ -18,10 +18,10 @@ import type { UserFormSubmitOptions } from '@/components/admin/users/user-form';
 function CreateUserContent() {
   const router = useRouter();
   const { user, profile } = useAuth();
-  const { role } = useAdminPermissions();
+  const { role, hasPermission } = useAdminPermissions();
   const [submitting, setSubmitting] = useState(false);
 
-  if (!canEditUsers(role)) {
+  if (!canEditUsers(role) || !hasPermission('Admin', 'create')) {
     return <ErrorCard accessDenied title="Access Denied" message="Only Super Admin and Admin can create users." />;
   }
 
@@ -30,6 +30,7 @@ function CreateUserContent() {
     const result = await createSystemUser(data, options?.tempPassword || '', {
       userId: user?.uid || 'system',
       userName: profile?.full_name || profile?.email || 'Admin',
+      role,
     }, {
       modulePermissions: options?.modulePermissions,
       presetId: options?.presetId,

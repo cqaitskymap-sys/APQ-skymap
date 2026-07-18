@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { ProductAccessGuard } from '@/components/admin/products/product-access-guard';
@@ -120,7 +120,8 @@ function EditProductContent({ id }: { id: string }) {
   );
 }
 
-export default function EditProductPage({ params }: { params: { id: string } }) {
+export default function EditProductPage(props: { params: Promise<{ id: string }> }) {
+  const params = use(props.params);
   return (
     <ProductAccessGuard>
       <EditProductContent id={params.id} />

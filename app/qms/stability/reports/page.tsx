@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Printer } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -35,7 +35,7 @@ export default function StabilityReportsPage() {
     });
   }, []);
 
-  const loadReport = async (id: string) => {
+  const loadReport = useCallback(async (id: string) => {
     if (!id) return;
     setReportLoading(true);
     const record = records.find((r) => r.id === id);
@@ -45,9 +45,9 @@ export default function StabilityReportsPage() {
     ]);
     setReportData({ record, schedules, pulls, results, approvals, auditLogs });
     setReportLoading(false);
-  };
+  }, [records]);
 
-  useEffect(() => { if (selectedId) void loadReport(selectedId); }, [selectedId, records.length]);
+  useEffect(() => { if (selectedId) void loadReport(selectedId); }, [selectedId, loadReport]);
 
   return (
     <div className="space-y-6">

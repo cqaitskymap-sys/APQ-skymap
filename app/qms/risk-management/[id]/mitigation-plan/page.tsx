@@ -1,5 +1,6 @@
 import { RiskMitigationPage } from '@/components/risk-management/mitigation/risk-mitigation-page';
 
-export default function Page({ params }: { params: { id: string } }) {
+export default async function Page(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   return <RiskMitigationPage riskAssessmentId={params.id} />;
 }

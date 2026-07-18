@@ -163,7 +163,7 @@ export function CcImplementationPage({ changeId }: { changeId: string }) {
       overall_remarks: data.plan?.overall_remarks || '',
     });
     setLoading(false);
-  }, [changeId, planForm, user?.uid, profile?.full_name, profile?.department]);
+  }, [changeId, planForm, user?.uid, profile?.full_name]);
 
   useEffect(() => { void load(); }, [load]);
 

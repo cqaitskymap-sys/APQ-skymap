@@ -134,15 +134,13 @@ export function CapaCorrectiveActionPage({ capaId }: { capaId: string }) {
     if (!selectedId && data.actions?.[0]) setSelectedId(data.actions[0].id);
     createForm.setValue('capa_id', capaId);
     createForm.setValue('root_cause_reference', data.investigation?.root_cause_description || data.capa.root_cause || '');
-    if (selected || data.actions?.[0]) {
-      const act = data.actions?.find((a) => a.id === selectedId) || data.actions?.[0];
-      if (act) {
-        implForm.reset({
-          implementation_status: act.implementation_status || 'in_progress',
-          implementation_evidence: act.implementation_evidence || '',
-          actual_completion_date: act.actual_completion_date || '',
-        });
-      }
+    const act = data.actions?.find((a) => a.id === selectedId) || data.actions?.[0];
+    if (act) {
+      implForm.reset({
+        implementation_status: act.implementation_status || 'in_progress',
+        implementation_evidence: act.implementation_evidence || '',
+        actual_completion_date: act.actual_completion_date || '',
+      });
     }
     setLoading(false);
   }, [capaId, createForm, implForm, selectedId]);

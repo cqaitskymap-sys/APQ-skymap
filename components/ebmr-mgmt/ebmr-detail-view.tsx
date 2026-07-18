@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Printer, Upload, Lock, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
@@ -37,13 +37,13 @@ export function EbmrDetailView({ record, onRefresh }: { record: EbmrRecord; onRe
   const [attachCategory, setAttachCategory] = useState('BMR Attachment');
   const [data, setData] = useState<Awaited<ReturnType<typeof getEbmrFullData>> | null>(null);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     setData(await getEbmrFullData(record.id));
     setLoading(false);
-  };
+  }, [record.id]);
 
-  useEffect(() => { void load(); }, [record.id]);
+  useEffect(() => { void load(); }, [load]);
 
   const handleUpdate = async (d: EbmrCreateInput) => {
     await updateEbmr(record.id, d, actor);

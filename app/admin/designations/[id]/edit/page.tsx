@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { DesignationAccessGuard } from '@/components/admin/designations/designation-access-guard';
@@ -102,7 +102,8 @@ function EditDesignationContent({ id }: { id: string }) {
   );
 }
 
-export default function EditDesignationPage({ params }: { params: { id: string } }) {
+export default function EditDesignationPage(props: { params: Promise<{ id: string }> }) {
+  const params = use(props.params);
   return (
     <DesignationAccessGuard>
       <EditDesignationContent id={params.id} />

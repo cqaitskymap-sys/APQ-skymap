@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Printer, Upload, Search, Scale, Link2, CheckSquare, Lock, ScrollText } from 'lucide-react';
 import { toast } from 'sonner';
@@ -35,7 +35,7 @@ export function ComplaintDetailView({ record, onRefresh, defaultTab = 'overview'
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  const loadSub = async () => {
+  const loadSub = useCallback(async () => {
     setLoading(true);
     const { getComplaintImpactAssessment } = await import('@/lib/complaint-impact-service');
     const { getActiveComplaintCapaLink } = await import('@/lib/complaint-capa-service');
@@ -52,8 +52,8 @@ export function ComplaintDetailView({ record, onRefresh, defaultTab = 'overview'
     setAttachments(att);
     setAuditLogs(al);
     setLoading(false);
-  };
-  useEffect(() => { void loadSub(); }, [record.id]);
+  }, [record.id]);
+  useEffect(() => { void loadSub(); }, [loadSub]);
 
   if (loading) return <LoadingSpinner label="Loading complaint..." />;
 

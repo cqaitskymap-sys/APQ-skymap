@@ -1,6 +1,9 @@
 'use client';
 
-import { Search, Sun, Moon, ChevronRight, Settings, LogOut } from 'lucide-react';
+import { FormEvent, useState } from 'react';
+import {
+  ChevronRight, CircleHelp, LifeBuoy, LogOut, Moon, Search, Settings, Sun,
+} from 'lucide-react';
 import { NotificationBell } from '@/components/layout/notification-bell';
 import { MobileNav } from '@/components/layout/mobile-nav';
 import { useTheme } from 'next-themes';
@@ -9,7 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useAuth } from '@/contexts/auth-context';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
@@ -31,7 +34,16 @@ export function Header() {
   const { theme, setTheme } = useTheme();
   const { profile, signOut } = useAuth();
   const pathname = usePathname();
+  const router = useRouter();
+  const [searchQuery, setSearchQuery] = useState('');
   const crumbs = getBreadcrumbs(pathname);
+
+  const submitSearch = (event: FormEvent) => {
+    event.preventDefault();
+    const value = searchQuery.trim();
+    if (!value) return;
+    router.push(`/dashboard/search?q=${encodeURIComponent(value)}`);
+  };
 
   const getRoleBadgeColor = (role?: string) => {
     switch (role) {
@@ -82,15 +94,17 @@ export function Header() {
       </nav>
 
       {/* Search */}
-      <div className="relative hidden lg:block w-64">
+      <form onSubmit={submitSearch} role="search" className="relative hidden lg:block w-64">
         <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
         <Input
           type="search"
-          placeholder="Search modules, records..."
-          aria-label="Search modules and records"
+          value={searchQuery}
+          onChange={(event) => setSearchQuery(event.target.value)}
+          placeholder="Search modules and workflows…"
+          aria-label="Search modules and workflows"
           className="pl-8 h-8 text-sm bg-muted/50 border-muted-foreground/20 focus:bg-background"
         />
-      </div>
+      </form>
 
       {/* Right actions */}
       <div className="flex items-center gap-2 ml-auto md:ml-0">
@@ -130,6 +144,12 @@ export function Header() {
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>
               <Link href="/dashboard/profile"><Settings className="h-4 w-4 mr-2" />Profile & Settings</Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href="/dashboard/help"><CircleHelp className="h-4 w-4 mr-2" />Help Center</Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href="/dashboard/support"><LifeBuoy className="h-4 w-4 mr-2" />Support</Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => signOut()} className="text-red-600 dark:text-red-400">

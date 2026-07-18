@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { ArrowLeft, RefreshCw } from 'lucide-react';
@@ -26,7 +26,7 @@ export function WiDetailPage() {
   const [loading, setLoading] = useState(true);
   const actor = { id: user?.uid || 'anonymous', name: profile?.full_name || 'Unknown', role: normalizeRole(profile?.role) };
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
       const record = await getWiById(id);
@@ -36,9 +36,9 @@ export function WiDetailPage() {
         setApprovals(ap.map((a) => ({ stage: a.stage, reviewer: a.reviewer_name, decision: a.decision, date: a.created_at })));
       }
     } finally { setLoading(false); }
-  };
+  }, [id]);
 
-  useEffect(() => { void load(); }, [id]);
+  useEffect(() => { void load(); }, [load]);
   if (loading) return <LoadingSkeleton rows={6} />;
   if (!wi) return <p className="text-muted-foreground">Work instruction not found.</p>;
 

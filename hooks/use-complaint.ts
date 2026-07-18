@@ -1,12 +1,27 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 import { listComplaints, getComplaintById, computeDashboardMetrics, syncOverdueComplaints } from '@/lib/complaint-service';
 import type { ComplaintRecord, ComplaintFilters, ComplaintDashboardMetrics } from '@/lib/complaint-types';
 import { normalizeRole } from '@/lib/permissions';
 
 export function useComplaints(filters?: ComplaintFilters) {
+  const hasFilters = filters !== undefined;
+  const {
+    status, complaint_category, complaint_criticality, product, batch_number,
+    market_region, date_from, date_to, search, kpi_filter,
+  } = filters ?? {};
+  const stableFilters = useMemo(
+    () => hasFilters ? {
+      status, complaint_category, complaint_criticality, product, batch_number,
+      market_region, date_from, date_to, search, kpi_filter,
+    } : undefined,
+    [
+      hasFilters, status, complaint_category, complaint_criticality, product,
+      batch_number, market_region, date_from, date_to, search, kpi_filter,
+    ],
+  );
   const [records, setRecords] = useState<ComplaintRecord[]>([]);
   const [metrics, setMetrics] = useState<ComplaintDashboardMetrics | null>(null);
   const [loading, setLoading] = useState(true);
@@ -17,7 +32,7 @@ export function useComplaints(filters?: ComplaintFilters) {
     setError(null);
     try {
       await syncOverdueComplaints();
-      const data = await listComplaints(filters);
+      const data = await listComplaints(stableFilters);
       setRecords(data);
       setMetrics(computeDashboardMetrics(data));
     } catch (e) {
@@ -25,7 +40,7 @@ export function useComplaints(filters?: ComplaintFilters) {
     } finally {
       setLoading(false);
     }
-  }, [JSON.stringify(filters)]);
+  }, [stableFilters]);
 
   useEffect(() => { refresh(); }, [refresh]);
   return { records, metrics, loading, error, refresh };

@@ -25,6 +25,25 @@ export function useTrainingEffectiveness(filters?: EffectivenessFilters) {
     role,
     department: profile?.department,
   }), [user?.uid, profile?.full_name, profile?.email, profile?.department, role]);
+  const hasFilters = filters !== undefined;
+  const {
+    department, employee_id, evaluation_type, result, status,
+    evaluator, date_from, date_to, search,
+  } = filters ?? {};
+  const stableFilters = useMemo<EffectivenessFilters | undefined>(() => hasFilters ? ({
+    department,
+    employee_id,
+    evaluation_type,
+    result,
+    status,
+    evaluator,
+    date_from,
+    date_to,
+    search,
+  }) : undefined, [
+    hasFilters, department, employee_id, evaluation_type, result,
+    status, evaluator, date_from, date_to, search,
+  ]);
 
   const refresh = useCallback(async () => {
     if (!canViewEffectiveness(role)) {
@@ -39,7 +58,7 @@ export function useTrainingEffectiveness(filters?: EffectivenessFilters) {
         role,
         userId: user?.uid,
         userDepartment: profile?.department,
-        filters,
+        filters: stableFilters,
       }));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load effectiveness data');
@@ -47,7 +66,7 @@ export function useTrainingEffectiveness(filters?: EffectivenessFilters) {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [role, user?.uid, profile?.department, JSON.stringify(filters)]);
+  }, [role, user?.uid, profile?.department, stableFilters]);
 
   useEffect(() => { refresh(); }, [refresh]);
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { ArrowLeft, RefreshCw } from 'lucide-react';
@@ -34,7 +34,7 @@ export function SopDetailPage() {
     role: normalizeRole(profile?.role),
   };
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
       const record = await getSopById(id);
@@ -46,9 +46,9 @@ export function SopDetailPage() {
         })));
       }
     } finally { setLoading(false); }
-  };
+  }, [id]);
 
-  useEffect(() => { void load(); }, [id]);
+  useEffect(() => { void load(); }, [load]);
 
   if (loading) return <LoadingSkeleton rows={6} />;
   if (!sop) return <p className="text-muted-foreground">SOP not found.</p>;

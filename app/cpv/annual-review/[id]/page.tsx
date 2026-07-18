@@ -3,7 +3,8 @@ import { AnnualReviewDetailView } from '@/components/cpv/annual-review/annual-re
 
 export const dynamic = 'force-dynamic';
 
-export default function AnnualReviewDetailRoutePage({ params }: { params: { id: string } }) {
+export default async function AnnualReviewDetailRoutePage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   return (
     <AnnualReviewAccessGuard>
       <AnnualReviewDetailView id={params.id} />

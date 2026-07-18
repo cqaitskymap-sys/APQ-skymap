@@ -63,7 +63,7 @@ export function PqrApprovalPage() {
     name: profile?.full_name || profile?.email || 'System',
     role,
     email: profile?.email || user?.email || '',
-  }), [user?.uid, profile?.full_name, profile?.email, profile?.email, role]);
+  }), [user?.uid, user?.email, profile?.full_name, profile?.email, role]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -79,10 +79,10 @@ export function PqrApprovalPage() {
       setHistory(hist);
       setPqrs(opts);
       setCounts(computeDashboardCounts(all, hist, actor.id, role));
-      if (opts.length && !submitPqrId) setSubmitPqrId(opts[0].id);
+      setSubmitPqrId((currentId) => currentId || opts[0]?.id || '');
     } catch { setError('Failed to load approval data.'); }
     finally { setLoading(false); }
-  }, [actor.id, role, submitPqrId]);
+  }, [actor.id, role]);
 
   useEffect(() => { void load(); void logPqrApprovalView(actor); }, [load, actor]);
 

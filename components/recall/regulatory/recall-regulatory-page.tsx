@@ -132,6 +132,11 @@ export function RecallRegulatoryPage({ recallId }: { recallId: string }) {
       e_signature: '',
     },
   });
+  const { reset: resetDetailsForm } = detailsForm;
+  const { reset: resetSubmissionForm } = submissionForm;
+  const { reset: resetResponseForm } = responseForm;
+  const { reset: resetFollowUpForm } = followUpForm;
+  const { reset: resetApprovalForm } = approvalForm;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -141,29 +146,29 @@ export function RecallRegulatoryPage({ recallId }: { recallId: string }) {
       if (!result) throw new Error('Recall not found');
       setData(result);
       const { notification } = result;
-      detailsForm.reset({
+      resetDetailsForm({
         regulatory_authority: notification.regulatory_authority,
         notification_required: notification.notification_required,
         notification_due_date: notification.notification_due_date,
         market_region: notification.market_region,
         qa_comments: notification.qa_comments,
       });
-      submissionForm.reset({
+      resetSubmissionForm({
         notification_date: notification.notification_date || new Date().toISOString().split('T')[0],
         submission_reference_number: notification.submission_reference_number,
         submission_document: notification.submission_document,
         regulatory_comments: notification.regulatory_comments,
       });
-      responseForm.reset({
+      resetResponseForm({
         authority_response: notification.authority_response,
         response_date: notification.response_date || new Date().toISOString().split('T')[0],
       });
-      followUpForm.reset({
+      resetFollowUpForm({
         follow_up_required: notification.follow_up_required,
         follow_up_due_date: notification.follow_up_due_date,
         regulatory_comments: notification.regulatory_comments,
       });
-      approvalForm.reset({
+      resetApprovalForm({
         qa_comments: notification.qa_comments,
         head_qa_comments: notification.head_qa_comments,
         decision: 'approved',
@@ -174,7 +179,15 @@ export function RecallRegulatoryPage({ recallId }: { recallId: string }) {
     } finally {
       setLoading(false);
     }
-  }, [recallId, actor.id, actor.name, actor.role]);
+  }, [
+    recallId,
+    actor,
+    resetDetailsForm,
+    resetSubmissionForm,
+    resetResponseForm,
+    resetFollowUpForm,
+    resetApprovalForm,
+  ]);
 
   useEffect(() => { void load(); }, [load]);
 

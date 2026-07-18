@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { RoleAccessGuard } from '@/components/admin/roles/role-access-guard';
@@ -120,7 +120,8 @@ function EditRoleContent({ id }: { id: string }) {
   );
 }
 
-export default function EditRolePage({ params }: { params: { id: string } }) {
+export default function EditRolePage(props: { params: Promise<{ id: string }> }) {
+  const params = use(props.params);
   return (
     <RoleAccessGuard>
       <EditRoleContent id={params.id} />

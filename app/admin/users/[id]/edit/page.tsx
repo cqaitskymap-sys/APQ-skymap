@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { UserAccessGuard } from '@/components/admin/users/user-access-guard';
@@ -21,7 +21,7 @@ import type { UserFormSubmitOptions } from '@/components/admin/users/user-form';
 function EditUserContent({ id }: { id: string }) {
   const router = useRouter();
   const { user, profile } = useAuth();
-  const { role } = useAdminPermissions();
+  const { role, hasPermission } = useAdminPermissions();
   const [existing, setExisting] = useState<AdminUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -33,7 +33,7 @@ function EditUserContent({ id }: { id: string }) {
     });
   }, [id]);
 
-  if (!canEditUsers(role)) {
+  if (!canEditUsers(role) || !hasPermission('Admin', 'edit')) {
     return <ErrorCard accessDenied title="Access Denied" message="Only Super Admin and Admin can edit users." />;
   }
 
@@ -50,10 +50,11 @@ function EditUserContent({ id }: { id: string }) {
     const result = await updateSystemUser(existing.id!, data, existing, {
       userId: user?.uid || 'system',
       userName: profile?.full_name || profile?.email || 'Admin',
+      role,
     }, 'EDIT_USER', {
       modulePermissions: options?.modulePermissions,
       presetId: options?.presetId,
-    });
+    }, options?.changeReason);
     setSubmitting(false);
     if (result.error) {
       toast.error(result.error);
@@ -81,7 +82,8 @@ function EditUserContent({ id }: { id: string }) {
   );
 }
 
-export default function EditUserPage({ params }: { params: { id: string } }) {
+export default function EditUserPage(props: { params: Promise<{ id: string }> }) {
+  const params = use(props.params);
   return (
     <UserAccessGuard>
       <EditUserContent id={params.id} />

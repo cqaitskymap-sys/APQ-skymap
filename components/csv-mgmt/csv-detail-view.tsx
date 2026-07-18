@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Printer, Upload, Download } from 'lucide-react';
 import { toast } from 'sonner';
@@ -35,7 +35,7 @@ export function CsvDetailView({ system, onRefresh }: { system: CsvSystem; onRefr
   const [auditLogs, setAuditLogs] = useState<Record<string, unknown>[]>([]);
   const [attachCategory, setAttachCategory] = useState('Protocol');
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     const [gxp, risk, urs, frs, ds, iq, oq, pq, trace, p11, vr, pr, att, logs, cov] = await Promise.all([
       listGxpAssessments(system.id), listRiskAssessments(system.id), listUrs(system.id),
@@ -50,9 +50,9 @@ export function CsvDetailView({ system, onRefresh }: { system: CsvSystem; onRefr
     setAuditLogs(logs);
     setCoverage(cov);
     setLoading(false);
-  };
+  }, [system.id]);
 
-  useEffect(() => { void load(); }, [system.id]);
+  useEffect(() => { void load(); }, [load]);
 
   const handleUpdate = async (d: SystemCreateInput) => {
     await updateSystem(system.id, d, actor);

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Pencil, AlertTriangle, Star } from 'lucide-react';
 import { toast } from 'sonner';
@@ -114,7 +115,13 @@ export function CompanySiteDetailView({ id }: { id: string }) {
       </div>
 
       {site.companyLogo && (
-        <img src={site.companyLogo} alt="Company logo" className="h-16 object-contain border rounded p-2 bg-white" />
+        <Image
+          src={site.companyLogo}
+          alt="Company logo"
+          width={240}
+          height={64}
+          className="h-16 w-auto rounded border bg-white p-2 object-contain"
+        />
       )}
 
       <Card>

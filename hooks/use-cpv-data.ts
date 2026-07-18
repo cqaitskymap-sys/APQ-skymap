@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { CPV_COLLECTIONS, CppRecord, CqaRecord, RiskRecord } from '@/lib/cpv';
 import { listCpvRecords, loadIntegrationSnapshot } from '@/lib/cpv-service';
 import { loadAllCpvModules } from '@/lib/cpv-module-service';
@@ -13,7 +13,7 @@ export function useCpvData(includeIntegrations = false) {
   const [integrations, setIntegrations] = useState<Awaited<ReturnType<typeof loadIntegrationSnapshot>> | null>(null);
   const [modules, setModules] = useState<Awaited<ReturnType<typeof loadAllCpvModules>> | null>(null);
 
-  const reload = async () => {
+  const reload = useCallback(async () => {
     setLoading(true);
     const [cppData, cqaData, riskData, integrationData, moduleData] = await Promise.all([
       listCpvRecords<CppRecord>(CPV_COLLECTIONS.cpp),
@@ -28,8 +28,8 @@ export function useCpvData(includeIntegrations = false) {
     setIntegrations(integrationData);
     setModules(moduleData);
     setLoading(false);
-  };
+  }, [includeIntegrations]);
 
-  useEffect(() => { void reload(); }, [includeIntegrations]);
+  useEffect(() => { void reload(); }, [reload]);
   return { loading, cpp, cqa, risks, integrations, modules, reload };
 }

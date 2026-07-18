@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { ApprovalMatrixAccessGuard } from '@/components/admin/approval-matrix/approval-matrix-access-guard';
@@ -128,7 +128,8 @@ function EditApprovalMatrixContent({ id }: { id: string }) {
   );
 }
 
-export default function EditApprovalMatrixPage({ params }: { params: { id: string } }) {
+export default function EditApprovalMatrixPage(props: { params: Promise<{ id: string }> }) {
+  const params = use(props.params);
   return (
     <ApprovalMatrixAccessGuard>
       <EditApprovalMatrixContent id={params.id} />

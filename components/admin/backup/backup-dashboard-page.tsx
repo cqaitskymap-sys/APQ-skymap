@@ -52,10 +52,10 @@ export function BackupDashboardPage() {
   const [endDate, setEndDate] = useState('');
   const [page, setPage] = useState(0);
 
-  const auditMeta = {
+  const auditMeta = useMemo(() => ({
     userId: user?.uid || 'system',
     userName: profile?.full_name || profile?.email || 'Admin',
-  };
+  }), [profile?.email, profile?.full_name, user?.uid]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -75,7 +75,7 @@ export function BackupDashboardPage() {
     } finally {
       setLoading(false);
     }
-  }, [auditMeta.userId, auditMeta.userName]);
+  }, [auditMeta]);
 
   useEffect(() => { load(); }, [load]);
 

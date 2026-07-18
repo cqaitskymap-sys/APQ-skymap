@@ -1,5 +1,5 @@
 import { collection, doc, getDocs, setDoc } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { getBlob, ref, uploadBytes } from 'firebase/storage';
 import { writeAuditTrail, createAuditLog } from '@/lib/audit-trail';
 import { sendInAppNotification } from '@/lib/notification-service';
 import {
@@ -274,6 +274,9 @@ export async function createBackup(
 
   const backupId = buildBackupId();
   const collections = resolveCollectionsForScope(form.backupScope, form.selectedCollections);
+  if (collections.length === 0) {
+    return { backup: null, error: 'Select at least one collection for this backup scope' };
+  }
   const fileName = `${form.backupNumber || backupId}.json`;
 
   const pendingRecord: Omit<BackupHistory, 'id'> = {
@@ -292,7 +295,7 @@ export async function createBackup(
     recordsCount: 0,
     backupFrequency: form.backupFrequency,
     nextBackupDue: '',
-    restorePointCreated: true,
+    restorePointCreated: false,
     checksum: '',
     remarks: form.remarks,
     status: 'Active',
@@ -316,13 +319,9 @@ export async function createBackup(
     for (let i = 0; i < collections.length; i++) {
       const col = collections[i];
       onProgress?.(5 + Math.round((i / collections.length) * 70), `Exporting ${col}...`);
-      try {
-        const result = await exportCollection(col);
-        exportData[result.name] = result.records;
-        totalRecords += result.count;
-      } catch {
-        exportData[col] = [];
-      }
+      const result = await exportCollection(col);
+      exportData[result.name] = result.records;
+      totalRecords += result.count;
     }
 
     const json = JSON.stringify({
@@ -344,14 +343,8 @@ export async function createBackup(
     const storagePath = `backups/${backupId}/${fileName}`;
 
     onProgress?.(85, 'Uploading to storage...');
-    let downloadUrl = '';
-    try {
-      const storageRef = ref(getFirebaseStorage(), storagePath);
-      await uploadBytes(storageRef, blob);
-      downloadUrl = await getDownloadURL(storageRef);
-    } catch {
-      /* storage upload may fail if rules deny — metadata still saved */
-    }
+    const storageRef = ref(getFirebaseStorage(), storagePath);
+    await uploadBytes(storageRef, blob);
 
     const updates: Partial<BackupHistory> = {
       backupStatus: 'Completed',
@@ -361,6 +354,7 @@ export async function createBackup(
       filePath: storagePath,
       recordsCount: totalRecords,
       checksum,
+      restorePointCreated: true,
       updatedBy: meta.userId,
     };
 
@@ -420,11 +414,13 @@ export async function downloadBackup(backup: BackupHistory): Promise<{ success: 
   }
   try {
     const path = backup.storageLocation || backup.filePath;
-    const url = await getDownloadURL(ref(getFirebaseStorage(), path));
+    const blob = await getBlob(ref(getFirebaseStorage(), path));
+    const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
     a.download = backup.fileName || `${backup.backupNumber}.json`;
     a.click();
+    URL.revokeObjectURL(url);
     return { success: true };
   } catch (e) {
     return { success: false, error: (e as Error).message };
@@ -438,9 +434,8 @@ export async function verifyBackup(
   if (!backup.checksum) return { verified: false, error: 'No checksum stored for this backup' };
   try {
     const path = backup.storageLocation || backup.filePath;
-    const url = await getDownloadURL(ref(getFirebaseStorage(), path));
-    const res = await fetch(url);
-    const text = await res.text();
+    const blob = await getBlob(ref(getFirebaseStorage(), path));
+    const text = await blob.text();
     const hash = await computeChecksum(text);
     const verified = hash === backup.checksum;
     await logBackupAudit(
@@ -603,9 +598,8 @@ async function executeRestore(
 
   try {
     const path = backup.storageLocation || backup.filePath;
-    const url = await getDownloadURL(ref(getFirebaseStorage(), path));
-    const res = await fetch(url);
-    const payload = JSON.parse(await res.text()) as { data?: Record<string, unknown[]> };
+    const blob = await getBlob(ref(getFirebaseStorage(), path));
+    const payload = JSON.parse(await blob.text()) as { data?: Record<string, unknown[]> };
     const collections = restore.collectionsRestored.filter((c) => !PROTECTED_RESTORE_COLLECTIONS.includes(c));
     let restored = 0;
 

@@ -25,6 +25,25 @@ export function useTrainingMatrix(filters?: MatrixFilters) {
     role,
     department: profile?.department,
   }), [user?.uid, profile?.full_name, profile?.email, profile?.department, role]);
+  const hasFilters = filters !== undefined;
+  const {
+    department, designation, role: filterRole, training_type, training_frequency,
+    status, document_number, sop_number, search,
+  } = filters ?? {};
+  const stableFilters = useMemo<MatrixFilters | undefined>(() => hasFilters ? ({
+    department,
+    designation,
+    role: filterRole,
+    training_type,
+    training_frequency,
+    status,
+    document_number,
+    sop_number,
+    search,
+  }) : undefined, [
+    hasFilters, department, designation, filterRole, training_type,
+    training_frequency, status, document_number, sop_number, search,
+  ]);
 
   const refresh = useCallback(async () => {
     if (!canViewMatrixModule(role)) {
@@ -38,7 +57,7 @@ export function useTrainingMatrix(filters?: MatrixFilters) {
       setData(await fetchMatrixDashboard({
         role,
         userDepartment: profile?.department,
-        filters,
+        filters: stableFilters,
       }));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load matrix data');
@@ -46,7 +65,7 @@ export function useTrainingMatrix(filters?: MatrixFilters) {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [role, profile?.department, JSON.stringify(filters)]);
+  }, [role, profile?.department, stableFilters]);
 
   useEffect(() => { refresh(); }, [refresh]);
 

@@ -1,6 +1,6 @@
 import {
   collection, doc, addDoc, updateDoc, query, where, orderBy, limit,
-  onSnapshot, getDocs, type Unsubscribe,
+  arrayUnion, onSnapshot, getDoc, getDocs, type Unsubscribe,
 } from 'firebase/firestore';
 import { createAuditLog } from '@/lib/audit-trail';
 import { getFirebaseFirestore, isFirebaseConfigured } from '@/lib/firebase';
@@ -32,6 +32,8 @@ export interface NotificationRecord {
   actionLink?: string;
   createdAt: string;
   readAt?: string | null;
+  readBy?: string[];
+  readAtBy?: Record<string, string>;
 }
 
 export interface CreateNotificationInput {
@@ -106,6 +108,8 @@ export async function createNotification(
       actionLink: input.actionLink || '',
       createdAt: nowIso(),
       readAt: null,
+      readBy: [],
+      readAtBy: {},
     };
     const docRef = await addDoc(collection(db, NOTIFICATIONS_COLLECTION), payload);
 
@@ -158,22 +162,36 @@ export async function sendEmailNotificationPlaceholder(
   return { success: true, message: 'Email notification queued (placeholder — integrate SMTP/API later)' };
 }
 
-export async function markNotificationAsRead(notificationId: string): Promise<boolean> {
+export async function markNotificationAsRead(
+  notificationId: string,
+  actor?: { id: string; name: string },
+): Promise<boolean> {
   if (!isFirebaseConfigured()) return false;
   try {
     const db = getFirebaseFirestore();
-    await updateDoc(doc(db, NOTIFICATIONS_COLLECTION, notificationId), {
-      isRead: true,
-      readStatus: 'Read',
-      readAt: nowIso(),
-    });
+    const notificationRef = doc(db, NOTIFICATIONS_COLLECTION, notificationId);
+    const notification = await getDoc(notificationRef);
+    if (!notification.exists()) return false;
+    if (notification.data().recipientRole) {
+      if (!actor?.id) return false;
+      await updateDoc(notificationRef, {
+        readBy: arrayUnion(actor.id),
+        [`readAtBy.${actor.id}`]: nowIso(),
+      });
+    } else {
+      await updateDoc(notificationRef, {
+        isRead: true,
+        readStatus: 'Read',
+        readAt: nowIso(),
+      });
+    }
     await createAuditLog({
       moduleName: 'Admin',
       collectionName: NOTIFICATIONS_COLLECTION,
       recordId: notificationId,
       actionType: 'Update',
       actionDescription: 'Notification read',
-      user: { id: 'system', name: 'User' },
+      user: actor || { id: 'system', name: 'System' },
       status: 'Success',
     });
     return true;
@@ -188,7 +206,11 @@ export async function markNotificationRead(notificationId: string): Promise<bool
   return markNotificationAsRead(notificationId);
 }
 
-export async function markAllNotificationsRead(userId: string): Promise<boolean> {
+export async function markAllNotificationsRead(
+  userId: string,
+  actor?: { id: string; name: string },
+  recipientRole?: string,
+): Promise<boolean> {
   if (!isFirebaseConfigured()) return false;
   try {
     const db = getFirebaseFirestore();
@@ -197,10 +219,38 @@ export async function markAllNotificationsRead(userId: string): Promise<boolean>
       where('userId', '==', userId),
       where('isRead', '==', false),
     );
-    const snap = await getDocs(q);
+    const [snap, roleSnap] = await Promise.all([
+      getDocs(q),
+      recipientRole
+        ? getDocs(query(
+          collection(db, NOTIFICATIONS_COLLECTION),
+          where('recipientRole', '==', recipientRole),
+        ))
+        : Promise.resolve(null),
+    ]);
+    const roleUnreadDocs = (roleSnap?.docs || [])
+      .filter((d) => !((d.data().readBy as string[] | undefined) || []).includes(userId));
     await Promise.all(
-      snap.docs.map((d) => updateDoc(d.ref, { isRead: true, readStatus: 'Read', readAt: nowIso() })),
+      [
+        ...snap.docs.map((d) => updateDoc(d.ref, { isRead: true, readStatus: 'Read', readAt: nowIso() })),
+        ...roleUnreadDocs.map((d) => updateDoc(d.ref, {
+            readBy: arrayUnion(userId),
+            [`readAtBy.${userId}`]: nowIso(),
+          })),
+      ],
     );
+    const updatedCount = snap.size + roleUnreadDocs.length;
+    if (updatedCount > 0) {
+      await createAuditLog({
+        moduleName: 'Admin',
+        collectionName: NOTIFICATIONS_COLLECTION,
+        recordId: userId,
+        actionType: 'Update',
+        actionDescription: `Marked ${updatedCount} notifications as read`,
+        user: actor || { id: userId, name: 'User' },
+        status: 'Success',
+      });
+    }
     return true;
   } catch (error) {
     console.error('Failed to mark all notifications read:', error);
@@ -227,8 +277,14 @@ export async function getUserNotifications(userId: string, max = 50): Promise<No
 }
 
 export async function getNotificationById(id: string): Promise<NotificationRecord | null> {
-  const all = await getAllNotifications(500);
-  return all.find((n) => n.id === id) ?? null;
+  if (!isFirebaseConfigured() || !id) return null;
+  try {
+    const snapshot = await getDoc(doc(getFirebaseFirestore(), NOTIFICATIONS_COLLECTION, id));
+    if (!snapshot.exists()) return null;
+    return normalizeNotification({ id: snapshot.id, ...snapshot.data() });
+  } catch {
+    return null;
+  }
 }
 
 export async function getAllNotifications(max = 500): Promise<NotificationRecord[]> {
@@ -244,20 +300,21 @@ export async function getAllNotifications(max = 500): Promise<NotificationRecord
 }
 
 export function normalizeNotification(raw: Record<string, unknown>): NotificationRecord {
-  const isRead = Boolean(raw.isRead);
+  const userId = String(raw.userId || raw.user_id || raw.recipientUserId || '');
+  const isRead = Boolean(raw.isRead ?? raw.read);
   return {
     id: raw.id as string | undefined,
     notificationId: String(raw.notificationId || raw.id || ''),
-    userId: String(raw.userId || raw.recipientUserId || ''),
-    recipientUserId: String(raw.recipientUserId || raw.userId || ''),
+    userId,
+    recipientUserId: String(raw.recipientUserId || raw.userId || raw.user_id || ''),
     title: String(raw.title || ''),
     message: String(raw.message || ''),
     type: (raw.type as NotificationType) || 'info',
-    moduleName: String(raw.moduleName || ''),
+    moduleName: String(raw.moduleName || raw.module || ''),
     eventName: String(raw.eventName || ''),
-    recordId: String(raw.recordId || ''),
+    recordId: String(raw.recordId || raw.record_id || ''),
     documentNumber: String(raw.documentNumber || ''),
-    recipientRole: String(raw.recipientRole || ''),
+    recipientRole: String(raw.recipientRole || raw.target_role || ''),
     recipientDepartment: String(raw.recipientDepartment || ''),
     priority: String(raw.priority || 'Medium'),
     notificationChannel: String(raw.notificationChannel || 'In-App'),
@@ -265,9 +322,45 @@ export function normalizeNotification(raw: Record<string, unknown>): Notificatio
     sentStatus: (raw.sentStatus as NotificationRecord['sentStatus']) || 'Sent',
     isRead,
     actionLink: String(raw.actionLink || ''),
-    createdAt: String(raw.createdAt || ''),
+    createdAt: String(raw.createdAt || raw.created_at || ''),
     readAt: raw.readAt ? String(raw.readAt) : null,
+    readBy: Array.isArray(raw.readBy) ? raw.readBy.map(String) : [],
+    readAtBy: raw.readAtBy && typeof raw.readAtBy === 'object'
+      ? raw.readAtBy as Record<string, string>
+      : {},
   };
+}
+
+const NOTIFICATION_MODULE_ROUTES: Record<string, { base: string; detail?: boolean }> = {
+  training: { base: '/training/assignments' },
+  document: { base: '/qms/dms', detail: true },
+  documents: { base: '/qms/dms', detail: true },
+  dms: { base: '/qms/dms', detail: true },
+  capa: { base: '/qms/capa', detail: true },
+  deviation: { base: '/qms/deviation', detail: true },
+  audit: { base: '/qms/audit', detail: true },
+  risk: { base: '/qms/risk-management', detail: true },
+  equipment: { base: '/qms/equipment', detail: true },
+  calibration: { base: '/qms/equipment/calibration-schedule' },
+  complaint: { base: '/qms/complaints', detail: true },
+  complaints: { base: '/qms/complaints', detail: true },
+  'change control': { base: '/qms/change-control', detail: true },
+  change_control: { base: '/qms/change-control', detail: true },
+  validation: { base: '/qms/validation', detail: true },
+  admin: { base: '/admin' },
+};
+
+/** Returns a same-origin route and rejects executable or cross-origin notification links. */
+export function getNotificationActionLink(notification: NotificationRecord): string {
+  const configured = notification.actionLink?.trim();
+  if (configured?.startsWith('/') && !configured.startsWith('//')) return configured;
+
+  const route = NOTIFICATION_MODULE_ROUTES[notification.moduleName.trim().toLowerCase()];
+  if (!route) return notification.id ? `/notifications/${encodeURIComponent(notification.id)}` : '/notifications';
+  if (route.detail && notification.recordId) {
+    return `${route.base}/${encodeURIComponent(notification.recordId)}`;
+  }
+  return route.base;
 }
 
 export function subscribeToNotifications(
@@ -275,6 +368,7 @@ export function subscribeToNotifications(
   onData: (notifications: NotificationRecord[]) => void,
   onError?: (error: Error) => void,
   max = 25,
+  recipientRole?: string,
 ): Unsubscribe {
   if (!isFirebaseConfigured()) {
     onData([]);
@@ -282,29 +376,108 @@ export function subscribeToNotifications(
   }
 
   let active = true;
-  let unsubscribe: Unsubscribe | undefined;
+  let unsubscribers: Unsubscribe[] = [];
   let pollTimer: ReturnType<typeof setInterval> | undefined;
   let retryTimer: ReturnType<typeof setTimeout> | undefined;
   let retryAttempt = 0;
+  const resultSets = new Map<string, NotificationRecord[]>();
 
-  const notificationQuery = () => {
+  const notificationQueries = () => {
     const db = getFirebaseFirestore();
-    return query(
-      collection(db, NOTIFICATIONS_COLLECTION),
-      where('userId', '==', userId),
-      orderBy('createdAt', 'desc'),
-      limit(max),
+    // Query both camelCase (new writers) and snake_case (legacy docs in Firestore).
+    const queries = [
+      {
+        key: 'user',
+        value: query(
+          collection(db, NOTIFICATIONS_COLLECTION),
+          where('userId', '==', userId),
+          orderBy('createdAt', 'desc'),
+          limit(max),
+        ),
+      },
+      {
+        key: 'user_legacy',
+        value: query(
+          collection(db, NOTIFICATIONS_COLLECTION),
+          where('user_id', '==', userId),
+          orderBy('created_at', 'desc'),
+          limit(max),
+        ),
+      },
+    ];
+    if (recipientRole) {
+      queries.push(
+        {
+          key: 'role',
+          value: query(
+            collection(db, NOTIFICATIONS_COLLECTION),
+            where('recipientRole', '==', recipientRole),
+            orderBy('createdAt', 'desc'),
+            limit(max),
+          ),
+        },
+        {
+          key: 'role_legacy',
+          value: query(
+            collection(db, NOTIFICATIONS_COLLECTION),
+            where('target_role', '==', recipientRole),
+            orderBy('created_at', 'desc'),
+            limit(max),
+          ),
+        },
+      );
+    }
+    return queries;
+  };
+
+  const emitResults = () => {
+    const unique = new Map<string, NotificationRecord>();
+    resultSets.forEach((records) => {
+      records.forEach((record) => unique.set(record.id || record.notificationId || '', record));
+    });
+    onData(
+      Array.from(unique.values())
+        .map((record): NotificationRecord => record.recipientRole
+          ? {
+            ...record,
+            isRead: record.readBy?.includes(userId) || false,
+            readStatus: record.readBy?.includes(userId) ? 'Read' : 'Unread',
+            readAt: record.readAtBy?.[userId] || null,
+          }
+          : record)
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+        .slice(0, max),
     );
   };
 
   const fetchOnce = async () => {
-    try {
-      const snap = await getDocs(notificationQuery());
-      if (!active) return;
-      onData(snap.docs.map((d) => normalizeNotification({ id: d.id, ...d.data() })));
-    } catch (error) {
-      console.error('Notification poll error:', error);
-      onError?.(error as Error);
+    const results = await Promise.allSettled(
+      notificationQueries().map(async ({ key, value }) => ({ key, snapshot: await getDocs(value) })),
+    );
+    if (!active) return;
+    let sawPermissionError: Error | undefined;
+    let sawSuccess = false;
+    results.forEach((result) => {
+      if (result.status === 'fulfilled') {
+        sawSuccess = true;
+        const { key, snapshot } = result.value;
+        resultSets.set(key, snapshot.docs.map((d) => normalizeNotification({ id: d.id, ...d.data() })));
+        return;
+      }
+      const err = result.reason as Error;
+      if ((err as { code?: string })?.code === 'permission-denied') {
+        sawPermissionError = err;
+      } else {
+        console.error('Notification poll error:', err);
+      }
+    });
+    if (sawSuccess) {
+      emitResults();
+      return;
+    }
+    if (sawPermissionError) {
+      console.error('Notification poll error:', sawPermissionError);
+      onError?.(sawPermissionError);
     }
   };
 
@@ -326,30 +499,31 @@ export function subscribeToNotifications(
   const attachListener = () => {
     if (!active) return;
     try {
-      unsubscribe?.();
-      unsubscribe = onSnapshot(
-        notificationQuery(),
-        (snap) => {
-          retryAttempt = 0;
-          stopPolling();
-          onData(snap.docs.map((d) => normalizeNotification({ id: d.id, ...d.data() })));
-        },
-        (error) => {
-          console.warn('Notification listener error (will retry):', error);
-          onError?.(error);
-          unsubscribe?.();
-          unsubscribe = undefined;
+      unsubscribers.forEach((unsubscribe) => unsubscribe());
+      unsubscribers = notificationQueries().map(({ key, value }) =>
+        onSnapshot(
+          value,
+          (snap) => {
+            retryAttempt = 0;
+            stopPolling();
+            resultSets.set(key, snap.docs.map((d) => normalizeNotification({ id: d.id, ...d.data() })));
+            emitResults();
+          },
+          (error) => {
+            console.warn('Notification listener error (will retry):', error);
+            onError?.(error);
+            unsubscribers.forEach((unsubscribe) => unsubscribe());
+            unsubscribers = [];
+            startPolling();
 
-          // Fall back to polling while the realtime channel recovers.
-          startPolling();
-
-          if (!active) return;
-          const delay = Math.min(30_000, 2_000 * 2 ** retryAttempt);
-          retryAttempt += 1;
-          retryTimer = setTimeout(() => {
-            if (active) attachListener();
-          }, delay);
-        },
+            if (!active) return;
+            const delay = Math.min(30_000, 2_000 * 2 ** retryAttempt);
+            retryAttempt += 1;
+            retryTimer = setTimeout(() => {
+              if (active) attachListener();
+            }, delay);
+          },
+        ),
       );
     } catch (error) {
       console.error('Failed to subscribe to notifications:', error);
@@ -362,7 +536,7 @@ export function subscribeToNotifications(
 
   return () => {
     active = false;
-    unsubscribe?.();
+    unsubscribers.forEach((unsubscribe) => unsubscribe());
     stopPolling();
     if (retryTimer) clearTimeout(retryTimer);
   };

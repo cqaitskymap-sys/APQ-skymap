@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Printer, Upload, Download, ExternalLink, Ban } from 'lucide-react';
 import { toast } from 'sonner';
@@ -37,7 +37,7 @@ export function EquipmentDetailView({ equipment, onRefresh }: { equipment: Equip
   const [auditLogs, setAuditLogs] = useState<Record<string, unknown>[]>([]);
   const [attachCategory, setAttachCategory] = useState('Manual');
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     const [cal, pm, bd, att, hist, logs] = await Promise.all([
       listCalibrations(equipment.id), listPmRecords(equipment.id), listBreakdowns(equipment.id),
@@ -50,9 +50,9 @@ export function EquipmentDetailView({ equipment, onRefresh }: { equipment: Equip
     setStatusHistory(hist);
     setAuditLogs(logs);
     setLoading(false);
-  };
+  }, [equipment.id]);
 
-  useEffect(() => { void load(); }, [equipment.id]);
+  useEffect(() => { void load(); }, [load]);
 
   const handleUpdate = async (d: EquipmentCreateInput) => {
     await updateEquipment(equipment.id, d, actor);

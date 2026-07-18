@@ -30,6 +30,27 @@ export function useTrainingAuditTrail(filters?: TrainingAuditFilters) {
     role,
     department: profile?.department || '',
   }), [user?.uid, profile?.full_name, profile?.email, profile?.department, role]);
+  const hasFilters = filters !== undefined;
+  const {
+    search, module, action, user_id, department, entity_type,
+    reference_number, e_signature_status, start_date, end_date, entity_id,
+  } = filters ?? {};
+  const stableFilters = useMemo<TrainingAuditFilters | undefined>(() => hasFilters ? ({
+    search,
+    module,
+    action,
+    user_id,
+    department,
+    entity_type,
+    reference_number,
+    e_signature_status,
+    start_date,
+    end_date,
+    entity_id,
+  }) : undefined, [
+    hasFilters, search, module, action, user_id, department, entity_type,
+    reference_number, e_signature_status, start_date, end_date, entity_id,
+  ]);
 
   const refresh = useCallback(async () => {
     if (!canViewTrainingAuditTrail(role)) {
@@ -44,7 +65,7 @@ export function useTrainingAuditTrail(filters?: TrainingAuditFilters) {
         role,
         userId: user?.uid,
         userDepartment: profile?.department,
-        filters,
+        filters: stableFilters,
       });
       setEntries(data.entries);
       setKpis(data.kpis);
@@ -56,16 +77,15 @@ export function useTrainingAuditTrail(filters?: TrainingAuditFilters) {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [role, user?.uid, profile?.department, JSON.stringify(filters)]);
+  }, [role, user?.uid, profile?.department, stableFilters]);
 
   useEffect(() => { refresh(); }, [refresh]);
 
   useEffect(() => {
-    if (canViewTrainingAuditTrail(role) && user?.uid) {
+    if (canViewTrainingAuditTrail(role) && actor.id) {
       logTrainingAuditView(actor).catch(() => {});
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [role, user?.uid]);
+  }, [role, actor]);
 
   return {
     entries, kpis, charts, users, loading, refreshing, error, role, actor,

@@ -174,11 +174,11 @@ function CapaDashboardContent() {
   const overdueCapas = useMemo(() => getOverdueCapas(records).slice(0, 10), [records]);
   const effectivenessPending = useMemo(() => getEffectivenessPendingCapas(records).slice(0, 10), [records]);
 
-  const viewLink = (r: CapaRecord) => (
+  const viewLink = useCallback((r: CapaRecord) => (
     <Link href={`/qms/capa/${r.id}`} onClick={() => void logCapaRecordOpened(actor, r.id, r.capa_number)}>
       <Button variant="ghost" size="sm"><Eye className="h-4 w-4" /></Button>
     </Link>
-  );
+  ), [actor]);
 
   const recentColumns = useMemo(() => [
     { key: 'capa_number', header: 'CAPA No', render: (r: CapaRecord) => <span className="font-mono text-blue-600">{r.capa_number}</span> },
@@ -190,7 +190,7 @@ function CapaDashboardContent() {
     { key: 'status', header: 'Status', render: (r: CapaRecord) => <CapaStatusBadge status={r.capa_status} /> },
     { key: 'priority', header: 'Priority', render: (r: CapaRecord) => <CapaPriorityBadge priority={r.priority} /> },
     { key: 'actions', header: 'Action', render: (r: CapaRecord) => viewLink(r) },
-  ], [actor]);
+  ], [viewLink]);
 
   const overdueColumns = useMemo(() => [
     { key: 'capa_number', header: 'CAPA No', render: (r: CapaRecord) => <span className="font-mono text-red-600">{r.capa_number}</span> },
@@ -200,7 +200,7 @@ function CapaDashboardContent() {
     { key: 'days', header: 'Days Overdue', render: (r: CapaRecord) => getCapaDaysOverdue(r) },
     { key: 'status', header: 'Status', render: (r: CapaRecord) => <CapaStatusBadge status={r.capa_status} /> },
     { key: 'actions', header: 'Action', render: (r: CapaRecord) => viewLink(r) },
-  ], [actor]);
+  ], [viewLink]);
 
   const effColumns = useMemo(() => [
     { key: 'capa_number', header: 'CAPA No', render: (r: CapaRecord) => <span className="font-mono text-blue-600">{r.capa_number}</span> },
@@ -209,7 +209,7 @@ function CapaDashboardContent() {
     { key: 'source', header: 'Source', render: (r: CapaRecord) => r.capa_source },
     { key: 'status', header: 'Status', render: (r: CapaRecord) => <CapaStatusBadge status={r.capa_status} /> },
     { key: 'actions', header: 'Action', render: (r: CapaRecord) => viewLink(r) },
-  ], [actor]);
+  ], [viewLink]);
 
   return (
     <CapaDashboardAccessGuard>

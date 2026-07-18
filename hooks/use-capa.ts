@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 import {
   listCapas, getCapaById, computeDashboardMetrics, syncOverdueCapas,
@@ -9,6 +9,22 @@ import type { CapaRecord, CapaFilters, CapaDashboardMetrics } from '@/lib/capa-t
 import { normalizeRole } from '@/lib/permissions';
 
 export function useCapas(filters?: CapaFilters) {
+  const hasFilters = filters !== undefined;
+  const {
+    status, source, department, priority, search, due_this_week, capa_number,
+    owner, effectiveness_result, date_from, date_to, overdue_only, kpi_filter,
+  } = filters ?? {};
+  const stableFilters = useMemo(
+    () => hasFilters ? {
+      status, source, department, priority, search, due_this_week, capa_number,
+      owner, effectiveness_result, date_from, date_to, overdue_only, kpi_filter,
+    } : undefined,
+    [
+      hasFilters, status, source, department, priority, search, due_this_week,
+      capa_number, owner, effectiveness_result, date_from, date_to, overdue_only,
+      kpi_filter,
+    ],
+  );
   const [records, setRecords] = useState<CapaRecord[]>([]);
   const [metrics, setMetrics] = useState<CapaDashboardMetrics | null>(null);
   const [loading, setLoading] = useState(true);
@@ -19,7 +35,7 @@ export function useCapas(filters?: CapaFilters) {
     setError(null);
     try {
       await syncOverdueCapas();
-      const data = await listCapas(filters);
+      const data = await listCapas(stableFilters);
       setRecords(data);
       setMetrics(computeDashboardMetrics(data));
     } catch (e) {
@@ -27,7 +43,7 @@ export function useCapas(filters?: CapaFilters) {
     } finally {
       setLoading(false);
     }
-  }, [JSON.stringify(filters)]);
+  }, [stableFilters]);
 
   useEffect(() => { refresh(); }, [refresh]);
 

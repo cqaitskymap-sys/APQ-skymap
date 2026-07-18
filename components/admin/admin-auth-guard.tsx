@@ -1,11 +1,12 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
 import { useAdminPermissions } from '@/hooks/use-admin-permissions';
 import { clearAuthSessionCookies } from '@/lib/auth-session-cookies';
 import { Skeleton } from '@/components/ui/skeleton';
+import { canAccessAdminRoute } from '@/lib/permissions';
 
 interface AdminAuthGuardProps {
   children: React.ReactNode;
@@ -23,6 +24,8 @@ export function AdminAuthGuard({
   const { user, loading: authLoading } = useAuth();
   const perms = useAdminPermissions();
   const router = useRouter();
+  const pathname = usePathname();
+  const canAccessRoute = canAccessAdminRoute(perms.role, pathname);
 
   useEffect(() => {
     if (authLoading || perms.loading) return;
@@ -33,6 +36,10 @@ export function AdminAuthGuard({
     }
     if (!perms.canAccessAdmin) {
       router.replace('/dashboard');
+      return;
+    }
+    if (!canAccessRoute) {
+      router.replace('/dashboard/admin');
       return;
     }
     if (requireSuperAdmin && !perms.canManageRoles) {
@@ -51,6 +58,7 @@ export function AdminAuthGuard({
     authLoading,
     perms.loading,
     perms.canAccessAdmin,
+    canAccessRoute,
     perms.canManageRoles,
     perms.canManageUsers,
     perms.canManageMasterData,
@@ -80,6 +88,14 @@ export function AdminAuthGuard({
     );
   }
   if (!perms.canAccessAdmin) {
+    return (
+      <div className="space-y-4 p-6">
+        <Skeleton className="h-10 w-64" />
+        <Skeleton className="h-40 w-full" />
+      </div>
+    );
+  }
+  if (!canAccessRoute) {
     return (
       <div className="space-y-4 p-6">
         <Skeleton className="h-10 w-64" />

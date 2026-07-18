@@ -26,6 +26,28 @@ export function useTrainingCertificates(filters?: CertificateFilters) {
     role,
     department: profile?.department,
   }), [user?.uid, profile?.full_name, profile?.email, profile?.department, role]);
+  const hasFilters = filters !== undefined;
+  const {
+    department, employee_id, training_type, certificate_status, approval_status,
+    issue_date_from, issue_date_to, expiry_date_from, expiry_date_to, trainer, search,
+  } = filters ?? {};
+  const stableFilters = useMemo<CertificateFilters | undefined>(() => hasFilters ? ({
+    department,
+    employee_id,
+    training_type,
+    certificate_status,
+    approval_status,
+    issue_date_from,
+    issue_date_to,
+    expiry_date_from,
+    expiry_date_to,
+    trainer,
+    search,
+  }) : undefined, [
+    hasFilters, department, employee_id, training_type, certificate_status,
+    approval_status, issue_date_from, issue_date_to, expiry_date_from,
+    expiry_date_to, trainer, search,
+  ]);
 
   const refresh = useCallback(async () => {
     if (!canViewCertificates(role)) {
@@ -37,7 +59,7 @@ export function useTrainingCertificates(filters?: CertificateFilters) {
     setError(null);
     try {
       setData(await fetchCertificateDashboard({
-        role, userId: user?.uid, userDepartment: profile?.department, filters,
+        role, userId: user?.uid, userDepartment: profile?.department, filters: stableFilters,
       }));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load certificates');
@@ -45,7 +67,7 @@ export function useTrainingCertificates(filters?: CertificateFilters) {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [role, user?.uid, profile?.department, JSON.stringify(filters)]);
+  }, [role, user?.uid, profile?.department, stableFilters]);
 
   useEffect(() => { refresh(); }, [refresh]);
 

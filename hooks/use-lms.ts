@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 import { normalizeRole } from '@/lib/permissions';
 import {
@@ -13,7 +13,22 @@ import { canViewLmsIntegration } from '@/lib/lms-types';
 export function useLmsIntegration(filters?: LmsFilters) {
   const { user, profile } = useAuth();
   const role = normalizeRole(profile?.role);
-  const actor: LmsActor = { id: user?.uid || '', name: profile?.full_name || '', role };
+  const actorId = user?.uid || '';
+  const actorName = profile?.full_name || '';
+  const actor = useMemo<LmsActor>(
+    () => ({ id: actorId, name: actorName, role }),
+    [actorId, actorName, role],
+  );
+  const hasFilters = filters !== undefined;
+  const connectionId = filters?.connectionId;
+  const status = filters?.status;
+  const search = filters?.search;
+  const dateFrom = filters?.dateFrom;
+  const dateTo = filters?.dateTo;
+  const stableFilters = useMemo<LmsFilters | undefined>(
+    () => hasFilters ? { connectionId, status, search, dateFrom, dateTo } : undefined,
+    [hasFilters, connectionId, status, search, dateFrom, dateTo],
+  );
 
   const [data, setData] = useState<LmsDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -31,7 +46,7 @@ export function useLmsIntegration(filters?: LmsFilters) {
     setRefreshing(true);
     setError(null);
     try {
-      const dashboard = await fetchLmsDashboard(filters);
+      const dashboard = await fetchLmsDashboard(stableFilters);
       setData(dashboard);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load LMS data');
@@ -39,7 +54,7 @@ export function useLmsIntegration(filters?: LmsFilters) {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [role, actor.id, JSON.stringify(filters)]);
+  }, [role, stableFilters]);
 
   useEffect(() => { refresh(); }, [refresh]);
 

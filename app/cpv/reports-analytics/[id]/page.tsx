@@ -3,7 +3,8 @@ import { ReportsAnalyticsDetailView } from '@/components/cpv/reports-analytics/r
 
 export const dynamic = 'force-dynamic';
 
-export default function ReportsAnalyticsDetailRoutePage({ params }: { params: { id: string } }) {
+export default async function ReportsAnalyticsDetailRoutePage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   return (
     <ReportsAnalyticsAccessGuard>
       <ReportsAnalyticsDetailView id={params.id} />

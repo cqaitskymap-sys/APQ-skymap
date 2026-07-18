@@ -1,5 +1,6 @@
 import { CcClosurePage } from '@/components/change-control/closure/cc-closure-page';
 
-export default function Page({ params }: { params: { id: string } }) {
+export default async function Page(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   return <CcClosurePage changeId={params.id} />;
 }

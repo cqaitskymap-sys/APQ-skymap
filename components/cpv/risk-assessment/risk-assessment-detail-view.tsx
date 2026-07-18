@@ -74,13 +74,15 @@ export function RiskAssessmentDetailView({ id }: { id: string }) {
     resolver: zodResolver(riskAssessmentFormSchema),
   });
 
+  const severityScore = editForm.watch('severityScore');
+  const occurrenceScore = editForm.watch('occurrenceScore');
+  const detectionScore = editForm.watch('detectionScore');
   const scorePreview = useMemo(() => {
-    const s = editForm.watch('severityScore');
-    const o = editForm.watch('occurrenceScore');
-    const d = editForm.watch('detectionScore');
-    if (!s || !o || !d) return { rpnScore: 0, riskLevel: 'Low' as const };
-    return calculateRiskAssessment(s, o, d);
-  }, [editForm.watch('severityScore'), editForm.watch('occurrenceScore'), editForm.watch('detectionScore')]);
+    if (!severityScore || !occurrenceScore || !detectionScore) {
+      return { rpnScore: 0, riskLevel: 'Low' as const };
+    }
+    return calculateRiskAssessment(severityScore, occurrenceScore, detectionScore);
+  }, [severityScore, occurrenceScore, detectionScore]);
 
   const actor = { id: user?.uid || 'system', name: profile?.full_name || 'System', role: profile?.role || '' };
 

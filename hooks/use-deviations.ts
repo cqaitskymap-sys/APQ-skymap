@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 import {
   listDeviations, getDeviationById, computeDashboardMetrics, syncOverdueStatuses,
@@ -9,6 +9,24 @@ import type { DeviationRecord, DeviationFilters, DeviationDashboardMetrics } fro
 import { normalizeRole } from '@/lib/permissions';
 
 export function useDeviations(filters?: DeviationFilters) {
+  const hasFilters = filters !== undefined;
+  const {
+    search, deviation_number, department, product_name, batch_number, category,
+    criticality, status, capa_required, date_from, date_to, assigned_to,
+    overdue_only, kpi_filter,
+  } = filters ?? {};
+  const stableFilters = useMemo(
+    () => hasFilters ? {
+      search, deviation_number, department, product_name, batch_number, category,
+      criticality, status, capa_required, date_from, date_to, assigned_to,
+      overdue_only, kpi_filter,
+    } : undefined,
+    [
+      hasFilters, search, deviation_number, department, product_name, batch_number,
+      category, criticality, status, capa_required, date_from, date_to, assigned_to,
+      overdue_only, kpi_filter,
+    ],
+  );
   const [records, setRecords] = useState<DeviationRecord[]>([]);
   const [metrics, setMetrics] = useState<DeviationDashboardMetrics | null>(null);
   const [loading, setLoading] = useState(true);
@@ -19,7 +37,7 @@ export function useDeviations(filters?: DeviationFilters) {
     setError(null);
     try {
       await syncOverdueStatuses();
-      const data = await listDeviations(filters);
+      const data = await listDeviations(stableFilters);
       setRecords(data);
       setMetrics(computeDashboardMetrics(data));
     } catch (e) {
@@ -27,7 +45,7 @@ export function useDeviations(filters?: DeviationFilters) {
     } finally {
       setLoading(false);
     }
-  }, [JSON.stringify(filters)]);
+  }, [stableFilters]);
 
   useEffect(() => { refresh(); }, [refresh]);
 

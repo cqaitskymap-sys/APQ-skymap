@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Printer, Upload, Download, ShieldBan, CheckCircle } from 'lucide-react';
 import { toast } from 'sonner';
@@ -54,7 +54,7 @@ export function VendorDetailView({ record, onRefresh, defaultTab = 'overview' }:
   const [showPrint, setShowPrint] = useState(false);
   const [attachCategory, setAttachCategory] = useState(ATTACHMENT_CATEGORIES[0]);
 
-  const loadSub = async () => {
+  const loadSub = useCallback(async () => {
     setLoading(true);
     const [a, q, au, ag, perf, att, logs] = await Promise.all([
       listAvl(record.id), listQualifications(record.id), listSupplierAudits(record.id),
@@ -64,9 +64,9 @@ export function VendorDetailView({ record, onRefresh, defaultTab = 'overview' }:
     setAvl(a); setQualifications(q); setAudits(au); setAgreements(ag);
     setPerformance(perf); setAttachments(att); setAuditLogs(logs);
     setLoading(false);
-  };
+  }, [record.id]);
 
-  useEffect(() => { void loadSub(); }, [record.id]);
+  useEffect(() => { void loadSub(); }, [loadSub]);
 
   const handleUpdate = async (data: VendorCreateInput) => {
     try {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -58,7 +58,7 @@ export function StabilityDetailView({ record, onRefresh, defaultTab = 'overview'
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  const loadSub = async () => {
+  const loadSub = useCallback(async () => {
     setLoading(true);
     const [sch, pull, res, ap, att, al] = await Promise.all([
       getSchedules(record.id), getSamplePulls(record.id), getResults(record.id),
@@ -71,9 +71,9 @@ export function StabilityDetailView({ record, onRefresh, defaultTab = 'overview'
     setAttachments(att);
     setAuditLogs(al);
     setLoading(false);
-  };
+  }, [record.id]);
 
-  useEffect(() => { void loadSub(); }, [record.id]);
+  useEffect(() => { void loadSub(); }, [loadSub]);
 
   const pullForm = useForm<SamplePullInput>({
     resolver: zodResolver(samplePullSchema),

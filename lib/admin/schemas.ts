@@ -39,28 +39,67 @@ const phoneSchema = z.string()
 export const adminUserSchema = z.object({
   ...baseFields,
   userId: z.string().optional(),
-  employeeId: z.string().min(1, 'Employee ID is required'),
-  fullName: z.string().min(1, 'Full name is required'),
-  email: z.string().min(1, 'Email is required').email('Valid email required'),
+  employeeId: z.string().trim().min(1, 'Employee ID is required').max(80),
+  employeeCode: z.string().trim().max(80).default(''),
+  firstName: z.string().trim().max(100).default(''),
+  middleName: z.string().trim().max(100).default(''),
+  lastName: z.string().trim().max(100).default(''),
+  fullName: z.string().trim().min(1, 'Full name is required').max(200),
+  email: z.string().trim().min(1, 'Email is required').email('Valid email required').max(320),
   mobileNumber: phoneSchema,
-  department: z.string().min(1, 'Department is required'),
-  designation: z.string().default(''),
-  role: z.string().min(1, 'Role is required'),
-  reportingManager: z.string().default(''),
+  alternateMobile: phoneSchema,
+  username: z.string()
+    .trim()
+    .max(80)
+    .regex(/^$|^[a-zA-Z0-9._-]+$/, 'Username may contain letters, numbers, dots, underscores, and hyphens')
+    .default(''),
+  department: z.string().trim().min(1, 'Department is required').max(160),
+  designation: z.string().trim().max(160).default(''),
+  role: z.string().trim().min(1, 'Role is required').max(80),
+  reportingManager: z.string().trim().max(200).default(''),
+  managerId: z.string().trim().max(128).default(''),
+  businessUnit: z.string().trim().max(160).default(''),
+  siteId: z.string().trim().max(128).default(''),
+  siteName: z.string().trim().max(200).default(''),
+  location: z.string().trim().max(240).default(''),
+  shift: z.string().trim().max(80).default(''),
+  employmentType: z.enum(['Permanent', 'Contract', 'Temporary', 'Consultant', 'Vendor', 'Intern']).default('Permanent'),
+  gender: z.enum(['', 'Female', 'Male', 'Non-binary', 'Prefer not to say']).default(''),
+  dateOfBirth: z.string().default(''),
   userStatus: z.enum(USER_STATUSES).or(z.literal('Pending Approval')).default('Active'),
+  statusBeforeLock: z.enum(['Active', 'Inactive', 'Suspended', 'Pending Approval']).optional(),
   accountLocked: z.boolean().default(false),
-  profilePhoto: z.string().default(''),
+  profilePhoto: z.string()
+    .url('Profile picture must be a valid URL')
+    .refine((value) => value.startsWith('https://'), 'Profile picture URL must use HTTPS')
+    .or(z.literal(''))
+    .default(''),
   joiningDate: z.string().default(''),
+  remarks: z.string().trim().max(2000).default(''),
   passwordResetRequired: z.boolean().default(false),
   twoFactorEnabled: z.boolean().default(false),
   lastLogin: z.string().nullable().default(null),
+  emailVerified: z.boolean().default(false),
   authUid: z.string().optional(),
   isDeleted: z.boolean().optional(),
-});
+}).refine(
+  (data) => !data.dateOfBirth || data.dateOfBirth < new Date().toISOString().slice(0, 10),
+  { message: 'Date of birth must be in the past', path: ['dateOfBirth'] },
+).refine(
+  (data) => !data.managerId || data.managerId !== data.id && data.managerId !== data.authUid,
+  { message: 'A user cannot report to themselves', path: ['managerId'] },
+);
 
-export const adminUserCreateSchema = adminUserSchema.extend({
-  temporaryPassword: z.string().min(8, 'Password must be at least 8 characters').optional(),
-});
+export const adminUserCreateSchema = adminUserSchema.and(z.object({
+  temporaryPassword: z.string()
+    .min(12, 'Password must be at least 12 characters')
+    .max(128)
+    .regex(/[A-Z]/, 'Password must include an uppercase letter')
+    .regex(/[a-z]/, 'Password must include a lowercase letter')
+    .regex(/\d/, 'Password must include a number')
+    .regex(/[^A-Za-z0-9]/, 'Password must include a special character')
+    .optional(),
+}));
 
 const matrixPermissionsSchema = z.record(
   z.string(),

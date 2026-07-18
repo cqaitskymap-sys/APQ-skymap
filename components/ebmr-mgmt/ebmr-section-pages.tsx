@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { EbmrBatchSectionPage } from '@/components/ebmr-mgmt/ebmr-detail-view';
@@ -31,15 +31,15 @@ function useBatchSection<T>(
   const [items, setItems] = useState<T[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
     setLoading(true);
     const [rec, data] = await Promise.all([getEbmrById(id), loader(id)]);
     setRecord(rec);
     setItems(data);
     setLoading(false);
-  };
+  }, [id, loader]);
 
-  useEffect(() => { void refresh(); }, [id]);
+  useEffect(() => { void refresh(); }, [refresh]);
   return { record, items, loading, refresh };
 }
 

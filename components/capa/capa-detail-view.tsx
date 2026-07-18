@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -47,7 +47,7 @@ export function CapaDetailView({ record, onRefresh }: CapaDetailViewProps) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  const loadSub = async () => {
+  const loadSub = useCallback(async () => {
     setLoading(true);
     const [a, e, ap, att, sl, al] = await Promise.all([
       getCapaActions(record.id),
@@ -64,9 +64,9 @@ export function CapaDetailView({ record, onRefresh }: CapaDetailViewProps) {
     setSourceLinks(sl);
     setAuditLogs(al);
     setLoading(false);
-  };
+  }, [record.id]);
 
-  useEffect(() => { void loadSub(); }, [record.id]);
+  useEffect(() => { void loadSub(); }, [loadSub]);
 
   const rootForm = useForm<CapaRootCauseInput>({
     resolver: zodResolver(capaRootCauseSchema),

@@ -3,7 +3,8 @@ import { RiskAssessmentDetailView } from '@/components/cpv/risk-assessment/risk-
 
 export const dynamic = 'force-dynamic';
 
-export default function RiskAssessmentDetailRoutePage({ params }: { params: { id: string } }) {
+export default async function RiskAssessmentDetailRoutePage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   return (
     <RiskAssessmentAccessGuard>
       <RiskAssessmentDetailView id={params.id} />

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { BatchAccessGuard } from '@/components/admin/batches/batch-access-guard';
@@ -132,7 +132,8 @@ function EditBatchContent({ id }: { id: string }) {
   );
 }
 
-export default function EditBatchPage({ params }: { params: { id: string } }) {
+export default function EditBatchPage(props: { params: Promise<{ id: string }> }) {
+  const params = use(props.params);
   return (
     <BatchAccessGuard>
       <EditBatchContent id={params.id} />

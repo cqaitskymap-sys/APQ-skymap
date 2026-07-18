@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useCallback, useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { RefreshCw, Shield, KeyRound, Clock, Upload, Palette, Wrench, Cloud, FileText, Settings } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -385,14 +385,14 @@ export function FirebaseHealthSection() {
   const [health, setHealth] = useState<FirebaseHealthStatus | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
     setLoading(true);
     const h = await logFirebaseHealthCheck(auditMeta);
     setHealth(h);
     setLoading(false);
-  };
+  }, [auditMeta]);
 
-  useEffect(() => { refresh(); }, []);
+  useEffect(() => { refresh(); }, [refresh]);
 
   return (
     <Card>

@@ -65,7 +65,7 @@ export function useTrainingReports(initialFilters?: TrainingReportFilters) {
     } finally {
       setLoading(false);
     }
-  }, [role, user?.uid, profile?.department, JSON.stringify(filters)]);
+  }, [role, user?.uid, profile?.department, filters]);
 
   useEffect(() => { refresh(); }, [refresh]);
 
@@ -73,8 +73,7 @@ export function useTrainingReports(initialFilters?: TrainingReportFilters) {
     if (canViewTrainingReports(role)) {
       logTrainingReportViewed(actor, filters.report_type).catch(() => {});
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [role]);
+  }, [role, actor, filters.report_type]);
 
   const generate = useCallback(async (overrideFilters?: TrainingReportFilters) => {
     setGenerating(true);

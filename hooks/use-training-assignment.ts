@@ -25,6 +25,26 @@ export function useTrainingAssignment(filters?: AssignmentFilters) {
     role,
     department: profile?.department,
   }), [user?.uid, profile?.full_name, profile?.email, profile?.department, role]);
+  const hasFilters = filters !== undefined;
+  const {
+    department, employee_id, training_type, training_status, training_mode,
+    trainer, source, date_from, date_to, search,
+  } = filters ?? {};
+  const stableFilters = useMemo<AssignmentFilters | undefined>(() => hasFilters ? ({
+    department,
+    employee_id,
+    training_type,
+    training_status,
+    training_mode,
+    trainer,
+    source,
+    date_from,
+    date_to,
+    search,
+  }) : undefined, [
+    hasFilters, department, employee_id, training_type, training_status,
+    training_mode, trainer, source, date_from, date_to, search,
+  ]);
 
   const refresh = useCallback(async () => {
     if (!canViewAssignments(role)) {
@@ -39,7 +59,7 @@ export function useTrainingAssignment(filters?: AssignmentFilters) {
         role,
         userId: user?.uid,
         userDepartment: profile?.department,
-        filters,
+        filters: stableFilters,
       }));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load assignment data');
@@ -47,7 +67,7 @@ export function useTrainingAssignment(filters?: AssignmentFilters) {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [role, user?.uid, profile?.department, JSON.stringify(filters)]);
+  }, [role, user?.uid, profile?.department, stableFilters]);
 
   useEffect(() => { refresh(); }, [refresh]);
 

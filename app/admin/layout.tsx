@@ -1,25 +1,16 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { AdminSidebar } from '@/components/admin/admin-sidebar';
 import { AdminAuthGuard } from '@/components/admin/admin-auth-guard';
 import { Header } from '@/components/layout/header';
 import { PageTransition } from '@/components/loading/page-transition';
 import { cn } from '@/lib/utils';
-import { useAuth } from '@/contexts/auth-context';
-import { seedDefaultData } from '@/lib/admin/admin-service';
 
 export default function AdminRootLayout({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
-  const { user } = useAuth();
   const pathname = usePathname();
-
-  useEffect(() => {
-    if (user?.uid) {
-      seedDefaultData(user.uid).catch(console.error);
-    }
-  }, [user?.uid]);
 
   return (
     <AdminAuthGuard>

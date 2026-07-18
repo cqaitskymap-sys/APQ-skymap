@@ -246,7 +246,7 @@ export function CcValidationPage({ changeId }: { changeId: string }) {
       recommendations: data.assessment?.recommendations || '',
     });
     setLoading(false);
-  }, [changeId, form, user?.uid, profile?.full_name, profile?.department]);
+  }, [changeId, form, user?.uid, profile?.full_name]);
 
   useEffect(() => { void load(); }, [load]);
 

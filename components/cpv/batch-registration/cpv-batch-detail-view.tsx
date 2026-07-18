@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { ArrowLeft, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/auth-context';
@@ -209,7 +210,7 @@ export function CpvBatchDetailView({ id }: { id: string }) {
           <Card>
             <CardContent className="p-6 text-sm text-muted-foreground">
               PQR batch review linkage uses batch number <strong>{batch.batchNumber}</strong>.
-              Open <a href="/pqr/batches" className="text-blue-600 hover:underline">PQR Batch Review</a> to view related periodic quality reports.
+              Open <Link href="/pqr/batches" className="text-blue-600 hover:underline">PQR Batch Review</Link> to view related periodic quality reports.
             </CardContent>
           </Card>
         </TabsContent>

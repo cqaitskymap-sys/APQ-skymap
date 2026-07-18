@@ -9,7 +9,10 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/contexts/auth-context';
-import { getNotificationById, markNotificationAsRead, type NotificationRecord } from '@/lib/notification-service';
+import {
+  getNotificationActionLink, getNotificationById, markNotificationAsRead,
+  type NotificationRecord,
+} from '@/lib/notification-service';
 import { LoadingSkeleton } from '@/components/admin/dashboard/loading-skeleton';
 import { ErrorCard } from '@/components/admin/dashboard/error-card';
 import { PriorityBadge } from '@/components/admin/notifications/priority-badge';
@@ -17,7 +20,7 @@ import { PriorityBadge } from '@/components/admin/notifications/priority-badge';
 export default function NotificationDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const id = params.id as string;
   const [notification, setNotification] = useState<NotificationRecord | null>(null);
   const [loading, setLoading] = useState(true);
@@ -32,23 +35,45 @@ export default function NotificationDetailPage() {
         setError('Notification not found');
         return;
       }
-      if (record.userId !== user?.uid) {
+      const canRead = record.userId === user?.uid
+        || (Boolean(record.recipientRole) && record.recipientRole === profile?.role)
+        || ['super_admin', 'admin'].includes(profile?.role || '');
+      if (!canRead) {
         setError('You do not have access to this notification');
         return;
       }
-      setNotification(record);
-      if (!record.isRead && record.id) await markNotificationAsRead(record.id);
+      const isReadForUser = record.recipientRole && user
+        ? record.readBy?.includes(user.uid) || false
+        : record.isRead;
+      setNotification({
+        ...record,
+        isRead: isReadForUser,
+        readStatus: isReadForUser ? 'Read' : 'Unread',
+        readAt: record.recipientRole && user ? record.readAtBy?.[user.uid] || null : record.readAt,
+      });
+      if (!isReadForUser && record.id && user) {
+        const marked = await markNotificationAsRead(record.id, {
+          id: user.uid,
+          name: profile?.full_name || profile?.email || 'User',
+        });
+        if (marked) {
+          setNotification((current) => current
+            ? { ...current, isRead: true, readStatus: 'Read', readAt: new Date().toISOString() }
+            : current);
+        }
+      }
     } catch (e) {
       setError((e as Error).message);
     } finally {
       setLoading(false);
     }
-  }, [id, user?.uid]);
+  }, [id, profile?.email, profile?.full_name, profile?.role, user]);
 
   useEffect(() => { load(); }, [load]);
 
   if (loading) return <LoadingSkeleton rows={3} />;
   if (error || !notification) return <ErrorCard message={error || 'Not found'} onRetry={load} />;
+  const relatedRoute = getNotificationActionLink(notification);
 
   return (
     <div className="space-y-6 max-w-2xl">
@@ -75,8 +100,11 @@ export default function NotificationDetailPage() {
             <span className="text-muted-foreground">Created</span>
             <span>{notification.createdAt ? formatDistanceToNow(new Date(notification.createdAt), { addSuffix: true }) : '—'}</span>
           </div>
-          {notification.actionLink && (
-            <Button className="bg-sky-600 hover:bg-sky-700" onClick={() => router.push(notification.actionLink!)}>
+          {relatedRoute !== `/notifications/${encodeURIComponent(id)}` && (
+            <Button
+              className="bg-sky-600 hover:bg-sky-700"
+              onClick={() => router.push(relatedRoute)}
+            >
               Open Related Record
             </Button>
           )}

@@ -16,8 +16,11 @@ service firebase.storage {
         : '';
     }
 
-    function isSuperAdmin() {
-      return isAuthenticated() && getProfileRole() == 'super_admin';
+    function isActiveUser() {
+      return isAuthenticated()
+        && profileExists()
+        && firestore.get(/databases/(default)/documents/profiles/$(request.auth.uid)).data.is_active == true
+        && firestore.get(/databases/(default)/documents/profiles/$(request.auth.uid)).data.access_status != 'pending';
     }
 
     function isAdmin() {
@@ -25,43 +28,86 @@ service firebase.storage {
     }
 
     function isReadOnly() {
-      return isAuthenticated() && getProfileRole() in ['auditor', 'viewer'];
+      return isAuthenticated() && getProfileRole() in ['auditor', 'vendor', 'viewer'];
     }
 
     function isAllowedMime() {
       return request.resource.contentType.matches('application/pdf')
+        || request.resource.contentType.matches('application/json')
         || request.resource.contentType.matches('application/vnd.*')
         || request.resource.contentType.matches('application/msword')
-        || request.resource.contentType.matches('image/.*')
-        || request.resource.contentType.matches('text/html')
+        || request.resource.contentType.matches('image/(png|jpeg|webp)')
         || request.resource.contentType.matches('text/csv');
     }
 
-    function canWriteModuleFile() {
-      return isAuthenticated()
+    function canWriteModule(moduleName) {
+      return isAdmin()
+        || (getProfileRole() in ['head_qa', 'qa_manager', 'qa_executive', 'qa']
+          && moduleName.matches('(qms|dms|documents|sop|capa|deviation|change-control|complaints|audit|training|validation|products).*'))
+        || (getProfileRole() in ['qc_manager', 'qc_executive', 'qc']
+          && moduleName.matches('(oos|stability|qc|laboratory|cqa).*'))
+        || (getProfileRole() in ['engineering_manager', 'engineering_executive', 'engineering']
+          && moduleName.matches('(equipment|calibration|maintenance|validation|monitoring|csv).*'))
+        || (getProfileRole() in ['production_manager', 'production_executive', 'production']
+          && moduleName.matches('(batch|batches|ebmr|production|cpv).*'))
+        || (getProfileRole() in ['warehouse_manager', 'warehouse_executive', 'warehouse']
+          && moduleName.matches('(warehouse|material|inventory|vendor).*'))
+        || (getProfileRole() == 'training_coordinator' && moduleName.matches('training.*'));
+    }
+
+    function canReadModule(moduleName, documentId) {
+      return getProfileRole() in [
+          'super_admin', 'admin', 'head_qa', 'qa_manager', 'qa_executive', 'qa',
+          'qc_manager', 'qc_executive', 'qc', 'production_manager',
+          'production_executive', 'production', 'engineering_manager',
+          'engineering_executive', 'engineering', 'warehouse_manager',
+          'warehouse_executive', 'warehouse', 'regulatory_affairs', 'regulatory',
+          'auditor', 'viewer'
+        ]
+        || (getProfileRole() in ['training_coordinator', 'hr']
+          && moduleName.matches('(training|dms|documents|sop).*'))
+        || (getProfileRole() == 'document_controller'
+          && moduleName.matches('(dms|documents|sop).*'))
+        || (getProfileRole() in ['department_head', 'employee']
+          && moduleName.matches('(training|dms|documents|sop).*'))
+        || (getProfileRole() == 'vendor'
+          && moduleName.matches('vendor.*')
+          && documentId == request.auth.uid);
+    }
+
+    function canWriteModuleFile(moduleName) {
+      return isActiveUser()
         && !isReadOnly()
+        && canWriteModule(moduleName)
         && isAllowedMime()
         && request.resource.size < 25 * 1024 * 1024;
     }
 
-    // Company site logos — authenticated users only; no profile role lookup (avoids rule failures)
+    // Company site logos are controlled master data.
     match /company-sites/{siteId}/{fileName} {
-      allow read: if isAuthenticated();
-      allow create, update: if isAuthenticated()
+      allow read: if isActiveUser();
+      allow create, update: if isAdmin()
         && request.resource.size < 2 * 1024 * 1024
-        && request.resource.contentType.matches('image/.*');
-      allow delete: if isAdmin() || isSuperAdmin();
+        && request.resource.contentType.matches('image/(png|jpeg|webp)');
+      allow delete: if isAdmin();
     }
 
     // Path: /moduleName/documentId/.../fileName (supports nested folders e.g. attachments/)
     match /{moduleName}/{documentId}/{allPaths=**} {
-      allow read: if isAuthenticated();
-      allow create, update: if canWriteModuleFile();
-      allow delete: if isAdmin() || isSuperAdmin();
+      allow read: if isActiveUser() && canReadModule(moduleName, documentId);
+      allow create, update: if canWriteModuleFile(moduleName);
+      allow delete: if isAdmin();
     }
 
     match /{allPaths=**} {
-      allow read: if isAuthenticated();
+      allow read: if isActiveUser() && getProfileRole() in [
+        'super_admin', 'admin', 'head_qa', 'qa_manager', 'qa_executive', 'qa',
+        'qc_manager', 'qc_executive', 'qc', 'production_manager',
+        'production_executive', 'production', 'engineering_manager',
+        'engineering_executive', 'engineering', 'warehouse_manager',
+        'warehouse_executive', 'warehouse', 'regulatory_affairs', 'regulatory',
+        'auditor', 'viewer'
+      ];
       allow write: if false;
     }
   }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 import {
   listEquipment, listCalibrations, listPmRecords, listBreakdowns,
@@ -13,6 +13,16 @@ import type {
 import { normalizeRole } from '@/lib/permissions';
 
 export function useEquipment(filters?: EquipmentFilters) {
+  const hasFilters = filters !== undefined;
+  const {
+    equipment_type, equipment_status, department, calibration_status, search,
+  } = filters ?? {};
+  const stableFilters = useMemo(
+    () => hasFilters ? {
+      equipment_type, equipment_status, department, calibration_status, search,
+    } : undefined,
+    [hasFilters, equipment_type, equipment_status, department, calibration_status, search],
+  );
   const [equipment, setEquipment] = useState<EquipmentRecord[]>([]);
   const [calibrations, setCalibrations] = useState<CalibrationRecord[]>([]);
   const [pmRecords, setPmRecords] = useState<PmRecord[]>([]);
@@ -27,7 +37,7 @@ export function useEquipment(filters?: EquipmentFilters) {
     try {
       await syncEquipmentDueDates();
       const [eq, cal, pm, bd] = await Promise.all([
-        listEquipment(filters), listCalibrations(), listPmRecords(), listBreakdowns(),
+        listEquipment(stableFilters), listCalibrations(), listPmRecords(), listBreakdowns(),
       ]);
       setEquipment(eq);
       setCalibrations(cal);
@@ -39,7 +49,7 @@ export function useEquipment(filters?: EquipmentFilters) {
     } finally {
       setLoading(false);
     }
-  }, [JSON.stringify(filters)]);
+  }, [stableFilters]);
 
   useEffect(() => { refresh(); }, [refresh]);
   return { equipment, calibrations, pmRecords, breakdowns, metrics, loading, error, refresh };

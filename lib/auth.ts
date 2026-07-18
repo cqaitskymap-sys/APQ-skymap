@@ -2,13 +2,15 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signOut as firebaseSignOut,
-  onAuthStateChanged,
+  onIdTokenChanged,
   updateProfile,
   sendPasswordResetEmail,
   type User,
   type Unsubscribe,
 } from 'firebase/auth';
-import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
+import {
+  addDoc, collection, doc, getDoc, setDoc, updateDoc,
+} from 'firebase/firestore';
 import {
   getFirebaseAuth,
   getFirebaseFirestore,
@@ -34,7 +36,14 @@ export const APP_ROLES: { id: UserRole; label: string }[] = [
   { id: 'engineering', label: 'Engineering' },
   { id: 'warehouse', label: 'Warehouse' },
   { id: 'regulatory', label: 'Regulatory' },
+  { id: 'hr', label: 'HR' },
+  { id: 'training_coordinator', label: 'Training Coordinator' },
+  { id: 'document_controller', label: 'Document Controller' },
+  { id: 'department_head', label: 'Department Head' },
+  { id: 'employee', label: 'Employee' },
   { id: 'auditor', label: 'Auditor' },
+  { id: 'vendor', label: 'Vendor' },
+  { id: 'viewer', label: 'Viewer' },
 ];
 
 function nowIso() {
@@ -144,6 +153,11 @@ export async function signIn(email: string, password: string): Promise<User> {
       }
 
       const profile = await getUserProfile(result.user.uid);
+      const accessStatus = (profile as (Profile & { access_status?: string }) | null)?.access_status;
+      if (!profile?.is_active || accessStatus === 'pending') {
+        await firebaseSignOut(auth);
+        throw new Error('This account is inactive or awaiting administrator approval.');
+      }
       await writeAuditTrail({
         collectionName: PROFILES_COLLECTION,
         documentId: result.user.uid,
@@ -154,6 +168,24 @@ export async function signIn(email: string, password: string): Promise<User> {
         userName: profile?.full_name || email,
         moduleName: 'Auth',
       });
+      const loginTime = nowIso();
+      const sessionRef = await addDoc(collection(requireDb(), 'login_activity'), {
+        userId: result.user.uid,
+        userName: profile?.full_name || email,
+        email: loginEmail,
+        loginStatus: 'Success',
+        ipAddress: 'client',
+        deviceInfo: typeof navigator !== 'undefined' ? navigator.userAgent.slice(0, 1000) : 'browser',
+        loginTime,
+        logoutTime: null,
+        failureReason: '',
+        status: 'Active',
+        createdAt: loginTime,
+        updatedAt: loginTime,
+      }).catch(() => null);
+      if (sessionRef && typeof sessionStorage !== 'undefined') {
+        sessionStorage.setItem('skymap-session-id', sessionRef.id);
+      }
     }
     return result.user;
   } catch (error) {
@@ -206,7 +238,7 @@ export async function signUp(
         userId: result.user.uid,
         userName: fullName,
         moduleName: 'Auth',
-      });
+      }).catch(() => undefined);
     }
     return result.user;
   } catch (error) {
@@ -221,6 +253,18 @@ export async function signOut(): Promise<void> {
     const user = auth.currentUser;
     if (user) {
       const profile = await getUserProfile(user.uid);
+      const sessionId = typeof sessionStorage !== 'undefined'
+        ? sessionStorage.getItem('skymap-session-id')
+        : null;
+      if (sessionId) {
+        const logoutTime = nowIso();
+        await updateDoc(doc(requireDb(), 'login_activity', sessionId), {
+          logoutTime,
+          status: 'Closed',
+          updatedAt: logoutTime,
+        }).catch(() => undefined);
+        sessionStorage.removeItem('skymap-session-id');
+      }
       await writeAuditTrail({
         collectionName: PROFILES_COLLECTION,
         documentId: user.uid,
@@ -256,7 +300,7 @@ export function subscribeToAuthState(
     return () => undefined;
   }
   try {
-    return onAuthStateChanged(getFirebaseAuth(), callback);
+    return onIdTokenChanged(getFirebaseAuth(), callback);
   } catch (error) {
     console.error('Auth state subscription failed:', error);
     callback(null);

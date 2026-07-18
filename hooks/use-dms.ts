@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 import {
   listDocuments, getDocumentById, computeDashboardMetrics, syncEffectiveDocuments,
@@ -12,6 +12,19 @@ import { normalizeRole } from '@/lib/permissions';
 export function useDocuments(filters?: DmsFilters) {
   const { profile } = useAuth();
   const role = normalizeRole(profile?.role);
+  const hasFilters = filters !== undefined;
+  const {
+    status, document_type, department, search, effectiveOnly, obsoleteOnly, reviewDue,
+  } = filters ?? {};
+  const stableFilters = useMemo(
+    () => hasFilters ? {
+      status, document_type, department, search, effectiveOnly, obsoleteOnly, reviewDue,
+    } : undefined,
+    [
+      hasFilters, status, document_type, department, search, effectiveOnly,
+      obsoleteOnly, reviewDue,
+    ],
+  );
   const [records, setRecords] = useState<DocumentRecord[]>([]);
   const [metrics, setMetrics] = useState<DmsDashboardMetrics | null>(null);
   const [loading, setLoading] = useState(true);
@@ -22,7 +35,7 @@ export function useDocuments(filters?: DmsFilters) {
     setError(null);
     try {
       await Promise.all([syncEffectiveDocuments(), syncReviewDueNotifications()]);
-      const data = await listDocuments(filters, role);
+      const data = await listDocuments(stableFilters, role);
       const trainingPending = await computeTrainingPending();
       const m = computeDashboardMetrics(data);
       m.trainingPending = trainingPending;
@@ -33,7 +46,7 @@ export function useDocuments(filters?: DmsFilters) {
     } finally {
       setLoading(false);
     }
-  }, [JSON.stringify(filters), role]);
+  }, [stableFilters, role]);
 
   useEffect(() => { refresh(); }, [refresh]);
 

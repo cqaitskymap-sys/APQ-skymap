@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { ArrowLeft, Link2, Unlink, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/auth-context';
@@ -390,9 +391,9 @@ export function CpvProductDetailView({ id }: { id: string }) {
           </div>
           <p className="mt-4 text-sm text-muted-foreground">
             Full trend analysis available in{' '}
-            <a href="/cpv/trend-analysis" className="text-blue-600 hover:underline">Trend Analysis</a>
+            <Link href="/cpv/trend-analysis" className="text-blue-600 hover:underline">Trend Analysis</Link>
             {' '}and{' '}
-            <a href="/cpv/process-capability" className="text-blue-600 hover:underline">Process Capability</a>.
+            <Link href="/cpv/process-capability" className="text-blue-600 hover:underline">Process Capability</Link>.
           </p>
         </TabsContent>
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { DepartmentAccessGuard } from '@/components/admin/departments/department-access-guard';
@@ -100,7 +100,8 @@ function EditDepartmentContent({ id }: { id: string }) {
   );
 }
 
-export default function EditDepartmentPage({ params }: { params: { id: string } }) {
+export default function EditDepartmentPage(props: { params: Promise<{ id: string }> }) {
+  const params = use(props.params);
   return (
     <DepartmentAccessGuard>
       <EditDepartmentContent id={params.id} />

@@ -22,6 +22,25 @@ export function useTrainingApproval(filters?: ApprovalFilters) {
   const actor: TrainingApprovalActor = useMemo(() => ({
     id: user?.uid || '', name: profile?.full_name || '', role, email: profile?.email,
   }), [user?.uid, profile?.full_name, profile?.email, role]);
+  const hasFilters = filters !== undefined;
+  const {
+    workflowType, status, approver, requester, department,
+    priority, dateFrom, dateTo, search,
+  } = filters ?? {};
+  const stableFilters = useMemo<ApprovalFilters | undefined>(() => hasFilters ? ({
+    workflowType,
+    status,
+    approver,
+    requester,
+    department,
+    priority,
+    dateFrom,
+    dateTo,
+    search,
+  }) : undefined, [
+    hasFilters, workflowType, status, approver, requester, department,
+    priority, dateFrom, dateTo, search,
+  ]);
 
   const [data, setData] = useState<ApprovalDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -38,7 +57,7 @@ export function useTrainingApproval(filters?: ApprovalFilters) {
     setRefreshing(true);
     setError(null);
     try {
-      const dashboard = await fetchApprovalDashboard(filters);
+      const dashboard = await fetchApprovalDashboard(stableFilters);
       if (isEmployeeApprovalView(role)) {
         const own = dashboard.requests.filter((r) => r.initiated_by === actor.id);
         setData({
@@ -58,7 +77,7 @@ export function useTrainingApproval(filters?: ApprovalFilters) {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [role, actor, JSON.stringify(filters)]);
+  }, [role, actor, stableFilters]);
 
   useEffect(() => { refresh(); }, [refresh]);
 

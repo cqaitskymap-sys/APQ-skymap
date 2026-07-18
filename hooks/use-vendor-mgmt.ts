@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 import {
   listVendors, listAvl, listAgreements, listPerformance, listQualifications, listSupplierAudits,
@@ -10,6 +10,22 @@ import type { VendorRecord, AvlRecord, TechnicalAgreement, VendorPerformance, Ve
 import { normalizeRole } from '@/lib/permissions';
 
 export function useVendors(filters?: VendorFilters) {
+  const hasFilters = filters !== undefined;
+  const approvalStatus = filters?.approval_status;
+  const vendorType = filters?.vendor_type;
+  const riskCategory = filters?.risk_category;
+  const vendorStatus = filters?.vendor_status;
+  const search = filters?.search;
+  const stableFilters = useMemo<VendorFilters | undefined>(
+    () => hasFilters ? {
+      approval_status: approvalStatus,
+      vendor_type: vendorType,
+      risk_category: riskCategory,
+      vendor_status: vendorStatus,
+      search,
+    } : undefined,
+    [hasFilters, approvalStatus, vendorType, riskCategory, vendorStatus, search],
+  );
   const [vendors, setVendors] = useState<VendorRecord[]>([]);
   const [avl, setAvl] = useState<AvlRecord[]>([]);
   const [agreements, setAgreements] = useState<TechnicalAgreement[]>([]);
@@ -26,7 +42,8 @@ export function useVendors(filters?: VendorFilters) {
     try {
       await syncVendorStatuses();
       const [v, a, ag, perf, qual, audits] = await Promise.all([
-        listVendors(filters), listAvl(), listAgreements(), listPerformance(), listQualifications(), listSupplierAudits(),
+        listVendors(stableFilters), listAvl(), listAgreements(), listPerformance(),
+        listQualifications(), listSupplierAudits(),
       ]);
       setVendors(v);
       setAvl(a);
@@ -40,7 +57,7 @@ export function useVendors(filters?: VendorFilters) {
     } finally {
       setLoading(false);
     }
-  }, [JSON.stringify(filters)]);
+  }, [stableFilters]);
 
   useEffect(() => { refresh(); }, [refresh]);
   return { vendors, avl, agreements, performance, qualifications, supplierAudits, metrics, loading, error, refresh };
@@ -63,5 +80,8 @@ export function useVendor(id: string) {
 
 export function useVendorActor() {
   const { user, profile } = useAuth();
-  return { id: user?.uid || 'anonymous', name: profile?.full_name || profile?.email || 'Unknown', role: normalizeRole(profile?.role) };
+  const id = user?.uid || 'anonymous';
+  const name = profile?.full_name || profile?.email || 'Unknown';
+  const role = normalizeRole(profile?.role);
+  return useMemo(() => ({ id, name, role }), [id, name, role]);
 }

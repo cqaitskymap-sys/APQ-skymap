@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { WorkflowAccessGuard } from '@/components/admin/workflows/workflow-access-guard';
@@ -132,7 +132,8 @@ function EditWorkflowContent({ id }: { id: string }) {
   );
 }
 
-export default function EditWorkflowPage({ params }: { params: { id: string } }) {
+export default function EditWorkflowPage(props: { params: Promise<{ id: string }> }) {
+  const params = use(props.params);
   return (
     <WorkflowAccessGuard>
       <EditWorkflowContent id={params.id} />

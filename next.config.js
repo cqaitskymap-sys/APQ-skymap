@@ -1,32 +1,22 @@
-const path = require('path');
-
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  eslint: {
-    ignoreDuringBuilds: true,
+  async headers() {
+    return [{
+      source: '/(.*)',
+      headers: [
+        { key: 'X-Content-Type-Options', value: 'nosniff' },
+        { key: 'X-Frame-Options', value: 'DENY' },
+        { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+        { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
+        { key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains' },
+      ],
+    }];
   },
-  images: { unoptimized: true },
-  experimental: {
-    // lucide-react barrel optimization breaks RSC client manifest on heavy dashboard routes
-    optimizePackageImports: [],
-  },
-  webpack: (config, { isServer }) => {
-    if (!isServer) {
-      config.resolve.fallback = {
-        ...config.resolve.fallback,
-        fs: false,
-        net: false,
-        tls: false,
-      };
-      config.resolve.alias = {
-        ...config.resolve.alias,
-        '@firebase/firestore': path.join(
-          __dirname,
-          'node_modules/@firebase/firestore/dist/index.esm2017.js'
-        ),
-      };
-    }
-    return config;
+  images: {
+    remotePatterns: [
+      { protocol: 'https', hostname: 'firebasestorage.googleapis.com' },
+      { protocol: 'https', hostname: 'storage.googleapis.com' },
+    ],
   },
 };
 

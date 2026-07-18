@@ -149,7 +149,13 @@ export type UserRole =
   | 'engineering'
   | 'warehouse'
   | 'regulatory'
+  | 'hr'
+  | 'training_coordinator'
+  | 'document_controller'
+  | 'department_head'
+  | 'employee'
   | 'auditor'
+  | 'vendor'
   | 'viewer';
 
 export interface Profile {

@@ -22,6 +22,25 @@ export function useTrainingCalendar(filters?: CalendarFilters) {
     name: profile?.full_name || '',
     role,
   }), [user?.uid, profile?.full_name, role]);
+  const hasFilters = filters !== undefined;
+  const {
+    department, trainer, trainingType, status, location,
+    mode, dateFrom, dateTo, search,
+  } = filters ?? {};
+  const stableFilters = useMemo<CalendarFilters | undefined>(() => hasFilters ? ({
+    department,
+    trainer,
+    trainingType,
+    status,
+    location,
+    mode,
+    dateFrom,
+    dateTo,
+    search,
+  }) : undefined, [
+    hasFilters, department, trainer, trainingType, status,
+    location, mode, dateFrom, dateTo, search,
+  ]);
 
   const [data, setData] = useState<CalendarDashboardData | null>(null);
   const [employees, setEmployees] = useState<Awaited<ReturnType<typeof listTmsEmployees>>>([]);
@@ -39,7 +58,7 @@ export function useTrainingCalendar(filters?: CalendarFilters) {
     setError(null);
     try {
       const [dashboard, emps] = await Promise.all([
-        fetchCalendarDashboard(filters),
+        fetchCalendarDashboard(stableFilters),
         listTmsEmployees(),
       ]);
       setData(dashboard);
@@ -51,7 +70,7 @@ export function useTrainingCalendar(filters?: CalendarFilters) {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [role, actor, JSON.stringify(filters)]);
+  }, [role, actor, stableFilters]);
 
   useEffect(() => { refresh(); }, [refresh]);
 

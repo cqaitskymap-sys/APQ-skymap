@@ -3,7 +3,10 @@
 import { Wrench } from 'lucide-react';
 import { useSystemSettings } from '@/contexts/system-settings-context';
 import { useAuth } from '@/contexts/auth-context';
-import { canAccessDuringMaintenance } from '@/lib/admin/system-settings-service';
+
+function canAccessDuringMaintenance(role?: string | null): boolean {
+  return ['super_admin', 'admin'].includes(role?.toLowerCase() || '');
+}
 
 export function MaintenanceGuard({ children }: { children: React.ReactNode }) {
   const { maintenanceActive, settings, loading, canBypassMaintenance } = useSystemSettings();

@@ -3,7 +3,8 @@ import { StabilityDetailView } from '@/components/cpv/stability-monitoring/stabi
 
 export const dynamic = 'force-dynamic';
 
-export default function StabilityDetailRoutePage({ params }: { params: { id: string } }) {
+export default async function StabilityDetailRoutePage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   return (
     <StabilityAccessGuard>
       <StabilityDetailView id={params.id} />

@@ -2,12 +2,15 @@
 
 import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react';
 import type { SystemSettings } from '@/lib/admin/schemas';
-import {
-  fetchSystemSettings,
-  isMaintenanceModeActive,
-  canAccessDuringMaintenance,
-} from '@/lib/admin/system-settings-service';
 import { useAuth } from '@/contexts/auth-context';
+
+function isMaintenanceModeActive(settings: SystemSettings | null): boolean {
+  return Boolean(settings?.maintenanceModeEnabled ?? settings?.maintenanceMode);
+}
+
+function canAccessDuringMaintenance(role?: string | null): boolean {
+  return ['super_admin', 'admin'].includes(role?.toLowerCase() || '');
+}
 
 interface SystemSettingsContextValue {
   settings: SystemSettings | null;
@@ -37,6 +40,7 @@ export function SystemSettingsProvider({ children }: { children: ReactNode }) {
       return;
     }
     try {
+      const { fetchSystemSettings } = await import('@/lib/admin/system-settings-service');
       const s = await fetchSystemSettings();
       setSettings(s);
     } catch {

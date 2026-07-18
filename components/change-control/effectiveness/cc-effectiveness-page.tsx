@@ -221,7 +221,7 @@ export function CcEffectivenessPage({ changeId }: { changeId: string }) {
       head_qa_comments: data.review?.head_qa_comments || '',
     });
     setLoading(false);
-  }, [changeId, form, user?.uid, profile?.full_name, profile?.department]);
+  }, [changeId, form, user?.uid, profile?.full_name]);
 
   useEffect(() => { void load(); }, [load]);
 

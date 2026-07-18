@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Pencil, AlertTriangle, UserPlus } from 'lucide-react';
@@ -29,6 +29,10 @@ import {
   fetchActiveUsers, linkUsersToDepartment,
 } from '@/lib/admin/department-service';
 
+function departmentMatches(d: Department, u: AdminUser) {
+  return u.department === d.departmentName || u.department === d.departmentCode;
+}
+
 export function DepartmentDetailView({ id }: { id: string }) {
   const router = useRouter();
   const { user, profile } = useAuth();
@@ -49,7 +53,7 @@ export function DepartmentDetailView({ id }: { id: string }) {
     userName: profile?.full_name || profile?.email || 'Admin',
   };
 
-  const load = async () => {
+  const load = useCallback(async () => {
     try {
       const department = await fetchDepartmentById(id);
       if (!department) {
@@ -66,13 +70,9 @@ export function DepartmentDetailView({ id }: { id: string }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [id]);
 
-  function departmentMatches(d: Department, u: AdminUser) {
-    return u.department === d.departmentName || u.department === d.departmentCode;
-  }
-
-  useEffect(() => { load(); }, [id]);
+  useEffect(() => { load(); }, [load]);
 
   const handleLink = async () => {
     if (!dept || !linkUserId) return;

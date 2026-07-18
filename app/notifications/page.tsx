@@ -21,7 +21,7 @@ import { LoadingSkeleton } from '@/components/admin/dashboard/loading-skeleton';
 import { PriorityBadge } from '@/components/admin/notifications/priority-badge';
 
 export default function NotificationsPage() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -43,15 +43,18 @@ export default function NotificationsPage() {
     }, (err) => {
       setError(err.message);
       setLoading(false);
-    });
+    }, 50, profile?.role);
     return () => unsub();
-  }, [user?.uid]);
+  }, [profile?.role, user?.uid]);
 
   const unreadCount = notifications.filter((n) => !n.isRead).length;
 
   const handleMarkAllRead = async () => {
     if (!user?.uid) return;
-    const ok = await markAllNotificationsRead(user.uid);
+    const ok = await markAllNotificationsRead(user.uid, {
+      id: user.uid,
+      name: profile?.full_name || profile?.email || 'User',
+    }, profile?.role);
     if (ok) toast.success('All notifications marked as read');
     else toast.error('Failed to update notifications');
   };

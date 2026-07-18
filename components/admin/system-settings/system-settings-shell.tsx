@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useCallback, useEffect, useRef, useState } from 'react';
+import { createContext, useContext, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Save, RotateCcw, Download, Upload, Settings } from 'lucide-react';
@@ -43,10 +43,10 @@ export function SystemSettingsShell({ children }: { children: React.ReactNode })
   const [resetOpen, setResetOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const auditMeta = {
+  const auditMeta = useMemo(() => ({
     userId: user?.uid || 'system',
     userName: profile?.full_name || profile?.email || 'Admin',
-  };
+  }), [profile?.email, profile?.full_name, user?.uid]);
 
   const load = useCallback(async () => {
     setLoading(true);

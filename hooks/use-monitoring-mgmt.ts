@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 import {
   listAreas, listEnvironmental, listUtility, listExcursions,
@@ -13,6 +13,40 @@ import type {
 import { normalizeRole } from '@/lib/permissions';
 
 export function useMonitoring(areaFilters?: AreaFilters, monFilters?: MonitoringFilters) {
+  const hasAreaFilters = areaFilters !== undefined;
+  const cleanroomGrade = areaFilters?.cleanroom_grade;
+  const areaStatus = areaFilters?.area_status;
+  const department = areaFilters?.department;
+  const areaSearch = areaFilters?.search;
+  const stableAreaFilters = useMemo<AreaFilters | undefined>(
+    () => hasAreaFilters ? {
+      cleanroom_grade: cleanroomGrade,
+      area_status: areaStatus,
+      department,
+      search: areaSearch,
+    } : undefined,
+    [hasAreaFilters, cleanroomGrade, areaStatus, department, areaSearch],
+  );
+  const hasMonFilters = monFilters !== undefined;
+  const status = monFilters?.status;
+  const monitoringType = monFilters?.monitoring_type;
+  const utilityType = monFilters?.utility_type;
+  const areaDocId = monFilters?.area_doc_id;
+  const monSearch = monFilters?.search;
+  const dateFrom = monFilters?.date_from;
+  const dateTo = monFilters?.date_to;
+  const stableMonFilters = useMemo<MonitoringFilters | undefined>(
+    () => hasMonFilters ? {
+      status,
+      monitoring_type: monitoringType,
+      utility_type: utilityType,
+      area_doc_id: areaDocId,
+      search: monSearch,
+      date_from: dateFrom,
+      date_to: dateTo,
+    } : undefined,
+    [hasMonFilters, status, monitoringType, utilityType, areaDocId, monSearch, dateFrom, dateTo],
+  );
   const [areas, setAreas] = useState<AreaRecord[]>([]);
   const [environmental, setEnvironmental] = useState<EnvironmentalRecord[]>([]);
   const [utility, setUtility] = useState<UtilityRecord[]>([]);
@@ -26,7 +60,8 @@ export function useMonitoring(areaFilters?: AreaFilters, monFilters?: Monitoring
     setError(null);
     try {
       const [ar, env, utl, exc] = await Promise.all([
-        listAreas(areaFilters), listEnvironmental(monFilters), listUtility(monFilters), listExcursions(),
+        listAreas(stableAreaFilters), listEnvironmental(stableMonFilters),
+        listUtility(stableMonFilters), listExcursions(),
       ]);
       setAreas(ar);
       setEnvironmental(env);
@@ -38,7 +73,7 @@ export function useMonitoring(areaFilters?: AreaFilters, monFilters?: Monitoring
     } finally {
       setLoading(false);
     }
-  }, [JSON.stringify(areaFilters), JSON.stringify(monFilters)]);
+  }, [stableAreaFilters, stableMonFilters]);
 
   useEffect(() => { refresh(); }, [refresh]);
   return { areas, environmental, utility, excursions, metrics, loading, error, refresh };
@@ -61,5 +96,8 @@ export function useAreaItem(id: string) {
 
 export function useMonitoringActor() {
   const { user, profile } = useAuth();
-  return { id: user?.uid || 'anonymous', name: profile?.full_name || profile?.email || 'Unknown', role: normalizeRole(profile?.role) };
+  const id = user?.uid || 'anonymous';
+  const name = profile?.full_name || profile?.email || 'Unknown';
+  const role = normalizeRole(profile?.role);
+  return useMemo(() => ({ id, name, role }), [id, name, role]);
 }

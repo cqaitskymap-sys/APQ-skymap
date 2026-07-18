@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -72,7 +72,7 @@ export function ValidationDetailView({ record, onRefresh, defaultTab = 'overview
   const [attachCategory, setAttachCategory] = useState(ATTACHMENT_CATEGORIES[0]);
   const [saving, setSaving] = useState(false);
 
-  const loadSub = async () => {
+  const loadSub = useCallback(async () => {
     setLoading(true);
     const [p, st, att, ap, logs, proc, clean, csv] = await Promise.all([
       getProtocol(record.id), listExecutionSteps(record.id), getValidationAttachments(record.id),
@@ -82,9 +82,9 @@ export function ValidationDetailView({ record, onRefresh, defaultTab = 'overview
     setProtocol(p); setSteps(st); setAttachments(att); setApprovals(ap);
     setAuditLogs(logs); setProcessData(proc); setCleaningData(clean); setCsvData(csv);
     setLoading(false);
-  };
+  }, [record.id]);
 
-  useEffect(() => { void loadSub(); }, [record.id]);
+  useEffect(() => { void loadSub(); }, [loadSub]);
 
   const protocolForm = useForm<ProtocolInput>({
     resolver: zodResolver(protocolSchema),
@@ -100,14 +100,16 @@ export function ValidationDetailView({ record, onRefresh, defaultTab = 'overview
     resolver: zodResolver(approvalSchema),
     defaultValues: { validation_id: record.id, approval_level: 'Final', decision: 'approved', comments: '' },
   });
+  const { reset: resetProtocolForm } = protocolForm;
+  const { setValue: setStepFormValue } = stepForm;
 
   useEffect(() => {
-    if (protocol) protocolForm.reset({ ...protocol, validation_id: record.id });
-  }, [protocol]);
+    if (protocol) resetProtocolForm({ ...protocol, validation_id: record.id });
+  }, [protocol, record.id, resetProtocolForm]);
 
   useEffect(() => {
-    stepForm.setValue('test_step_no', steps.length + 1);
-  }, [steps.length]);
+    setStepFormValue('test_step_no', steps.length + 1);
+  }, [setStepFormValue, steps.length]);
 
   const handleUpdate = async (data: ValidationCreateInput) => {
     try {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 import {
   listStudies, getStudyById, computeDashboardMetrics, syncSampleDueNotifications,
@@ -13,6 +13,33 @@ import type {
 import { normalizeRole } from '@/lib/permissions';
 
 export function useStabilityStudies(filters?: StabilityFilters) {
+  const hasFilters = filters !== undefined;
+  const product = filters?.product;
+  const batchNumber = filters?.batch_number;
+  const studyType = filters?.study_type;
+  const storageCondition = filters?.storage_condition;
+  const interval = filters?.interval;
+  const status = filters?.status;
+  const dateFrom = filters?.date_from;
+  const dateTo = filters?.date_to;
+  const search = filters?.search;
+  const stableFilters = useMemo<StabilityFilters | undefined>(
+    () => hasFilters ? {
+      product,
+      batch_number: batchNumber,
+      study_type: studyType,
+      storage_condition: storageCondition,
+      interval,
+      status,
+      date_from: dateFrom,
+      date_to: dateTo,
+      search,
+    } : undefined,
+    [
+      hasFilters, product, batchNumber, studyType, storageCondition, interval,
+      status, dateFrom, dateTo, search,
+    ],
+  );
   const [records, setRecords] = useState<StabilityStudy[]>([]);
   const [pulls, setPulls] = useState<StabilitySamplePull[]>([]);
   const [results, setResults] = useState<StabilityResult[]>([]);
@@ -26,7 +53,7 @@ export function useStabilityStudies(filters?: StabilityFilters) {
     try {
       await syncSampleDueNotifications();
       const [data, pullData, resultData] = await Promise.all([
-        listStudies(filters), listAllSamplePulls(), listAllResults(),
+        listStudies(stableFilters), listAllSamplePulls(), listAllResults(),
       ]);
       setRecords(data);
       setPulls(pullData);
@@ -37,7 +64,7 @@ export function useStabilityStudies(filters?: StabilityFilters) {
     } finally {
       setLoading(false);
     }
-  }, [JSON.stringify(filters)]);
+  }, [stableFilters]);
 
   useEffect(() => { refresh(); }, [refresh]);
 
@@ -65,9 +92,8 @@ export function useStabilityStudy(id: string) {
 
 export function useStabilityActor() {
   const { user, profile } = useAuth();
-  return {
-    id: user?.uid || 'anonymous',
-    name: profile?.full_name || profile?.email || 'Unknown User',
-    role: normalizeRole(profile?.role),
-  };
+  const id = user?.uid || 'anonymous';
+  const name = profile?.full_name || profile?.email || 'Unknown User';
+  const role = normalizeRole(profile?.role);
+  return useMemo(() => ({ id, name, role }), [id, name, role]);
 }

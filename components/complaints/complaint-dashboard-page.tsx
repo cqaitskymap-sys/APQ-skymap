@@ -185,14 +185,14 @@ function ComplaintDashboardContent() {
   const overdueComplaints = useMemo(() => getOverdueComplaints(records).slice(0, 10), [records]);
   const criticalComplaints = useMemo(() => getCriticalComplaints(records).slice(0, 10), [records]);
 
-  const viewLink = (r: ComplaintRecord) => (
+  const viewLink = useCallback((r: ComplaintRecord) => (
     <Link
       href={`/qms/complaints/${r.id}`}
       onClick={() => void logComplaintRecordOpened(actor, r.id, r.complaint_number)}
     >
       <Button variant="ghost" size="sm"><Eye className="h-4 w-4" /></Button>
     </Link>
-  );
+  ), [actor]);
 
   const recentColumns = useMemo(() => [
     { key: 'complaint_number', header: 'Complaint No', render: (r: ComplaintRecord) => <span className="font-mono text-blue-600">{r.complaint_number}</span> },
@@ -206,7 +206,7 @@ function ComplaintDashboardContent() {
     { key: 'assigned', header: 'Assigned To', render: (r: ComplaintRecord) => r.assigned_to_name || r.assigned_to || '—' },
     { key: 'due_date', header: 'Due Date', render: (r: ComplaintRecord) => r.due_date || '—' },
     { key: 'actions', header: 'Action', render: (r: ComplaintRecord) => viewLink(r) },
-  ], [actor]);
+  ], [viewLink]);
 
   const overdueColumns = useMemo(() => [
     { key: 'complaint_number', header: 'Complaint No', render: (r: ComplaintRecord) => <span className="font-mono text-red-600">{r.complaint_number}</span> },
@@ -217,7 +217,7 @@ function ComplaintDashboardContent() {
     { key: 'assigned', header: 'Assigned To', render: (r: ComplaintRecord) => r.assigned_to_name || r.assigned_to || '—' },
     { key: 'status', header: 'Status', render: (r: ComplaintRecord) => <ComplaintStatusBadge status={r.status} /> },
     { key: 'actions', header: 'Action', render: (r: ComplaintRecord) => viewLink(r) },
-  ], [actor]);
+  ], [viewLink]);
 
   const criticalColumns = useMemo(() => [
     { key: 'complaint_number', header: 'Complaint No', render: (r: ComplaintRecord) => <span className="font-mono text-red-600">{r.complaint_number}</span> },
@@ -229,7 +229,7 @@ function ComplaintDashboardContent() {
     { key: 'capa', header: 'CAPA Required', render: (r: ComplaintRecord) => yesNo(r.capa_required || isComplaintCapaLinked(r)) },
     { key: 'status', header: 'Status', render: (r: ComplaintRecord) => <ComplaintStatusBadge status={r.status} /> },
     { key: 'actions', header: 'Action', render: (r: ComplaintRecord) => viewLink(r) },
-  ], [actor]);
+  ], [viewLink]);
 
   return (
     <ComplaintDashboardAccessGuard>

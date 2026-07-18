@@ -6,14 +6,19 @@
     "serve": "npm run build && firebase emulators:start --only functions",
     "deploy": "firebase deploy --only functions"
   },
-  "engines": { "node": "20" },
+  "engines": {
+    "node": "20"
+  },
   "main": "lib/index.js",
   "dependencies": {
-    "firebase-admin": "^12.0.0",
-    "firebase-functions": "^5.0.0"
+    "firebase-admin": "^14.2.0",
+    "firebase-functions": "^7.3.0"
   },
   "devDependencies": {
     "typescript": "^5.0.0"
+  },
+  "overrides": {
+    "uuid": "^11.1.1"
   },
   "private": true
 }

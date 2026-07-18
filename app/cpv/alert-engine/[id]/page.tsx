@@ -3,7 +3,8 @@ import { AlertEngineDetailView } from '@/components/cpv/alert-engine/alert-engin
 
 export const dynamic = 'force-dynamic';
 
-export default function AlertEngineDetailRoutePage({ params }: { params: { id: string } }) {
+export default async function AlertEngineDetailRoutePage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   return (
     <AlertEngineAccessGuard>
       <AlertEngineDetailView id={params.id} />

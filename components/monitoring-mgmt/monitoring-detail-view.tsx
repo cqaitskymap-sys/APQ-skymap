@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Printer, Upload, Download } from 'lucide-react';
 import { toast } from 'sonner';
@@ -34,7 +34,7 @@ export function MonitoringDetailView({ area, onRefresh }: { area: AreaRecord; on
   const [auditLogs, setAuditLogs] = useState<Record<string, unknown>[]>([]);
   const [attachCategory, setAttachCategory] = useState('Report');
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     const [env, allExc, att, logs] = await Promise.all([
       listEnvironmental(undefined, area.id),
@@ -47,9 +47,9 @@ export function MonitoringDetailView({ area, onRefresh }: { area: AreaRecord; on
     setAttachments(att);
     setAuditLogs(logs);
     setLoading(false);
-  };
+  }, [area.area_name, area.id]);
 
-  useEffect(() => { void load(); }, [area.id]);
+  useEffect(() => { void load(); }, [load]);
 
   const handleUpdate = async (d: AreaCreateInput) => {
     await updateArea(area.id, d, actor);

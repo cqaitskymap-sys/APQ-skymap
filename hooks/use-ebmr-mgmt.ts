@@ -1,12 +1,18 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 import { listEbmr, computeEbmrMetrics, listAllCppRecords, listAllIpcChecks, listAllManufacturingSteps } from '@/lib/ebmr-mgmt-service';
 import type { EbmrRecord, EbmrFilters, EbmrDashboardMetrics, CppRecord, IpcCheckRecord, ManufacturingStepRecord } from '@/lib/ebmr-mgmt-types';
 import { normalizeRole } from '@/lib/permissions';
 
 export function useEbmr(filters?: EbmrFilters) {
+  const hasFilters = filters !== undefined;
+  const { batch_status, search } = filters ?? {};
+  const stableFilters = useMemo(
+    () => hasFilters ? { batch_status, search } : undefined,
+    [hasFilters, batch_status, search],
+  );
   const [records, setRecords] = useState<EbmrRecord[]>([]);
   const [cppRecords, setCppRecords] = useState<CppRecord[]>([]);
   const [ipcRecords, setIpcRecords] = useState<IpcCheckRecord[]>([]);
@@ -20,7 +26,7 @@ export function useEbmr(filters?: EbmrFilters) {
     setError(null);
     try {
       const [data, cpp, ipc, steps] = await Promise.all([
-        listEbmr(filters), listAllCppRecords(), listAllIpcChecks(), listAllManufacturingSteps(),
+        listEbmr(stableFilters), listAllCppRecords(), listAllIpcChecks(), listAllManufacturingSteps(),
       ]);
       setRecords(data);
       setCppRecords(cpp);
@@ -32,7 +38,7 @@ export function useEbmr(filters?: EbmrFilters) {
     } finally {
       setLoading(false);
     }
-  }, [JSON.stringify(filters)]);
+  }, [stableFilters]);
 
   useEffect(() => { refresh(); }, [refresh]);
   return { records, cppRecords, ipcRecords, mfgSteps, metrics, loading, error, refresh };

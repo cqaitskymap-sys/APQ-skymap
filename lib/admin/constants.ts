@@ -42,6 +42,12 @@ export const ROLE_PRESET_OPTIONS = [
 export const ADMIN_ROLES = [
   { id: 'super_admin', name: 'Super Admin', level: 100 },
   { id: 'admin', name: 'Admin', level: 90 },
+  { id: 'qa', name: 'QA', level: 65 },
+  { id: 'qc', name: 'QC', level: 65 },
+  { id: 'production', name: 'Production', level: 65 },
+  { id: 'engineering', name: 'Engineering', level: 65 },
+  { id: 'warehouse', name: 'Warehouse', level: 65 },
+  { id: 'regulatory', name: 'Regulatory', level: 65 },
   { id: 'head_qa', name: 'Head QA', level: 80 },
   { id: 'qa_manager', name: 'QA Manager', level: 70 },
   { id: 'qa_executive', name: 'QA Executive', level: 60 },
@@ -54,7 +60,13 @@ export const ADMIN_ROLES = [
   { id: 'engineering_manager', name: 'Engineering Manager', level: 70 },
   { id: 'engineering_executive', name: 'Engineering Executive', level: 60 },
   { id: 'regulatory_affairs', name: 'Regulatory Affairs', level: 65 },
+  { id: 'hr', name: 'HR', level: 65 },
+  { id: 'training_coordinator', name: 'Training Coordinator', level: 65 },
+  { id: 'document_controller', name: 'Document Controller', level: 65 },
+  { id: 'department_head', name: 'Department Head', level: 75 },
+  { id: 'employee', name: 'Employee', level: 30 },
   { id: 'auditor', name: 'Auditor', level: 50 },
+  { id: 'vendor', name: 'Vendor', level: 20 },
   { id: 'viewer', name: 'Viewer', level: 10 },
 ] as const;
 

@@ -1,10 +1,40 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { createRemoteJWKSet } from 'jose/jwks/remote';
+import { jwtVerify } from 'jose/jwt/verify';
 
 const PROTECTED_PREFIXES = ['/dashboard', '/cpv', '/qms', '/pqr', '/admin', '/training'];
 const AUTH_ROUTES = ['/auth/login', '/auth/signup', '/login'];
+const FIREBASE_JWKS = createRemoteJWKSet(
+  new URL('https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com'),
+);
 
-export function middleware(request: NextRequest) {
+async function hasValidSession(request: NextRequest): Promise<boolean> {
+  const token = request.cookies.get('__session')?.value;
+  if (!token) return false;
+
+  if (
+    process.env.NODE_ENV !== 'production'
+    && process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATOR === 'true'
+  ) {
+    return true;
+  }
+
+  const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+  if (!projectId) return false;
+  try {
+    const { payload } = await jwtVerify(token, FIREBASE_JWKS, {
+      issuer: `https://securetoken.google.com/${projectId}`,
+      audience: projectId,
+      algorithms: ['RS256'],
+    });
+    return payload.active !== false;
+  } catch {
+    return false;
+  }
+}
+
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   if (pathname === '/qms/training' || pathname.startsWith('/qms/training/')) {
@@ -17,16 +47,18 @@ export function middleware(request: NextRequest) {
   );
   const isAuthRoute = AUTH_ROUTES.some((route) => pathname.startsWith(route));
 
-  const session = request.cookies.get('firebase-auth-session')?.value
-    || request.cookies.get('__session')?.value;
+  const sessionIsValid = await hasValidSession(request);
 
-  if (isProtected && !session) {
+  if (isProtected && !sessionIsValid) {
     const loginUrl = new URL('/auth/login', request.url);
     loginUrl.searchParams.set('redirect', pathname);
-    return NextResponse.redirect(loginUrl);
+    const response = NextResponse.redirect(loginUrl);
+    response.cookies.delete('__session');
+    response.cookies.delete('firebase-auth-session');
+    return response;
   }
 
-  if (isAuthRoute && session) {
+  if (isAuthRoute && sessionIsValid) {
     return NextResponse.redirect(new URL('/dashboard', request.url));
   }
 

@@ -1,10 +1,12 @@
-'use client';
+'use client';;
+import { use } from "react";
 
 import { CcDetailView } from '@/components/change-control/cc-detail-view';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { useChangeControl } from '@/hooks/use-change-control';
 
-export default function ChangeControlDetailPage({ params }: { params: { id: string } }) {
+export default function ChangeControlDetailPage(props: { params: Promise<{ id: string }> }) {
+  const params = use(props.params);
   const { record, loading, refresh } = useChangeControl(params.id);
 
   if (loading) return <LoadingSpinner label="Loading change control..." />;

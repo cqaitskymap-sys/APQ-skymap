@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { ParameterAccessGuard } from '@/components/admin/parameters/parameter-access-guard';
@@ -117,7 +117,8 @@ function EditParameterContent({ id }: { id: string }) {
   );
 }
 
-export default function EditParameterPage({ params }: { params: { id: string } }) {
+export default function EditParameterPage(props: { params: Promise<{ id: string }> }) {
+  const params = use(props.params);
   return (
     <ParameterAccessGuard>
       <EditParameterContent id={params.id} />

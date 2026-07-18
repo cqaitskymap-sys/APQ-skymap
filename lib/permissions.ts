@@ -22,7 +22,13 @@ const LEGACY_ROLE_MAP: Record<string, AdminRoleId> = {
   engineering: 'engineering_manager',
   warehouse: 'warehouse_manager',
   regulatory: 'regulatory_affairs',
+  hr: 'hr',
+  training_coordinator: 'training_coordinator',
+  document_controller: 'document_controller',
+  department_head: 'department_head',
+  employee: 'employee',
   auditor: 'auditor',
+  vendor: 'vendor',
   viewer: 'viewer',
   head_qa: 'head_qa',
   qa_manager: 'qa_manager',
@@ -42,7 +48,13 @@ export const ROLE_DEFINITIONS: { id: UserRole; label: string; description: strin
   { id: 'engineering', label: 'Engineering', description: 'Equipment, utility, and validation' },
   { id: 'warehouse', label: 'Warehouse', description: 'Material, inventory, and dispensing' },
   { id: 'regulatory', label: 'Regulatory', description: 'Change control, recall, and documents' },
+  { id: 'hr', label: 'HR', description: 'Employee and training coordination' },
+  { id: 'training_coordinator', label: 'Training Coordinator', description: 'Training planning and administration' },
+  { id: 'document_controller', label: 'Document Controller', description: 'Controlled document administration' },
+  { id: 'department_head', label: 'Department Head', description: 'Department review and oversight' },
+  { id: 'employee', label: 'Employee', description: 'Assigned training and controlled document access' },
   { id: 'auditor', label: 'Auditor', description: 'Read-only access across modules' },
+  { id: 'vendor', label: 'Vendor', description: 'Restricted vendor portal access' },
 ];
 
 export function normalizeRole(role?: string | null): AdminRoleId {
@@ -63,13 +75,18 @@ function buildDefaultPermissions(roleId: AdminRoleId): Record<AdminModule, Recor
   const matrix = {} as Record<AdminModule, Record<PermissionAction, boolean>>;
   const isSuperAdmin = roleId === 'super_admin';
   const isAdmin = roleId === 'admin' || isSuperAdmin;
-  const isAuditor = roleId === 'auditor' || roleId === 'viewer';
+  const isAuditor = roleId === 'auditor';
   const isQa = ['head_qa', 'qa_manager', 'qa_executive'].includes(roleId);
   const isQc = ['qc_manager', 'qc_executive'].includes(roleId);
   const isProduction = ['production_manager', 'production_executive'].includes(roleId);
   const isEngineering = ['engineering_manager', 'engineering_executive'].includes(roleId);
   const isWarehouse = ['warehouse_manager', 'warehouse_executive'].includes(roleId);
   const isRegulatory = roleId === 'regulatory_affairs';
+  const isTraining = roleId === 'training_coordinator' || roleId === 'hr';
+  const isDocumentController = roleId === 'document_controller';
+  const isDepartmentHead = roleId === 'department_head';
+  const isEmployee = roleId === 'employee' || roleId === 'viewer';
+  const isVendor = roleId === 'vendor';
 
   for (const mod of ADMIN_MODULES) {
     matrix[mod] = {} as Record<PermissionAction, boolean>;
@@ -105,8 +122,24 @@ function buildDefaultPermissions(roleId: AdminRoleId): Record<AdminModule, Recor
         matrix[mod][action] = ['Dashboard', 'Change Control', 'Recall', 'Document', 'PQR', 'Complaint'].includes(mod)
           ? ['view', 'create', 'edit', 'review', 'approve', 'export'].includes(action)
           : action === 'view';
+      } else if (isTraining) {
+        matrix[mod][action] = ['Dashboard', 'Training', 'Reports'].includes(mod)
+          ? ['view', 'create', 'edit', 'review', 'export'].includes(action)
+          : false;
+      } else if (isDocumentController) {
+        matrix[mod][action] = ['Dashboard', 'Document', 'Reports'].includes(mod)
+          ? ['view', 'create', 'edit', 'review', 'export', 'archive'].includes(action)
+          : false;
+      } else if (isDepartmentHead) {
+        matrix[mod][action] = ['Dashboard', 'Document', 'Training', 'Deviation', 'CAPA', 'Reports'].includes(mod)
+          ? ['view', 'review', 'approve', 'export'].includes(action)
+          : false;
+      } else if (isEmployee) {
+        matrix[mod][action] = ['Dashboard', 'Document', 'Training'].includes(mod) && action === 'view';
+      } else if (isVendor) {
+        matrix[mod][action] = mod === 'Vendor' && action === 'view';
       } else {
-        matrix[mod][action] = ['view', 'create', 'edit'].includes(action) && !['Admin'].includes(mod);
+        matrix[mod][action] = false;
       }
     }
   }
@@ -155,7 +188,7 @@ export function getDefaultPermissionMatrix(roleId: AdminRoleId): PermissionMatri
 
 export function canAccessAdminPanel(role?: string | null): boolean {
   const r = normalizeRole(role);
-  return ['super_admin', 'admin', 'auditor'].includes(r);
+  return ['super_admin', 'admin', 'head_qa', 'auditor'].includes(r);
 }
 
 export function canManageRoles(role?: string | null): boolean {
@@ -241,6 +274,43 @@ export function canManageUsers(role?: string | null): boolean {
 export function canViewUsers(role?: string | null): boolean {
   const r = normalizeRole(role);
   return ['super_admin', 'admin', 'head_qa', 'auditor'].includes(r);
+}
+
+export function canAccessAdminRoute(role: string | null | undefined, pathname: string): boolean {
+  if (!canAccessAdminPanel(role)) return false;
+  if (pathname === '/admin' || pathname === '/dashboard/admin') return true;
+
+  const routeChecks: Array<[string, (value?: string | null) => boolean]> = [
+    ['/admin/users', canViewUsers],
+    ['/admin/roles', canViewRoles],
+    ['/admin/departments', canViewDepartments],
+    ['/admin/designations', canViewDesignations],
+    ['/admin/company-site', canViewCompanySites],
+    ['/admin/products', canViewProducts],
+    ['/admin/batches', canViewBatches],
+    ['/admin/parameters', canViewParameters],
+    ['/admin/workflows', canViewWorkflows],
+    ['/admin/approval-matrix', canViewApprovalMatrix],
+    ['/admin/document-numbering', canViewDocumentNumbering],
+    ['/admin/audit-trail', canViewAuditTrail],
+    ['/admin/esign-settings', canViewEsignSettings],
+    ['/admin/notifications', canViewNotificationSettings],
+    ['/admin/backup', canViewBackup],
+    ['/admin/system-settings', canViewSystemSettings],
+    ['/dashboard/admin/login-activity', canViewAuditTrail],
+    ['/dashboard/admin/user-access-review', canViewUsers],
+    ['/dashboard/admin/password-policy', canViewSystemSettings],
+    ['/dashboard/admin/email-sms-templates', canViewNotificationSettings],
+    ['/dashboard/admin/module-configuration', canViewSystemSettings],
+    ['/dashboard/admin/master-data-import-export', canViewSystemSettings],
+    ['/dashboard/admin/data-backup-log', canViewBackup],
+    ['/dashboard/admin/firebase-status', canViewSystemSettings],
+    ['/dashboard/admin/system-health', canViewSystemSettings],
+  ];
+  const match = routeChecks.find(([prefix]) =>
+    pathname === prefix || pathname.startsWith(`${prefix}/`),
+  );
+  return match ? match[1](role) : false;
 }
 
 export function canEditUsers(role?: string | null): boolean {
@@ -598,10 +668,12 @@ const MODULE_ROLE_ACCESS: Record<AppModule, AdminRoleId[]> = {
   stability: ['super_admin', 'admin', 'head_qa', 'qa_manager', 'qc_manager'],
   complaints: ['super_admin', 'admin', 'head_qa', 'qa_manager', 'regulatory_affairs'],
   recall: ['super_admin', 'admin', 'head_qa', 'qa_manager', 'regulatory_affairs'],
-  dms: ['super_admin', 'admin', 'head_qa', 'qa_manager', 'regulatory_affairs'],
-  training: ['super_admin', 'admin', 'head_qa', 'qa_manager'],
+  dms: ['super_admin', 'admin', 'head_qa', 'qa_manager', 'regulatory_affairs',
+    'document_controller', 'department_head', 'employee', 'training_coordinator', 'hr'],
+  training: ['super_admin', 'admin', 'head_qa', 'qa_manager', 'training_coordinator',
+    'hr', 'department_head', 'employee'],
   audit: ['super_admin', 'admin', 'head_qa', 'qa_manager', 'auditor'],
-  vendors: ['super_admin', 'admin', 'head_qa', 'qa_manager', 'warehouse_manager'],
+  vendors: ['super_admin', 'admin', 'head_qa', 'qa_manager', 'warehouse_manager', 'vendor'],
   validation: ['super_admin', 'admin', 'head_qa', 'qa_manager', 'engineering_manager'],
   csv: ['super_admin', 'admin', 'head_qa', 'qa_manager', 'engineering_manager'],
   equipment: ['super_admin', 'admin', 'engineering_manager', 'production_manager'],
@@ -618,11 +690,16 @@ export function canAccessModule(role: string | null | undefined, module: AppModu
       'deviation', 'oos', 'capa', 'change_control', 'cpv', 'vendors', 'validation', 'csv',
       'equipment', 'monitoring', 'warehouse', 'ebmr'].includes(module);
   }
+  if (r === 'document_controller') return module === 'dms';
+  if (['training_coordinator', 'hr'].includes(r)) return ['training', 'dms'].includes(module);
+  if (r === 'department_head') return ['dms', 'training', 'deviation', 'capa'].includes(module);
+  if (r === 'employee') return ['dms', 'training'].includes(module);
+  if (r === 'vendor') return module === 'vendors';
   return MODULE_ROLE_ACCESS[module]?.includes(r) ?? false;
 }
 
 export function canEditModule(role: string | null | undefined, module: AppModule): boolean {
-  if (isReadOnlyRole(role)) return false;
+  if (isReadOnlyRole(role) || ['employee', 'vendor', 'department_head'].includes(normalizeRole(role))) return false;
   return canAccessModule(role, module);
 }
 

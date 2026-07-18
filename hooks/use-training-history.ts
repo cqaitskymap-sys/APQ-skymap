@@ -28,6 +28,23 @@ export function useTrainingHistory(employeeId?: string, filters?: HistoryFilters
     role,
     department: profile?.department,
   }), [user?.uid, profile?.full_name, profile?.email, profile?.department, role]);
+  const hasFilters = filters !== undefined;
+  const {
+    department, employee_id, training_type, status,
+    date_from, date_to, search,
+  } = filters ?? {};
+  const stableFilters = useMemo<HistoryFilters | undefined>(() => hasFilters ? ({
+    department,
+    employee_id,
+    training_type,
+    status,
+    date_from,
+    date_to,
+    search,
+  }) : undefined, [
+    hasFilters, department, employee_id, training_type,
+    status, date_from, date_to, search,
+  ]);
 
   const effectiveEmployeeId = useMemo(() => {
     if (isEmployeeHistoryView(role)) return user?.uid || '';
@@ -46,10 +63,10 @@ export function useTrainingHistory(employeeId?: string, filters?: HistoryFilters
       const [historyData, deptData] = await Promise.all([
         fetchEmployeeHistory({
           employeeId: effectiveEmployeeId,
-          role, userId: user?.uid, userDepartment: profile?.department, filters,
+          role, userId: user?.uid, userDepartment: profile?.department, filters: stableFilters,
         }),
         fetchDepartmentHistory({
-          department: isDepartmentHistoryView(role) ? profile?.department : filters?.department,
+          department: isDepartmentHistoryView(role) ? profile?.department : stableFilters?.department,
           role, userId: user?.uid, userDepartment: profile?.department,
         }),
       ]);
@@ -68,7 +85,7 @@ export function useTrainingHistory(employeeId?: string, filters?: HistoryFilters
       setLoading(false);
       setRefreshing(false);
     }
-  }, [role, user?.uid, profile?.department, effectiveEmployeeId, JSON.stringify(filters)]);
+  }, [role, user?.uid, profile?.department, effectiveEmployeeId, stableFilters, actor]);
 
   useEffect(() => { refresh(); }, [refresh]);
 

@@ -26,6 +26,25 @@ export function useTrainingCompletion(filters?: CompletionFilters) {
     role,
     department: profile?.department,
   }), [user?.uid, profile?.full_name, profile?.email, profile?.department, role]);
+  const hasFilters = filters !== undefined;
+  const {
+    department, employee_id, attendance_status, completion_status,
+    training_result, trainer, date_from, date_to, search,
+  } = filters ?? {};
+  const stableFilters = useMemo<CompletionFilters | undefined>(() => hasFilters ? ({
+    department,
+    employee_id,
+    attendance_status,
+    completion_status,
+    training_result,
+    trainer,
+    date_from,
+    date_to,
+    search,
+  }) : undefined, [
+    hasFilters, department, employee_id, attendance_status, completion_status,
+    training_result, trainer, date_from, date_to, search,
+  ]);
 
   const refresh = useCallback(async () => {
     if (!canViewCompletion(role)) {
@@ -40,7 +59,7 @@ export function useTrainingCompletion(filters?: CompletionFilters) {
         role,
         userId: user?.uid,
         userDepartment: profile?.department,
-        filters,
+        filters: stableFilters,
       }));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load completion data');
@@ -48,7 +67,7 @@ export function useTrainingCompletion(filters?: CompletionFilters) {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [role, user?.uid, profile?.department, JSON.stringify(filters)]);
+  }, [role, user?.uid, profile?.department, stableFilters]);
 
   useEffect(() => { refresh(); }, [refresh]);
 

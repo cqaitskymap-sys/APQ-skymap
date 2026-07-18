@@ -1,10 +1,11 @@
 import { redirect } from 'next/navigation';
 
-export default function LoginRedirect({
-  searchParams,
-}: {
-  searchParams?: { redirect?: string };
-}) {
+export default async function LoginRedirect(
+  props: {
+    searchParams?: Promise<{ redirect?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const qs = searchParams?.redirect ? `?redirect=${encodeURIComponent(searchParams.redirect)}` : '';
   redirect(`/auth/login${qs}`);
 }

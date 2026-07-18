@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, use } from 'react';
 import { BackupAccessGuard } from '@/components/admin/backup/backup-access-guard';
 import { BackupDetailView } from '@/components/admin/backup/backup-detail-view';
 import { LoadingSkeleton } from '@/components/admin/dashboard/loading-skeleton';
@@ -41,7 +41,8 @@ function BackupDetailContent({ id }: { id: string }) {
   return <BackupDetailView backup={backup} auditMeta={auditMeta} onRefresh={load} />;
 }
 
-export default function BackupDetailPage({ params }: { params: { id: string } }) {
+export default function BackupDetailPage(props: { params: Promise<{ id: string }> }) {
+  const params = use(props.params);
   return (
     <BackupAccessGuard>
       <BackupDetailContent id={params.id} />

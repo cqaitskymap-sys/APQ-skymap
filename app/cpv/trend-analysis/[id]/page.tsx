@@ -3,7 +3,8 @@ import { TrendAnalysisDetailView } from '@/components/cpv/trend-analysis/trend-a
 
 export const dynamic = 'force-dynamic';
 
-export default function TrendAnalysisDetailRoutePage({ params }: { params: { id: string } }) {
+export default async function TrendAnalysisDetailRoutePage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   return (
     <TrendAnalysisAccessGuard>
       <TrendAnalysisDetailView id={params.id} />

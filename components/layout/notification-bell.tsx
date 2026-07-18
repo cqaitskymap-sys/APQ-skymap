@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { formatDistanceToNow } from 'date-fns';
 import { Bell } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -13,24 +14,31 @@ import {
 import { useAuth } from '@/contexts/auth-context';
 import { isFirebaseConfigured } from '@/lib/firebase-config';
 import {
-  subscribeToNotifications, markNotificationAsRead, type NotificationRecord,
+  getNotificationActionLink, subscribeToNotifications, markNotificationAsRead,
+  type NotificationRecord,
 } from '@/lib/notification-service';
 import { cn } from '@/lib/utils';
 
 export function NotificationBell() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
+  const router = useRouter();
   const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
 
   useEffect(() => {
     if (!user?.uid || !isFirebaseConfigured()) return;
-    return subscribeToNotifications(user.uid, setNotifications, undefined, 15);
-  }, [user?.uid]);
+    return subscribeToNotifications(user.uid, setNotifications, undefined, 15, profile?.role);
+  }, [profile?.role, user?.uid]);
 
   const unreadCount = notifications.filter((n) => !n.isRead).length;
 
   const handleClick = async (n: NotificationRecord) => {
-    if (!n.isRead && n.id) await markNotificationAsRead(n.id);
-    if (n.actionLink) window.location.href = n.actionLink;
+    if (!n.isRead && n.id && user) {
+      await markNotificationAsRead(n.id, {
+        id: user.uid,
+        name: profile?.full_name || profile?.email || 'User',
+      });
+    }
+    router.push(getNotificationActionLink(n));
   };
 
   return (

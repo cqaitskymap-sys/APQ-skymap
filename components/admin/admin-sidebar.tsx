@@ -14,6 +14,13 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ADMIN_NAV_ITEMS } from '@/lib/admin/constants';
 import { useAdminPermissions } from '@/hooks/use-admin-permissions';
+import {
+  canViewApprovalMatrix, canViewAuditTrail, canViewBackup, canViewBatches,
+  canViewCompanySites, canViewDepartments, canViewDesignations,
+  canViewDocumentNumbering, canViewEsignSettings, canViewNotificationSettings,
+  canViewParameters, canViewProducts, canViewRoles, canViewSystemSettings,
+  canViewUsers, canViewWorkflows,
+} from '@/lib/permissions';
 
 const ICON_MAP: Record<string, React.ElementType> = {
   LayoutDashboard, Users, Shield, Building2, BadgeCheck, Factory,
@@ -29,7 +36,7 @@ interface AdminSidebarProps {
 
 export function AdminSidebar({ collapsed, onToggle }: AdminSidebarProps) {
   const pathname = usePathname();
-  const { role, canManageRoles, isReadOnly } = useAdminPermissions();
+  const { role } = useAdminPermissions();
 
   const isActive = (href: string) => {
     if (href === '/admin') {
@@ -68,19 +75,44 @@ export function AdminSidebar({ collapsed, onToggle }: AdminSidebarProps) {
     return pathname === href || pathname.startsWith(href + '/');
   };
 
+  const routeAccess: Array<[string, (currentRole: string) => boolean]> = [
+    ['/admin/users', canViewUsers],
+    ['/admin/roles', canViewRoles],
+    ['/admin/departments', canViewDepartments],
+    ['/admin/designations', canViewDesignations],
+    ['/admin/company-site', canViewCompanySites],
+    ['/admin/products', canViewProducts],
+    ['/admin/batches', canViewBatches],
+    ['/admin/parameters', canViewParameters],
+    ['/admin/workflows', canViewWorkflows],
+    ['/admin/approval-matrix', canViewApprovalMatrix],
+    ['/admin/document-numbering', canViewDocumentNumbering],
+    ['/admin/audit-trail', canViewAuditTrail],
+    ['/dashboard/admin/login-activity', canViewAuditTrail],
+    ['/dashboard/admin/user-access-review', canViewUsers],
+    ['/admin/esign-settings', canViewEsignSettings],
+    ['/admin/notifications', canViewNotificationSettings],
+    ['/dashboard/admin/email-sms-templates', canViewNotificationSettings],
+    ['/dashboard/admin/module-configuration', canViewSystemSettings],
+    ['/dashboard/admin/master-data-import-export', canViewSystemSettings],
+    ['/admin/backup', canViewBackup],
+    ['/dashboard/admin/data-backup-log', canViewBackup],
+    ['/admin/system-settings', canViewSystemSettings],
+    ['/dashboard/admin/password-policy', canViewSystemSettings],
+    ['/dashboard/admin/firebase-status', canViewSystemSettings],
+    ['/dashboard/admin/system-health', canViewSystemSettings],
+  ];
   const filteredNav = ADMIN_NAV_ITEMS.filter((item) => {
-    if (item.href.includes('/roles') && !canManageRoles) return false;
-    if (item.href.includes('/system-settings') && !canManageRoles) return false;
-    if (item.href.includes('/password-policy') && !canManageRoles) return false;
-    if (item.href.includes('/backup') && isReadOnly) return false;
-    if (item.href.includes('/data-backup-log') && isReadOnly) return false;
-    return true;
+    const accessRule = routeAccess.find(([prefix]) =>
+      item.href === prefix || item.href.startsWith(`${prefix}/`),
+    );
+    return accessRule ? accessRule[1](role) : true;
   });
 
   return (
     <aside
       className={cn(
-        'h-full flex flex-col border-r bg-slate-50 dark:bg-slate-950 transition-all duration-300',
+        'hidden h-full flex-col border-r bg-slate-50 transition-all duration-300 dark:bg-slate-950 lg:flex',
         collapsed ? 'w-[68px]' : 'w-[280px]'
       )}
     >
@@ -138,8 +170,8 @@ export function AdminSidebar({ collapsed, onToggle }: AdminSidebarProps) {
 
       {!collapsed && (
         <div className="p-4 border-t text-xs text-muted-foreground">
-          <p>21 CFR Part 11 Compliant</p>
-          <p className="mt-1">GxP Validated System</p>
+          <p>GxP control framework enabled</p>
+          <p className="mt-1">Validation evidence must be maintained</p>
         </div>
       )}
     </aside>

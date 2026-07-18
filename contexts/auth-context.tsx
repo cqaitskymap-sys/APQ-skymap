@@ -1,7 +1,7 @@
 'use client';
 
 import {
-  createContext, useContext, useEffect, useState, ReactNode,
+  createContext, useCallback, useContext, useEffect, useState, ReactNode,
 } from 'react';
 import type { User } from 'firebase/auth';
 import type { Profile } from '@/lib/firebase';
@@ -20,9 +20,12 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-function setAuthSessionCookie() {
+async function syncAuthSessionCookie(user: User) {
   if (typeof document === 'undefined') return;
-  document.cookie = `firebase-auth-session=1; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
+  const token = await user.getIdToken();
+  const secure = window.location.protocol === 'https:' ? '; Secure' : '';
+  document.cookie = 'firebase-auth-session=; path=/; max-age=0; SameSite=Lax';
+  document.cookie = `__session=${token}; path=/; max-age=${60 * 60}; SameSite=Lax${secure}`;
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -66,7 +69,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         unsubscribe = subscribeToAuthState((currentUser) => {
           setUser(currentUser ?? null);
           if (currentUser) {
-            document.cookie = `firebase-auth-session=1; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
+            void syncAuthSessionCookie(currentUser).catch(() => clearAuthSessionCookies());
             void fetchProfile(currentUser.uid);
           } else {
             clearAuthSessionCookies();
@@ -100,7 +103,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     try {
       const signedInUser = await firebaseSignIn(email, password);
-      setAuthSessionCookie();
+      await syncAuthSessionCookie(signedInUser);
       await fetchProfile(signedInUser.uid);
       return { error: null };
     } catch (error) {
@@ -132,13 +135,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const signOut = async () => {
+  const signOut = useCallback(async () => {
     const { signOut: firebaseSignOut } = await import('@/lib/auth');
     await firebaseSignOut();
     clearAuthSessionCookies();
     setUser(null);
     setProfile(null);
-  };
+  }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    const configuredMinutes = Number(process.env.NEXT_PUBLIC_SESSION_TIMEOUT_MINUTES || 30);
+    const timeoutMs = Math.max(5, Number.isFinite(configuredMinutes) ? configuredMinutes : 30) * 60_000;
+    let idleTimer = window.setTimeout(() => void signOut(), timeoutMs);
+
+    const resetIdleTimer = () => {
+      window.clearTimeout(idleTimer);
+      idleTimer = window.setTimeout(() => void signOut(), timeoutMs);
+    };
+    const activityEvents: Array<keyof WindowEventMap> = [
+      'pointerdown', 'keydown', 'scroll', 'touchstart',
+    ];
+    activityEvents.forEach((eventName) =>
+      window.addEventListener(eventName, resetIdleTimer, { passive: true }));
+    window.addEventListener('focus', resetIdleTimer);
+
+    return () => {
+      window.clearTimeout(idleTimer);
+      activityEvents.forEach((eventName) => window.removeEventListener(eventName, resetIdleTimer));
+      window.removeEventListener('focus', resetIdleTimer);
+    };
+  }, [signOut, user]);
 
   return (
     <AuthContext.Provider value={{ user, profile, loading, signIn, signUp, signOut, refreshProfile }}>

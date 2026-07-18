@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { CompanySiteAccessGuard } from '@/components/admin/company-sites/company-site-access-guard';
@@ -137,7 +137,8 @@ function EditCompanySiteContent({ id }: { id: string }) {
   );
 }
 
-export default function EditCompanySitePage({ params }: { params: { id: string } }) {
+export default function EditCompanySitePage(props: { params: Promise<{ id: string }> }) {
+  const params = use(props.params);
   return (
     <CompanySiteAccessGuard>
       <EditCompanySiteContent id={params.id} />

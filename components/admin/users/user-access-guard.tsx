@@ -10,7 +10,7 @@ import { ErrorCard } from '@/components/admin/dashboard/error-card';
 
 export function UserAccessGuard({ children }: { children: React.ReactNode }) {
   const { user, loading: authLoading } = useAuth();
-  const { role, loading: permsLoading } = useAdminPermissions();
+  const { role, loading: permsLoading, hasPermission } = useAdminPermissions();
   const router = useRouter();
 
   useEffect(() => {
@@ -25,7 +25,7 @@ export function UserAccessGuard({ children }: { children: React.ReactNode }) {
 
   if (!user) return null;
 
-  if (!canViewUsers(role)) {
+  if (!canViewUsers(role) || !hasPermission('Admin', 'view')) {
     return (
       <ErrorCard
         accessDenied

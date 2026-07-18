@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import type { CompanySite } from '@/lib/admin/schemas';
 import {
@@ -20,7 +21,13 @@ export function DocumentPreviewCard({ site, logoUrl }: { site: Partial<CompanySi
         </CardHeader>
         <CardContent className="text-xs space-y-2 bg-slate-50 rounded-b-lg p-4 min-h-[120px]">
           {logo && (
-            <img src={logo} alt="Logo" className="h-10 object-contain mb-2" />
+            <Image
+              src={logo}
+              alt="Logo"
+              width={160}
+              height={40}
+              className="mb-2 h-10 w-auto object-contain"
+            />
           )}
           <pre className="whitespace-pre-wrap font-sans text-slate-800">{header}</pre>
         </CardContent>

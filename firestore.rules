@@ -2,18 +2,28 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    function profilePath() {
+      return /databases/$(database)/documents/profiles/$(request.auth.uid);
+    }
+
+    function profileData() {
+      return get(profilePath()).data;
+    }
+
+    // Missing access_status must not block active users (many legacy profiles omit it).
     function isAuthenticated() {
-      return request.auth != null;
+      return request.auth != null
+        && exists(profilePath())
+        && profileData().is_active == true
+        && profileData().get('access_status', 'approved') != 'pending';
     }
 
     function isActiveUser() {
-      return isAuthenticated()
-        && get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.is_active == true
-        && get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.access_status != 'pending';
+      return isAuthenticated();
     }
 
     function getProfileRole() {
-      return get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.role;
+      return profileData().role;
     }
 
     function isSuperAdmin() {
@@ -24,8 +34,21 @@ service cloud.firestore {
       return isAuthenticated() && getProfileRole() in ['super_admin', 'admin'];
     }
 
+    function canReadAdminDirectory() {
+      return isAuthenticated() && getProfileRole() in [
+        'super_admin', 'admin', 'head_qa', 'auditor'
+      ];
+    }
+
+    function canReadProfileDirectory() {
+      return isAuthenticated() && getProfileRole() in [
+        'super_admin', 'admin', 'head_qa', 'auditor', 'hr',
+        'training_coordinator'
+      ];
+    }
+
     function isReadOnly() {
-      return isAuthenticated() && getProfileRole() in ['auditor', 'viewer'];
+      return isAuthenticated() && getProfileRole() in ['auditor', 'vendor', 'viewer'];
     }
 
     function isNotReadOnly() {
@@ -56,6 +79,13 @@ service cloud.firestore {
 
     function isRegulatoryRole() {
       return getProfileRole() in ['super_admin', 'admin', 'regulatory_affairs', 'regulatory'];
+    }
+
+    function canReadAuditTrail() {
+      return isActiveUser() && getProfileRole() in [
+        'super_admin', 'admin', 'head_qa', 'qa_manager', 'qa_executive', 'qa',
+        'regulatory_affairs', 'regulatory', 'auditor'
+      ];
     }
 
     function isTrainingCoordinator() {
@@ -136,8 +166,59 @@ service cloud.firestore {
           'material_master', 'packaging_material_master',
           'departments', 'designations', 'company_sites', 'parameters',
           'workflows', 'approval_matrix', 'document_numbering',
-          'notification_settings', 'esign_settings', 'system_settings', 'backup_history'
+          'notification_settings', 'esign_settings', 'system_settings', 'backup_history',
+          'backup_restore', 'backup_settings', 'restore_history',
+          'notification_templates', 'system_logs', 'login_activity', 'access_reviews',
+          'password_policy', 'module_configuration', 'email_sms_templates',
+          'master_data_import_export', 'product_compositions', 'product_packing_details',
+          'product_attachments', 'batch_attachments', 'workflow_steps',
+          'document_number_sequences'
         ];
+    }
+
+    function isDocumentCollection(name) {
+      return name.matches('.*document.*')
+        || name.matches('sop_.*')
+        || name.matches('wi_.*')
+        || name.matches('form_.*')
+        || name in [
+          'work_instructions', 'forms_templates', 'periodic_reviews',
+          'review_comments', 'approval_comments', 'approval_delegations',
+          'read_confirmations'
+        ];
+    }
+
+    function isTrainingCollection(name) {
+      return name.matches('training_.*')
+        || name.matches('trainer_.*')
+        || name.matches('lms_.*')
+        || name in [
+          'competency_records', 'induction_records', 'job_descriptions',
+          'ojt_training_plans', 'ojt_competency_matrix', 'self_reading_declarations',
+          'annual_training_plans', 'question_bank', 'questionnaires',
+          'questionnaire_attempts', 'practical_assessments'
+        ];
+    }
+
+    function canReadCollection(name) {
+      return getProfileRole() in [
+          'super_admin', 'admin', 'head_qa', 'qa_manager', 'qa_executive', 'qa',
+          'qc_manager', 'qc_executive', 'qc', 'production_manager',
+          'production_executive', 'production', 'engineering_manager',
+          'engineering_executive', 'engineering', 'warehouse_manager',
+          'warehouse_executive', 'warehouse', 'regulatory_affairs', 'regulatory',
+          'auditor', 'viewer'
+        ]
+        || (getProfileRole() in ['training_coordinator', 'hr']
+          && (isTrainingCollection(name) || isDocumentCollection(name)))
+        || (getProfileRole() == 'document_controller' && isDocumentCollection(name))
+        || (getProfileRole() == 'department_head'
+          && (isTrainingCollection(name) || isDocumentCollection(name)
+            || name in ['deviations', 'capa', 'capa_records']))
+        || (getProfileRole() == 'employee'
+          && (isTrainingCollection(name) || isDocumentCollection(name)))
+        || (getProfileRole() == 'vendor'
+          && name in ['vendors', 'vendor_master', 'vendor_records']);
     }
 
     function canWriteCollection(name) {
@@ -156,77 +237,152 @@ service cloud.firestore {
 
     // ── Profiles & Users ──
     match /profiles/{userId} {
-      allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin() || isQaRole());
-      allow create: if isAuthenticated()
+      allow read: if request.auth != null && (
+        request.auth.uid == userId
+        || canReadProfileDirectory()
+        || (isAuthenticated()
+          && getProfileRole() == 'department_head'
+          && resource.data.department
+            == get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.department)
+      );
+      allow create: if request.auth != null
         && request.auth.uid == userId
+        && request.resource.data.keys().hasOnly([
+          'id', 'email', 'full_name', 'role', 'department', 'employee_id', 'phone',
+          'avatar_url', 'is_active', 'last_login', 'created_at', 'updated_at',
+          'requested_role', 'access_status'
+        ])
+        && request.resource.data.email is string
+        && request.resource.data.email.size() <= 320
+        && request.resource.data.full_name is string
+        && request.resource.data.full_name.size() <= 200
+        && request.resource.data.id == userId
         && request.resource.data.role == 'viewer'
+        && request.resource.data.requested_role in [
+          'qa', 'qc', 'production', 'engineering', 'warehouse', 'regulatory',
+          'hr', 'training_coordinator', 'document_controller', 'department_head',
+          'employee', 'auditor', 'vendor', 'viewer'
+        ]
         && request.resource.data.is_active == false
         && request.resource.data.access_status == 'pending';
       allow update: if isAuthenticated() && (
         (request.auth.uid == userId
-          && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
-            'role', 'is_active', 'department', 'employee_id', 'access_status'
-          ]))
-        || isAdmin()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'full_name', 'phone', 'avatar_url', 'updated_at', 'last_login'
+          ])
+          && request.resource.data.full_name is string
+          && request.resource.data.full_name.size() <= 200
+          && request.resource.data.phone is string
+          && request.resource.data.phone.size() <= 40
+          && request.resource.data.avatar_url is string
+          && request.resource.data.avatar_url.size() <= 2048)
       );
       allow delete: if isSuperAdmin();
     }
 
     match /users/{docId} {
-      allow read: if isAuthenticated();
-      allow create, update: if isAdmin();
-      allow delete: if isSuperAdmin();
+      allow read: if canReadAdminDirectory();
+      // Authentication accounts and directory records are created atomically by a trusted Cloud Function.
+      allow create: if false;
+      allow update, delete: if false;
     }
 
     match /roles/{docId} {
-      allow read: if isAuthenticated();
+      allow read: if canReadAdminDirectory();
       allow write: if isSuperAdmin();
     }
 
     match /permissions/{docId} {
-      allow read: if isAuthenticated();
+      allow read: if canReadAdminDirectory();
       allow write: if isSuperAdmin();
     }
 
     match /user_permissions/{docId} {
-      allow read: if isAuthenticated();
-      allow write: if isAdmin();
+      allow read: if canReadAdminDirectory()
+        || (isAuthenticated() && resource.data.userId == request.auth.uid);
+      allow write: if isSuperAdmin();
+    }
+
+    match /login_activity/{sessionId} {
+      allow read: if canReadAuditTrail()
+        || (isActiveUser() && resource.data.userId == request.auth.uid);
+      allow create: if isActiveUser()
+        && request.resource.data.keys().hasOnly([
+          'userId', 'userName', 'email', 'loginStatus', 'ipAddress', 'deviceInfo',
+          'loginTime', 'logoutTime', 'failureReason', 'status', 'createdAt', 'updatedAt'
+        ])
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.userName is string
+        && request.resource.data.userName.size() <= 200
+        && request.resource.data.email is string
+        && request.resource.data.email.size() <= 320
+        && request.resource.data.loginStatus == 'Success'
+        && request.resource.data.deviceInfo is string
+        && request.resource.data.deviceInfo.size() <= 1000
+        && request.resource.data.loginTime is string
+        && request.resource.data.logoutTime == null;
+      allow update: if isActiveUser()
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.userId == resource.data.userId
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'logoutTime', 'status', 'updatedAt'
+        ])
+        && request.resource.data.logoutTime is string;
+      allow delete: if false;
     }
 
     // ── Immutable audit trail ──
     match /audit_trail/{logId} {
-      allow read: if isActiveUser();
+      allow read: if canReadAuditTrail();
       allow create: if isActiveUser() && isNotReadOnly();
       allow update, delete: if false;
     }
 
     match /audit_logs/{logId} {
-      allow read: if isActiveUser();
+      allow read: if canReadAuditTrail();
       allow create: if isActiveUser() && isNotReadOnly();
       allow update, delete: if false;
     }
 
     match /audit_events/{eventId} {
-      allow read: if isActiveUser();
+      allow read: if canReadAuditTrail();
       allow create: if isActiveUser() && isNotReadOnly();
       allow update, delete: if false;
     }
 
     match /audit_exports/{exportId} {
-      allow read: if isAuthenticated();
+      allow read: if canReadAuditTrail();
       allow create: if isNotReadOnly();
       allow update, delete: if false;
     }
 
     match /esign_records/{recordId} {
-      allow read: if isActiveUser();
-      allow create: if isActiveUser();
+      allow read: if canReadAuditTrail()
+        || (isActiveUser() && (
+          resource.data.get('user_id', '') == request.auth.uid
+          || resource.data.get('userId', '') == request.auth.uid
+          || resource.data.get('signed_by', '') == request.auth.uid
+        ));
+      allow create: if isActiveUser() && (
+        request.resource.data.get('user_id', '') == request.auth.uid
+        || request.resource.data.get('userId', '') == request.auth.uid
+        || request.resource.data.get('signed_by', '') == request.auth.uid
+      );
       allow update, delete: if false;
     }
 
     match /electronic_signatures/{recordId} {
-      allow read: if isActiveUser();
-      allow create: if isActiveUser() && isNotReadOnly();
+      allow read: if canReadAuditTrail()
+        || (isActiveUser() && (
+          resource.data.get('user_id', '') == request.auth.uid
+          || resource.data.get('userId', '') == request.auth.uid
+          || resource.data.get('signed_by', '') == request.auth.uid
+        ));
+      allow create: if isActiveUser() && isNotReadOnly() && (
+        request.resource.data.get('user_id', '') == request.auth.uid
+        || request.resource.data.get('userId', '') == request.auth.uid
+        || request.resource.data.get('signed_by', '') == request.auth.uid
+      );
       allow update: if isActiveUser() && isQaRole()
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'verified_at', 'verified_by']);
       allow delete: if false;
@@ -252,41 +408,66 @@ service cloud.firestore {
     }
 
     match /cpv_audit_trail/{logId} {
-      allow read: if isAuthenticated();
+      allow read: if canReadAuditTrail();
       allow create: if isNotReadOnly();
       allow update, delete: if false;
     }
 
     match /packaging_audit_trail/{logId} {
-      allow read: if isAuthenticated();
+      allow read: if canReadAuditTrail();
       allow create: if isNotReadOnly();
       allow update, delete: if false;
     }
 
     match /audit_logs_material/{logId} {
-      allow read: if isAuthenticated();
+      allow read: if canReadAuditTrail();
       allow create: if isNotReadOnly();
       allow update, delete: if false;
     }
 
     // ── Notifications ──
+    // Split get/list and use separate `allow list` statements so OR + resource.data
+    // does not block admin list queries (Firestore rules are not filters).
+    // Support both camelCase (new) and snake_case (legacy) notification fields.
     match /notifications/{docId} {
-      allow read: if isActiveUser()
-        && (
-          resource.data.userId == request.auth.uid
-          || resource.data.recipientRole == getProfileRole()
-          || isAdmin()
-        );
+      allow get: if isActiveUser() && (
+        isAdmin()
+        || resource.data.userId == request.auth.uid
+        || resource.data.user_id == request.auth.uid
+        || resource.data.recipientRole == getProfileRole()
+        || resource.data.target_role == getProfileRole()
+      );
+      allow list: if isActiveUser() && isAdmin();
+      allow list: if isActiveUser() && resource.data.userId == request.auth.uid;
+      allow list: if isActiveUser() && resource.data.user_id == request.auth.uid;
+      allow list: if isActiveUser() && resource.data.recipientRole == getProfileRole();
+      allow list: if isActiveUser() && resource.data.target_role == getProfileRole();
       allow create: if isActiveUser() && isNotReadOnly();
-      allow update: if isActiveUser()
-        && (
-          resource.data.userId == request.auth.uid
-          || resource.data.recipientRole == getProfileRole()
-          || isAdmin()
+      allow update: if isActiveUser() && (
+        (
+          (resource.data.userId == request.auth.uid || resource.data.user_id == request.auth.uid)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'isRead', 'readStatus', 'readAt', 'read'
+          ])
         )
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-          'isRead', 'readStatus', 'readAt'
-        ]);
+        || (
+          (resource.data.recipientRole == getProfileRole()
+            || resource.data.target_role == getProfileRole())
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'readBy', 'readAtBy'
+          ])
+          && request.resource.data.readBy.toSet()
+            .difference(resource.data.get('readBy', []).toSet())
+            .hasOnly([request.auth.uid])
+          && request.resource.data.readBy.toSet()
+            .hasAll(resource.data.get('readBy', []).toSet())
+          && request.resource.data.readAtBy
+            .diff(resource.data.get('readAtBy', {}))
+            .affectedKeys()
+            .hasOnly([request.auth.uid])
+        )
+        || isAdmin()
+      );
       allow delete: if isSuperAdmin();
     }
 
@@ -307,58 +488,78 @@ service cloud.firestore {
       allow update, delete: if isSuperAdmin();
     }
 
+    match /backup_restore/{docId} {
+      allow read, create: if isAdmin();
+      allow update, delete: if isSuperAdmin();
+    }
+
+    match /backup_settings/{docId} {
+      allow read: if isAdmin();
+      allow create, update: if isAdmin();
+      allow delete: if isSuperAdmin();
+    }
+
+    match /restore_history/{docId} {
+      allow read, create: if isAdmin();
+      allow update, delete: if isSuperAdmin();
+    }
+
     match /departments/{docId} {
-      allow read: if isAuthenticated();
+      allow read: if isActiveUser() && canReadCollection('departments');
       allow write: if isAdmin() || isQaRole();
     }
 
     match /designations/{docId} {
-      allow read: if isAuthenticated();
+      allow read: if isActiveUser() && canReadCollection('designations');
       allow write: if isAdmin() || isQaRole();
     }
 
     match /company_sites/{docId} {
-      allow read: if isAuthenticated();
+      allow read: if isActiveUser() && canReadCollection('company_sites');
       allow write: if isAdmin();
     }
 
     match /products/{docId} {
-      allow read: if isAuthenticated();
+      allow read: if isActiveUser() && canReadCollection('products');
       allow write: if isAdmin() || isQaRole();
     }
 
     match /batches/{docId} {
-      allow read: if isAuthenticated();
-      allow create, update: if isNotReadOnly();
-      allow delete: if isSuperAdmin();
-    }
-
-    // ── CPV (cpv_* prefix) ──
-    match /cpv_{cpvModule}/{docId} {
-      allow read: if isAuthenticated();
+      allow read: if isActiveUser() && canReadCollection('batches');
       allow create, update: if isNotReadOnly();
       allow delete: if isSuperAdmin();
     }
 
     // ── Document Acknowledgements (employees may update own records) ──
     match /document_acknowledgements/{docId} {
-      allow read: if isAuthenticated();
+      allow read: if isActiveUser() && canReadCollection('document_acknowledgements');
       allow create: if isNotReadOnly() && canWriteCollection('document_acknowledgements');
       allow update: if isAuthenticated() && isNotReadOnly() && (
         canWriteCollection('document_acknowledgements')
-        || resource.data.employee_id == request.auth.uid
+        || (
+          resource.data.employee_id == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'viewed_date', 'read_confirmation_date', 'acknowledgement_status',
+            'comments', 'ip_address', 'device_information', 'browser_information',
+            'updated_at', 'updated_by', 'updated_by_name'
+          ])
+          && request.resource.data.updated_by == request.auth.uid
+        )
       );
       allow delete: if isSuperAdmin();
     }
 
     match /read_confirmations/{docId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && isNotReadOnly();
+      allow read: if isActiveUser() && canReadCollection('read_confirmations');
+      allow create: if isAuthenticated() && isNotReadOnly()
+        && request.resource.data.employee_id == request.auth.uid
+        && request.resource.data.get('comments', '') is string
+        && request.resource.data.get('comments', '').size() <= 4000;
       allow update, delete: if false;
     }
 
     match /document_reviews/{docId} {
-      allow read: if isAuthenticated();
+      allow read: if isActiveUser() && canReadCollection('document_reviews');
       allow create: if isNotReadOnly() && canWriteCollection('document_reviews');
       allow update: if isAuthenticated() && isNotReadOnly() && (
         canWriteCollection('document_reviews')
@@ -368,13 +569,13 @@ service cloud.firestore {
     }
 
     match /review_comments/{docId} {
-      allow read: if isAuthenticated();
+      allow read: if isActiveUser() && canReadCollection('review_comments');
       allow create: if isAuthenticated() && isNotReadOnly();
       allow update, delete: if isSuperAdmin();
     }
 
     match /document_approvals/{docId} {
-      allow read: if isAuthenticated();
+      allow read: if isActiveUser() && canReadCollection('document_approvals');
       allow create: if isNotReadOnly() && canWriteCollection('document_approvals');
       allow update: if isAuthenticated() && isNotReadOnly() && (
         canWriteCollection('document_approvals')
@@ -385,13 +586,13 @@ service cloud.firestore {
     }
 
     match /approval_comments/{docId} {
-      allow read: if isAuthenticated();
+      allow read: if isActiveUser() && canReadCollection('approval_comments');
       allow create: if isAuthenticated() && isNotReadOnly();
       allow update, delete: if isSuperAdmin();
     }
 
     match /approval_delegations/{docId} {
-      allow read: if isAuthenticated();
+      allow read: if isActiveUser() && canReadCollection('approval_delegations');
       allow create: if isNotReadOnly() && canWriteCollection('approval_delegations');
       allow update, delete: if isSuperAdmin();
     }
@@ -399,6 +600,13 @@ service cloud.firestore {
     // ── Default: registered collections ──
     match /{collection}/{docId} {
       allow read: if isActiveUser()
+        && isRegisteredCollection(collection)
+        && canReadCollection(collection)
+        && (
+          getProfileRole() != 'vendor'
+          || resource.data.get('userId', '') == request.auth.uid
+          || resource.data.get('vendorUserId', '') == request.auth.uid
+        )
         && (collection != 'lms_connections' || isTrainingCoordinator());
       allow create, update: if isActiveUser() && isNotReadOnly()
         && isRegisteredCollection(collection)

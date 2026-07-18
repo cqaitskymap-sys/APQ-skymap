@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -58,7 +58,7 @@ export function AuditDetailView({ record, onRefresh, defaultTab = 'overview' }: 
   const [uploading, setUploading] = useState(false);
   const [showPrint, setShowPrint] = useState(false);
 
-  const loadSub = async () => {
+  const loadSub = useCallback(async () => {
     setLoading(true);
     const [cl, fi, att, ap, cap, al] = await Promise.all([
       getChecklistItems(record.id), listFindings(record.id), getAttachments(record.id),
@@ -67,9 +67,9 @@ export function AuditDetailView({ record, onRefresh, defaultTab = 'overview' }: 
     setChecklist(cl); setFindings(fi); setAttachments(att);
     setApprovals(ap); setCapaLinks(cap); setAuditLogs(al);
     setLoading(false);
-  };
+  }, [record.id]);
 
-  useEffect(() => { void loadSub(); }, [record.id]);
+  useEffect(() => { void loadSub(); }, [loadSub]);
 
   const checklistForm = useForm<ChecklistItemInput>({
     resolver: zodResolver(checklistItemSchema),

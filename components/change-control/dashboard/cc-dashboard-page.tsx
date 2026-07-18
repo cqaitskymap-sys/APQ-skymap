@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
   AlertTriangle, CheckCircle2, Clock, Database, FileSpreadsheet, FileText,
@@ -90,6 +90,7 @@ export function CcDashboardPage() {
   const { user, profile } = useAuth();
   const readOnly = isCcDashboardReadOnly(profile?.role);
   const canExport = canExportCcDashboard(profile?.role) && !readOnly;
+  const initialized = useRef(false);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -130,10 +131,11 @@ export function CcDashboardPage() {
   }, [actor, filters]);
 
   useEffect(() => {
+    if (initialized.current) return;
+    initialized.current = true;
     void logCcDashboardViewed(actor);
     void load(filters);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [actor, filters, load]);
 
   const handleFilterChange = (patch: Partial<CcDashboardFilters>) => {
     const next = { ...filters, ...patch };
@@ -146,9 +148,9 @@ export function CcDashboardPage() {
     handleFilterChange({ kpi_filter: key });
   };
 
-  const handleOpenChange = (id: string, changeNumber: string) => {
+  const handleOpenChange = useCallback((id: string, changeNumber: string) => {
     void logCcChangeOpened(actor, id, changeNumber);
-  };
+  }, [actor]);
 
   const handleExportPdf = async () => {
     if (!canExport || !data) return toast.error('No export permission');
@@ -174,7 +176,7 @@ export function CcDashboardPage() {
     { key: 'owner', header: 'Owner', render: (r: CcDashboardTableRow) => r.owner },
     { key: 'due_date', header: 'Due Date', render: (r: CcDashboardTableRow) => r.due_date },
     { key: 'actions', header: 'Action', render: (r: CcDashboardTableRow) => <ActionLink row={r} onOpen={handleOpenChange} /> },
-  ], []);
+  ], [handleOpenChange]);
 
   const overdueCols = useMemo(() => [
     { key: 'change_number', header: 'Change No', render: (r: CcDashboardTableRow) => <span className="font-mono">{r.change_number}</span> },
@@ -185,7 +187,7 @@ export function CcDashboardPage() {
     { key: 'owner', header: 'Owner', render: (r: CcDashboardTableRow) => r.owner },
     { key: 'status', header: 'Status', render: (r: CcDashboardTableRow) => <CcDashboardStatusBadge status={r.status} /> },
     { key: 'actions', header: 'Action', render: (r: CcDashboardTableRow) => <ActionLink row={r} onOpen={handleOpenChange} /> },
-  ], []);
+  ], [handleOpenChange]);
 
   const criticalCols = useMemo(() => [
     { key: 'change_number', header: 'Change No', render: (r: CcDashboardTableRow) => <span className="font-mono">{r.change_number}</span> },
@@ -196,7 +198,7 @@ export function CcDashboardPage() {
     { key: 'risk_level', header: 'Risk Level', render: (r: CcDashboardTableRow) => <CcRiskBadge level={r.risk_level} /> },
     { key: 'status', header: 'Status', render: (r: CcDashboardTableRow) => <CcDashboardStatusBadge status={r.status} /> },
     { key: 'actions', header: 'Action', render: (r: CcDashboardTableRow) => <ActionLink row={r} onOpen={handleOpenChange} /> },
-  ], []);
+  ], [handleOpenChange]);
 
   return (
     <CcDashboardAccessGuard>

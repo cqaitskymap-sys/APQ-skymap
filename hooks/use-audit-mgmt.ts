@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 import {
   listAudits, getAuditById, listFindings, computeDashboardMetrics,
@@ -10,6 +10,12 @@ import type { AuditRecord, AuditFinding, AuditFilters, AuditDashboardMetrics } f
 import { normalizeRole } from '@/lib/permissions';
 
 export function useAudits(filters?: AuditFilters) {
+  const hasFilters = filters !== undefined;
+  const { status, audit_type, department, search } = filters ?? {};
+  const stableFilters = useMemo(
+    () => hasFilters ? { status, audit_type, department, search } : undefined,
+    [hasFilters, status, audit_type, department, search],
+  );
   const [audits, setAudits] = useState<AuditRecord[]>([]);
   const [findings, setFindings] = useState<AuditFinding[]>([]);
   const [metrics, setMetrics] = useState<AuditDashboardMetrics | null>(null);
@@ -21,7 +27,7 @@ export function useAudits(filters?: AuditFilters) {
     setError(null);
     try {
       await Promise.all([syncOverdueFindings(), syncOverdueAudits()]);
-      const [a, f] = await Promise.all([listAudits(filters), listFindings()]);
+      const [a, f] = await Promise.all([listAudits(stableFilters), listFindings()]);
       setAudits(a);
       setFindings(f);
       setMetrics(computeDashboardMetrics(a, f));
@@ -30,7 +36,7 @@ export function useAudits(filters?: AuditFilters) {
     } finally {
       setLoading(false);
     }
-  }, [JSON.stringify(filters)]);
+  }, [stableFilters]);
 
   useEffect(() => { refresh(); }, [refresh]);
   return { audits, findings, metrics, loading, error, refresh };

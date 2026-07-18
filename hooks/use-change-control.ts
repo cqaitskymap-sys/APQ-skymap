@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 import {
   listChanges, getChangeById, computeDashboardMetrics, syncOverdueChanges, listAllRiskAssessments,
@@ -9,6 +9,12 @@ import type { ChangeControlRecord, CcFilters, CcDashboardMetrics, ChangeRiskAsse
 import { normalizeRole } from '@/lib/permissions';
 
 export function useChangeControls(filters?: CcFilters) {
+  const hasFilters = filters !== undefined;
+  const { status, change_type, change_category, department, search } = filters ?? {};
+  const stableFilters = useMemo(
+    () => hasFilters ? { status, change_type, change_category, department, search } : undefined,
+    [hasFilters, status, change_type, change_category, department, search],
+  );
   const [records, setRecords] = useState<ChangeControlRecord[]>([]);
   const [metrics, setMetrics] = useState<CcDashboardMetrics | null>(null);
   const [risks, setRisks] = useState<ChangeRiskAssessment[]>([]);
@@ -20,7 +26,7 @@ export function useChangeControls(filters?: CcFilters) {
     setError(null);
     try {
       await syncOverdueChanges();
-      const [data, riskData] = await Promise.all([listChanges(filters), listAllRiskAssessments()]);
+      const [data, riskData] = await Promise.all([listChanges(stableFilters), listAllRiskAssessments()]);
       setRecords(data);
       setRisks(riskData);
       setMetrics(computeDashboardMetrics(data));
@@ -29,7 +35,7 @@ export function useChangeControls(filters?: CcFilters) {
     } finally {
       setLoading(false);
     }
-  }, [JSON.stringify(filters)]);
+  }, [stableFilters]);
 
   useEffect(() => { refresh(); }, [refresh]);
 

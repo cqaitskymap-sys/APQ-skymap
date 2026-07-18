@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Image from 'next/image';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Upload } from 'lucide-react';
@@ -153,7 +154,15 @@ export function CompanySiteForm({
           <div className="space-y-2 sm:col-span-2">
             <Label>Company Logo</Label>
             <div className="flex items-center gap-4">
-              {logoPreview && <img src={logoPreview} alt="Logo" className="h-12 object-contain border rounded p-1" />}
+              {logoPreview && (
+                <Image
+                  src={logoPreview}
+                  alt="Logo"
+                  width={180}
+                  height={48}
+                  className="h-12 w-auto rounded border p-1 object-contain"
+                />
+              )}
               {!readOnly && (
                 <div>
                   <Button type="button" variant="outline" size="sm" asChild>

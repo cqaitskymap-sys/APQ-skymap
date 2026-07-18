@@ -3,7 +3,8 @@ import { SpcDetailView } from '@/components/cpv/statistical-process-control/spc-
 
 export const dynamic = 'force-dynamic';
 
-export default function ControlChartsDetailRoutePage({ params }: { params: { id: string } }) {
+export default async function ControlChartsDetailRoutePage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   return (
     <SpcAccessGuard>
       <SpcDetailView id={params.id} />

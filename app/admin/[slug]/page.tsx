@@ -29,7 +29,8 @@ const ADMIN_ROUTES: Record<string, string> = {
   'system-settings': '/admin/system-settings',
 };
 
-export default function AdminSlugRedirect({ params }: { params: { slug: string } }) {
+export default async function AdminSlugRedirect(props: { params: Promise<{ slug: string }> }) {
+  const params = await props.params;
   const target = ADMIN_ROUTES[params.slug];
   redirect(target || '/dashboard/admin');
 }

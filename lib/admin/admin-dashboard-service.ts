@@ -1,4 +1,7 @@
-import { collection, getDocs, limit, orderBy, query } from 'firebase/firestore';
+import {
+  collection, getCountFromServer, getDocs, limit, orderBy, query, where,
+  type QueryConstraint,
+} from 'firebase/firestore';
 import {
   getFirebaseFirestore, isFirebaseConfigured, getFirebaseAuth,
 } from '@/lib/firebase';
@@ -16,8 +19,9 @@ export interface DashboardKpis {
   lockedUsers: number;
   totalRoles: number;
   totalDepartments: number;
+  totalSites: number;
   pendingApprovals: number;
-  openAuditLogs: number;
+  totalAuditRecords: number;
   firebaseStatus: string;
   lastBackupStatus: string;
   systemHealthScore: number;
@@ -64,6 +68,7 @@ export interface ChartPoint {
 
 export interface AdminDashboardData {
   kpis: DashboardKpis;
+  moduleKpis: Array<{ label: string; value: number; href: string }>;
   loginActivity: LoginActivityRow[];
   recentActions: AdminActionRow[];
   pendingApprovals: PendingApprovalRow[];
@@ -82,20 +87,61 @@ export interface AdminDashboardData {
     moduleUsageTrend: ChartPoint[];
     auditActionsTrend: ChartPoint[];
   };
+  dataQuality: {
+    sampled: boolean;
+    warnings: string[];
+    fetchedAt: string;
+  };
 }
 
 const EMPTY_CHART: ChartPoint[] = [{ name: 'No Data', value: 0 }];
 
-async function safeDocs(collectionName: string, max = 500): Promise<Record<string, unknown>[]> {
+async function safeDocs(
+  collectionName: string,
+  max = 500,
+  constraints: QueryConstraint[] = [],
+  warnings?: string[],
+): Promise<Record<string, unknown>[]> {
   if (!isFirebaseConfigured()) return [];
   try {
     const snap = await getDocs(
-      query(collection(getFirebaseFirestore(), collectionName), limit(max))
+      query(collection(getFirebaseFirestore(), collectionName), ...constraints, limit(max))
     );
     return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-  } catch {
+  } catch (error) {
+    warnings?.push(`${collectionName}: ${(error as Error).message || 'query failed'}`);
     return [];
   }
+}
+
+async function safeCount(
+  collectionName: string,
+  constraints: QueryConstraint[] = [],
+  warnings?: string[],
+): Promise<number> {
+  if (!isFirebaseConfigured()) return 0;
+  try {
+    const snap = await getCountFromServer(
+      query(collection(getFirebaseFirestore(), collectionName), ...constraints),
+    );
+    return snap.data().count;
+  } catch (error) {
+    warnings?.push(`${collectionName} count: ${(error as Error).message || 'query failed'}`);
+    return 0;
+  }
+}
+
+async function countOpenRecords(
+  collectionName: string,
+  statusField = 'status',
+  terminalStatuses: string[] = ['Closed', 'closed'],
+  warnings?: string[],
+): Promise<number> {
+  const [total, terminal] = await Promise.all([
+    safeCount(collectionName, [], warnings),
+    safeCount(collectionName, [where(statusField, 'in', terminalStatuses)], warnings),
+  ]);
+  return Math.max(0, total - terminal);
 }
 
 function groupCount(items: Record<string, unknown>[], key: string, labelMap?: Record<string, string>): ChartPoint[] {
@@ -114,18 +160,27 @@ function monthlyTrend(
   dateKey: string,
   months = 6,
 ): ChartPoint[] {
-  const monthMap: Record<string, number> = {};
+  const monthMap = new Map<string, number>();
   items.forEach((item) => {
     const dt = String(item[dateKey] ?? '');
     if (!dt) return;
     const d = new Date(dt);
     if (Number.isNaN(d.getTime())) return;
-    const label = d.toLocaleString('default', { month: 'short', year: '2-digit' });
-    monthMap[label] = (monthMap[label] || 0) + 1;
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    monthMap.set(key, (monthMap.get(key) || 0) + 1);
   });
-  const entries = Object.entries(monthMap);
+  const entries = Array.from(monthMap.entries()).sort(([a], [b]) => a.localeCompare(b));
   if (!entries.length) return [{ name: 'N/A', value: 0 }];
-  return entries.slice(-months).map(([name, value]) => ({ name, value }));
+  return entries.slice(-months).map(([key, value]) => {
+    const [year, month] = key.split('-').map(Number);
+    return {
+      name: new Date(year, month - 1, 1).toLocaleString('default', {
+        month: 'short',
+        year: '2-digit',
+      }),
+      value,
+    };
+  });
 }
 
 function healthScore(status: string): number {
@@ -161,11 +216,11 @@ export async function getExtendedSystemHealth(): Promise<{
 
     const storageHealth = getFirebaseStorageHealthStatus();
     checks.push({
-      name: 'Storage',
+      name: 'Storage Configuration',
       status: storageHealth === 'Connected' ? 'Healthy' : storageHealth === 'Degraded' ? 'Degraded' : 'Down',
       detail:
         storageHealth === 'Connected'
-          ? `Bucket configured (${process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET})`
+          ? `Bucket configured (${process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET}); object access not tested`
           : storageHealth === 'Degraded'
             ? 'Storage configured but Firebase connection degraded'
             : 'Storage bucket not configured',
@@ -174,9 +229,9 @@ export async function getExtendedSystemHealth(): Promise<{
     try {
       const auth = getFirebaseAuth();
       checks.push({
-        name: 'Auth',
+        name: 'Auth SDK',
         status: auth ? 'Healthy' : 'Degraded',
-        detail: auth.currentUser ? `Session: ${auth.currentUser.email}` : 'Auth SDK initialized',
+        detail: auth.currentUser ? `Authenticated session: ${auth.currentUser.email}` : 'SDK initialized; no active session',
       });
     } catch (e) {
       checks.push({ name: 'Auth', status: 'Down', detail: (e as Error).message });
@@ -184,19 +239,20 @@ export async function getExtendedSystemHealth(): Promise<{
   } else {
     checks.push(
       { name: 'Firestore Read', status: 'Down', detail: 'Firebase not configured' },
-      { name: 'Storage', status: 'Down', detail: 'Firebase not configured' },
-      { name: 'Auth', status: 'Down', detail: 'Firebase not configured' },
+      { name: 'Storage Configuration', status: 'Down', detail: 'Firebase not configured' },
+      { name: 'Auth SDK', status: 'Down', detail: 'Firebase not configured' },
     );
   }
 
   try {
     if (!isFirebaseConfigured()) throw new Error('not configured');
     const backupSnap = await getDocs(
-      query(collection(getFirebaseFirestore(), ADMIN_COLLECTIONS.backupRestore), orderBy('backupDate', 'desc'), limit(1))
+      query(collection(getFirebaseFirestore(), ADMIN_COLLECTIONS.backupRestore), orderBy('backupDateTime', 'desc'), limit(1))
     ).catch(() => null);
     const last = backupSnap?.docs[0]?.data();
-    const age = last?.backupDate
-      ? Math.floor((Date.now() - new Date(String(last.backupDate)).getTime()) / 86400000)
+    const lastBackupDate = last?.backupDateTime ?? last?.backupDate;
+    const age = lastBackupDate
+      ? Math.floor((Date.now() - new Date(String(lastBackupDate)).getTime()) / 86400000)
       : null;
     checks.push({
       name: 'Backup',
@@ -224,61 +280,90 @@ export async function fetchAdminDashboardData(
   dateRange?: { startDate?: string; endDate?: string },
 ): Promise<AdminDashboardData> {
   const roleLabelMap = Object.fromEntries(ADMIN_ROLES.map((r) => [r.id, r.name]));
+  const warnings: string[] = [];
 
-  const [
-    usersRaw,
-    rolesRaw,
-    departmentsRaw,
-    loginRaw,
-    auditLogsRaw,
-    auditTrailRaw,
-    backupsRaw,
-    notificationsRaw,
-    workflowsRaw,
-    docNumRaw,
-    settingsRaw,
-    health,
-    firebase,
-  ] = await Promise.all([
-    safeDocs(ADMIN_COLLECTIONS.users),
-    safeDocs(ADMIN_COLLECTIONS.roles),
-    safeDocs(ADMIN_COLLECTIONS.departments),
-    safeDocs(ADMIN_COLLECTIONS.loginActivity, 200),
-    safeDocs(ADMIN_COLLECTIONS.auditLogs, 300),
-    safeDocs(ADMIN_COLLECTIONS.auditTrail, 300),
-    safeDocs(ADMIN_COLLECTIONS.backupRestore, 50),
-    safeDocs(ADMIN_COLLECTIONS.notificationSettings, 100),
-    safeDocs(ADMIN_COLLECTIONS.workflows, 100),
-    safeDocs(ADMIN_COLLECTIONS.documentNumbering, 100),
-    safeDocs(ADMIN_COLLECTIONS.systemSettings, 10),
-    getExtendedSystemHealth(),
-    checkFirebaseConnection(),
+  const [samples, metrics] = await Promise.all([
+    Promise.all([
+      safeDocs(ADMIN_COLLECTIONS.users, 500, [orderBy('createdAt', 'desc')], warnings),
+      safeDocs(ADMIN_COLLECTIONS.roles, 200, [orderBy('createdAt', 'desc')], warnings),
+      safeDocs(ADMIN_COLLECTIONS.departments, 500, [orderBy('createdAt', 'desc')], warnings),
+      safeDocs(ADMIN_COLLECTIONS.loginActivity, 200, [orderBy('loginTime', 'desc')], warnings),
+      safeDocs(ADMIN_COLLECTIONS.auditLogs, 300, [orderBy('dateTime', 'desc')], warnings),
+      safeDocs(ADMIN_COLLECTIONS.auditTrail, 300, [orderBy('timestamp', 'desc')], warnings),
+      safeDocs(ADMIN_COLLECTIONS.backupRestore, 50, [orderBy('backupDateTime', 'desc')], warnings),
+      safeDocs(ADMIN_COLLECTIONS.notificationSettings, 100, [], warnings),
+      safeDocs(ADMIN_COLLECTIONS.workflows, 100, [], warnings),
+      safeDocs(ADMIN_COLLECTIONS.documentNumbering, 100, [], warnings),
+      safeDocs(ADMIN_COLLECTIONS.systemSettings, 10, [], warnings),
+      getExtendedSystemHealth(),
+      checkFirebaseConnection(),
+    ]),
+    Promise.all([
+      safeCount(ADMIN_COLLECTIONS.users, [], warnings),
+      safeCount(ADMIN_COLLECTIONS.users, [where('userStatus', '==', 'Active')], warnings),
+      safeCount(ADMIN_COLLECTIONS.users, [where('userStatus', '==', 'Inactive')], warnings),
+      safeCount(ADMIN_COLLECTIONS.users, [where('userStatus', '==', 'Locked')], warnings),
+      safeCount(ADMIN_COLLECTIONS.roles, [], warnings),
+      safeCount(ADMIN_COLLECTIONS.departments, [], warnings),
+      safeCount(ADMIN_COLLECTIONS.companySites, [], warnings),
+      safeCount(ADMIN_COLLECTIONS.users, [where('userStatus', '==', 'Pending Approval')], warnings),
+      safeCount(ADMIN_COLLECTIONS.auditLogs, [], warnings),
+      safeCount(ADMIN_COLLECTIONS.auditTrail, [], warnings),
+      safeCount('training_assignments', [where('status', 'in', ['Assigned', 'In Progress', 'Overdue'])], warnings),
+      safeCount('sop_reviews', [where('status', '==', 'in_progress')], warnings),
+      countOpenRecords('capa_records', 'status', ['Closed', 'closed'], warnings),
+      countOpenRecords('deviations', 'status', ['Closed', 'closed'], warnings),
+      countOpenRecords('audits', 'status', ['Closed', 'closed'], warnings),
+      countOpenRecords('risk_assessment', 'risk_status', ['Closed', 'Accepted', 'Rejected'], warnings),
+      safeCount('equipment_master', [], warnings),
+      countOpenRecords('complaints', 'status', ['Closed', 'closed'], warnings),
+      countOpenRecords('change_controls', 'status', ['Closed', 'closed'], warnings),
+      countOpenRecords('validation_records', 'validation_status', ['Approved', 'Rejected', 'Closed'], warnings),
+      safeCount('notifications', [where('isRead', '==', false)], warnings),
+    ]),
   ]);
 
+  const [
+    usersRaw, rolesRaw, departmentsRaw, loginRaw, auditLogsRaw, auditTrailRaw,
+    backupsRaw, notificationsRaw, workflowsRaw, docNumRaw, settingsRaw, health, firebase,
+  ] = samples as [
+    Record<string, unknown>[], Record<string, unknown>[], Record<string, unknown>[],
+    Record<string, unknown>[], Record<string, unknown>[], Record<string, unknown>[],
+    Record<string, unknown>[], Record<string, unknown>[], Record<string, unknown>[],
+    Record<string, unknown>[], Record<string, unknown>[],
+    Awaited<ReturnType<typeof getExtendedSystemHealth>>,
+    Awaited<ReturnType<typeof checkFirebaseConnection>>,
+  ];
+
+  const [
+    totalUsers, activeUsers, inactiveUsers, lockedUsers, totalRoles, totalDepartments,
+    totalSites, pendingApprovalCount, auditLogCount, auditTrailCount, pendingTrainings,
+    pendingSopReviews, openCapa, openDeviations, openAudits, openRisks, totalEquipment,
+    openComplaints, openChangeControls, openValidations, unreadNotifications,
+  ] = metrics;
+
   const users = usersRaw as AdminUser[];
-  const activeUsers = users.filter((u) => u.userStatus === 'Active' || u.status === 'Active').length;
-  const inactiveUsers = users.filter((u) => u.userStatus === 'Inactive' || u.status === 'Inactive').length;
-  const lockedUsers = users.filter((u) => u.userStatus === 'Locked').length;
   const pendingUserApprovals = users.filter((u) => u.userStatus === 'Pending Approval');
 
   const lastBackup = [...backupsRaw].sort((a, b) =>
-    String(b.backupDate ?? '').localeCompare(String(a.backupDate ?? ''))
+    String(b.backupDateTime ?? b.backupDate ?? '').localeCompare(
+      String(a.backupDateTime ?? a.backupDate ?? ''),
+    )
   )[0];
 
-  const openAuditLogs = auditLogsRaw.length + auditTrailRaw.length;
-
   const kpis: DashboardKpis = {
-    totalUsers: users.length,
+    totalUsers,
     activeUsers,
     inactiveUsers,
     lockedUsers,
-    totalRoles: rolesRaw.length || ADMIN_ROLES.length,
-    totalDepartments: departmentsRaw.length,
-    pendingApprovals: pendingUserApprovals.length,
-    openAuditLogs,
+    totalRoles: totalRoles || rolesRaw.length || ADMIN_ROLES.length,
+    totalDepartments,
+    totalSites,
+    pendingApprovals: pendingApprovalCount,
+    totalAuditRecords: auditLogCount + auditTrailCount,
     firebaseStatus: firebase.connected ? 'Connected' : firebase.configured ? 'Degraded' : 'Not Configured',
     lastBackupStatus: lastBackup
-      ? `${lastBackup.backupStatus || 'Success'} — ${new Date(String(lastBackup.backupDate)).toLocaleDateString()}`
+      ? `${lastBackup.backupStatus || 'Success'} — ${new Date(String(lastBackup.backupDateTime ?? lastBackup.backupDate)).toLocaleDateString()}`
       : 'No backups',
     systemHealthScore: health.score,
   };
@@ -393,14 +478,37 @@ export async function fetchAdminDashboardData(
   const usersByRole = groupCount(users as Record<string, unknown>[], 'role', roleLabelMap);
   const usersByDepartment = groupCount(users as Record<string, unknown>[], 'department');
   const monthlyLoginTrend = monthlyTrend(loginRaw, 'loginTime');
-  const moduleUsageTrend = monthlyTrend(
-    [...auditTrailRaw, ...auditLogsRaw.map((l) => ({ ...l, moduleName: l.module }))],
-    'timestamp',
+  const normalizedAuditEvents = [
+    ...auditTrailRaw.map((event) => ({
+      ...event,
+      eventDate: event.timestamp ?? event.dateTime,
+    })),
+    ...auditLogsRaw.map((event) => ({
+      ...event,
+      moduleName: event.module,
+      eventDate: event.dateTime ?? event.timestamp,
+    })),
+  ];
+  const auditActionsTrend = monthlyTrend(
+    normalizedAuditEvents,
+    'eventDate',
   );
-  const auditActionsTrend = monthlyTrend([...auditTrailRaw, ...auditLogsRaw], 'dateTime');
 
   return {
     kpis,
+    moduleKpis: [
+      { label: 'Pending Trainings', value: pendingTrainings, href: '/training/assignments' },
+      { label: 'Pending SOP Reviews', value: pendingSopReviews, href: '/qms/documents/sop' },
+      { label: 'Open CAPA', value: openCapa, href: '/qms/capa' },
+      { label: 'Open Deviations', value: openDeviations, href: '/qms/deviation' },
+      { label: 'Open Audits', value: openAudits, href: '/qms/audit' },
+      { label: 'Open Risks', value: openRisks, href: '/qms/risk-management' },
+      { label: 'Equipment', value: totalEquipment, href: '/qms/equipment' },
+      { label: 'Open Complaints', value: openComplaints, href: '/qms/complaints' },
+      { label: 'Open Change Controls', value: openChangeControls, href: '/qms/change-control' },
+      { label: 'Open Validations', value: openValidations, href: '/qms/validation' },
+      { label: 'Unread Notifications', value: unreadNotifications, href: '/notifications' },
+    ],
     loginActivity: loginActivity.slice(0, 10),
     recentActions,
     pendingApprovals: pendingApprovals.slice(0, 12),
@@ -417,64 +525,19 @@ export async function fetchAdminDashboardData(
       usersByDepartment,
       monthlyLoginTrend,
       moduleUsageTrend: groupCount(
-        [...auditTrailRaw, ...auditLogsRaw.map((l) => ({ moduleName: l.module }))],
+        normalizedAuditEvents,
         'moduleName',
       ),
       auditActionsTrend,
     },
+    dataQuality: {
+      sampled: totalUsers > usersRaw.length
+        || auditLogCount > auditLogsRaw.length
+        || auditTrailCount > auditTrailRaw.length,
+      warnings: Array.from(new Set(warnings)),
+      fetchedAt: new Date().toISOString(),
+    },
   };
-}
-
-export async function runDashboardBackup(
-  auditMeta: { userId: string; userName: string },
-): Promise<{ success: boolean; error?: string }> {
-  if (!isFirebaseConfigured()) {
-    return { success: false, error: 'Firebase not configured' };
-  }
-  try {
-    const collections = [
-      ADMIN_COLLECTIONS.users,
-      ADMIN_COLLECTIONS.roles,
-      ADMIN_COLLECTIONS.departments,
-      ADMIN_COLLECTIONS.auditTrail,
-      ADMIN_COLLECTIONS.loginActivity,
-      ADMIN_COLLECTIONS.backupRestore,
-      ADMIN_COLLECTIONS.systemSettings,
-    ];
-    const backup: Record<string, unknown[]> = {};
-    for (const col of collections) {
-      const snap = await getDocs(collection(getFirebaseFirestore(), col));
-      backup[col] = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    }
-    const json = JSON.stringify(backup, null, 2);
-    const blob = new Blob([json], { type: 'application/json' });
-    const backupId = `BK-${Date.now()}`;
-
-    await logAuditEvent({
-      userId: auditMeta.userId,
-      userName: auditMeta.userName,
-      module: 'Admin Dashboard',
-      recordId: backupId,
-      action: 'BACKUP',
-      oldValue: '',
-      newValue: JSON.stringify({ backupId, size: blob.size }),
-      reason: 'Dashboard backup now',
-      ipAddress: 'client',
-      device: typeof navigator !== 'undefined' ? navigator.userAgent : 'browser',
-      status: 'Success',
-    });
-
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${backupId}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-
-    return { success: true };
-  } catch (e) {
-    return { success: false, error: (e as Error).message };
-  }
 }
 
 export async function logDashboardAudit(

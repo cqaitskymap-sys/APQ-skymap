@@ -2,7 +2,6 @@ import {
   collection, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc,
   query, where, orderBy, limit, writeBatch, QueryConstraint,
 } from 'firebase/firestore';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { getFirebaseFirestore, getFirebaseAuth, isFirebaseConfigured } from '@/lib/firebase';
 import { ADMIN_COLLECTIONS } from './constants';
 import { createRecord, getRecords, getRecord, updateRecord, deleteRecord } from '@/lib/firestore-service';
@@ -143,26 +142,6 @@ export async function deleteAdminRecord(
   return success;
 }
 
-export async function createAuthUser(
-  email: string,
-  password: string,
-  profileData: Record<string, unknown>
-): Promise<{ uid: string | null; error: string | null }> {
-  try {
-    const result = await createUserWithEmailAndPassword(getFirebaseAuth(), email, password);
-    const uid = result.user.uid;
-
-    await updateDoc(doc(getFirebaseFirestore(), 'profiles', uid), profileData as Record<string, string | boolean>).catch(async () => {
-      const { setDoc } = await import('firebase/firestore');
-      await setDoc(doc(getFirebaseFirestore(), 'profiles', uid), { id: uid, ...profileData });
-    });
-
-    return { uid, error: null };
-  } catch (error) {
-    return { uid: null, error: (error as Error).message };
-  }
-}
-
 export async function checkFirebaseConnection(): Promise<{
   configured: boolean;
   connected: boolean;
@@ -218,11 +197,12 @@ export async function getSystemHealthCheck() {
 
   try {
     const backupSnap = await getDocs(
-      query(collection(getFirebaseFirestore(), ADMIN_COLLECTIONS.backupRestore), orderBy('backupDate', 'desc'), limit(1))
+      query(collection(getFirebaseFirestore(), ADMIN_COLLECTIONS.backupRestore), orderBy('backupDateTime', 'desc'), limit(1))
     );
     const lastBackup = backupSnap.docs[0]?.data();
-    const backupAge = lastBackup?.backupDate
-      ? Math.floor((Date.now() - new Date(lastBackup.backupDate).getTime()) / 86400000)
+    const lastBackupDate = lastBackup?.backupDateTime ?? lastBackup?.backupDate;
+    const backupAge = lastBackupDate
+      ? Math.floor((Date.now() - new Date(lastBackupDate).getTime()) / 86400000)
       : null;
     checks.push({
       name: 'Backup Status',
@@ -269,7 +249,9 @@ export async function getDashboardStats() {
 
   const backupDocs = backups.docs?.map((d) => d.data()) || [];
   const lastBackup = backupDocs.sort((a, b) =>
-    String(b.backupDate || '').localeCompare(String(a.backupDate || ''))
+    String(b.backupDateTime || b.backupDate || '').localeCompare(
+      String(a.backupDateTime || a.backupDate || ''),
+    )
   )[0];
 
   const firebase = await checkFirebaseConnection();
@@ -293,7 +275,7 @@ export async function getDashboardStats() {
     systemHealth: health.overall,
     firebaseStatus: firebase.connected ? 'Connected' : firebase.configured ? 'Degraded' : 'Not Configured',
     backupStatus: lastBackup
-      ? `${lastBackup.backupStatus || 'Success'} — ${new Date(String(lastBackup.backupDate)).toLocaleDateString()}`
+      ? `${lastBackup.backupStatus || 'Success'} — ${new Date(String(lastBackup.backupDateTime || lastBackup.backupDate)).toLocaleDateString()}`
       : 'No backups',
     totalDepartments: 0,
     totalProducts: 0,

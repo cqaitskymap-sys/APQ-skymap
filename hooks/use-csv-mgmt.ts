@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 import {
   listSystems, listGxpAssessments, listRiskAssessments, listUrs, listFrs,
@@ -15,6 +15,12 @@ import type {
 import { normalizeRole } from '@/lib/permissions';
 
 export function useCsvSystems(filters?: CsvFilters) {
+  const hasFilters = filters !== undefined;
+  const { system_type, validation_status, department, gxp_impact, search } = filters ?? {};
+  const stableFilters = useMemo(
+    () => hasFilters ? { system_type, validation_status, department, gxp_impact, search } : undefined,
+    [hasFilters, system_type, validation_status, department, gxp_impact, search],
+  );
   const [systems, setSystems] = useState<CsvSystem[]>([]);
   const [gxpAssessments, setGxpAssessments] = useState<GxpAssessment[]>([]);
   const [riskAssessments, setRiskAssessments] = useState<CsvRiskAssessment[]>([]);
@@ -36,7 +42,7 @@ export function useCsvSystems(filters?: CsvFilters) {
     try {
       await syncPeriodicReviewDue();
       const [sys, gxp, risk, u, f, ds, tests, trace, p11, vr, pr] = await Promise.all([
-        listSystems(filters), listGxpAssessments(), listRiskAssessments(), listUrs(), listFrs(),
+        listSystems(stableFilters), listGxpAssessments(), listRiskAssessments(), listUrs(), listFrs(),
         listDesignSpecs(), listTestScripts(), listTraceability(), listPart11Assessments(),
         listValidationReports(), listPeriodicReviews(),
       ]);
@@ -57,7 +63,7 @@ export function useCsvSystems(filters?: CsvFilters) {
     } finally {
       setLoading(false);
     }
-  }, [JSON.stringify(filters)]);
+  }, [stableFilters]);
 
   useEffect(() => { refresh(); }, [refresh]);
   return {

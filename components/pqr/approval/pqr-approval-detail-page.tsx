@@ -75,7 +75,7 @@ export function PqrApprovalDetailPage() {
     name: profile?.full_name || profile?.email || 'System',
     role,
     email: profile?.email || user?.email || '',
-  }), [user?.uid, profile?.full_name, profile?.email, role]);
+  }), [user?.uid, user?.email, profile?.full_name, profile?.email, role]);
 
   const currentStep = useMemo(() => getCurrentPendingStep(approvals), [approvals]);
   const workflowStatus = approvals[0]?.workflowStatus || 'Draft';

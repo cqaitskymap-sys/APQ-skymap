@@ -2,14 +2,11 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, LineChart, Line, Legend,
-} from 'recharts';
+import dynamic from 'next/dynamic';
 import {
   Users, UserCheck, UserX, Lock, Shield, Building2, Clock, FileSearch,
-  Cloud, Database, Activity, RefreshCw, Download, Plus, GitBranch, Settings,
-  Eye,
+  Database, Activity, RefreshCw, Download, Plus, GitBranch, Settings,
+  Eye, MapPin, AlertTriangle,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -19,8 +16,10 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/contexts/auth-context';
 import { useAdminPermissions } from '@/hooks/use-admin-permissions';
+import { usePermissions } from '@/hooks/usePermissions';
+import { navHrefModule } from '@/lib/nav-permissions';
 import {
-  fetchAdminDashboardData, runDashboardBackup, logDashboardAudit,
+  fetchAdminDashboardData, logDashboardAudit,
   type AdminDashboardData,
 } from '@/lib/admin/admin-dashboard-service';
 import { KpiCard } from './dashboard/kpi-card';
@@ -30,7 +29,13 @@ import { EmptyState } from './dashboard/empty-state';
 import { ErrorCard } from './dashboard/error-card';
 import { PageHeader } from './dashboard/page-header';
 
-const CHART_COLORS = ['#2563eb', '#0891b2', '#059669', '#d97706', '#dc2626', '#7c3aed', '#64748b'];
+const DashboardChartCard = dynamic(
+  () => import('./dashboard/chart-card').then((module) => module.DashboardChartCard),
+  {
+    ssr: false,
+    loading: () => <div className="h-[312px] animate-pulse rounded-xl bg-muted" role="status" aria-label="Loading chart" />,
+  },
+);
 
 const SAFE_CHART = [{ name: 'No Data', value: 0 }];
 
@@ -45,27 +50,29 @@ interface AdminDashboardProps {
 export function AdminDashboard({ basePath = '/admin' }: AdminDashboardProps) {
   const { user, profile } = useAuth();
   const { role, canAccessAdmin, isReadOnly, hasPermission, loading: permsLoading } = useAdminPermissions();
+  const { canAccessModule } = usePermissions();
   const [data, setData] = useState<AdminDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [refreshing, setRefreshing] = useState(false);
-  const [backingUp, setBackingUp] = useState(false);
 
-  const adminBase = basePath === '/admin' ? '/dashboard/admin' : basePath;
-  const canView = canAccessAdmin && (
-    role === 'super_admin' || role === 'admin' ||
-    (role === 'auditor' && hasPermission('Admin', 'view'))
-  );
+  const adminBase = '/admin';
+  const canView = canAccessAdmin && hasPermission('Admin', 'view');
   const canAct = !isReadOnly && (role === 'super_admin' || role === 'admin');
 
-  const getAuditMeta = () => ({
+  const getAuditMeta = useCallback(() => ({
     userId: user?.uid || 'system',
     userName: profile?.full_name || profile?.email || 'Admin',
-  });
+  }), [profile?.email, profile?.full_name, user?.uid]);
 
   const load = useCallback(async (isRefresh = false) => {
+    if (startDate && endDate && startDate > endDate) {
+      setError('Start date must be on or before end date');
+      toast.error('Invalid date range');
+      return;
+    }
     if (isRefresh) setRefreshing(true);
     else setLoading(true);
     setError(null);
@@ -84,12 +91,25 @@ export function AdminDashboard({ basePath = '/admin' }: AdminDashboardProps) {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [startDate, endDate, user?.uid, profile?.full_name, profile?.email]);
+  }, [startDate, endDate, getAuditMeta]);
 
   useEffect(() => {
     if (!permsLoading && canView) load();
     else if (!permsLoading) setLoading(false);
   }, [permsLoading, canView, load]);
+
+  useEffect(() => {
+    if (permsLoading || !canView) return;
+    const refreshWhenActive = () => {
+      if (document.visibilityState === 'visible') void load();
+    };
+    const interval = window.setInterval(refreshWhenActive, 120_000);
+    window.addEventListener('online', refreshWhenActive);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('online', refreshWhenActive);
+    };
+  }, [canView, load, permsLoading]);
 
   const handleExport = async () => {
     if (!data) return;
@@ -105,18 +125,6 @@ export function AdminDashboard({ basePath = '/admin' }: AdminDashboardProps) {
       toast.success('Dashboard exported');
     } catch {
       toast.error('Export failed');
-    }
-  };
-
-  const handleBackup = async () => {
-    setBackingUp(true);
-    const result = await runDashboardBackup(getAuditMeta());
-    setBackingUp(false);
-    if (result.success) {
-      toast.success('Backup completed');
-      load(true);
-    } else {
-      toast.error(result.error || 'Backup failed');
     }
   };
 
@@ -154,6 +162,10 @@ export function AdminDashboard({ basePath = '/admin' }: AdminDashboardProps) {
   if (!data) return null;
 
   const k = data.kpis;
+  const visibleModuleKpis = data.moduleKpis.filter((item) => {
+    const moduleName = navHrefModule(item.href);
+    return !moduleName || canAccessModule(moduleName);
+  });
 
   return (
     <div className="space-y-6">
@@ -203,8 +215,9 @@ export function AdminDashboard({ basePath = '/admin' }: AdminDashboardProps) {
         <KpiCard label="Locked Users" value={k.lockedUsers} icon={Lock} accent="border-l-red-500" />
         <KpiCard label="Total Roles" value={k.totalRoles} icon={Shield} accent="border-l-indigo-600" />
         <KpiCard label="Departments" value={k.totalDepartments} icon={Building2} accent="border-l-cyan-600" />
+        <KpiCard label="Sites" value={k.totalSites} icon={MapPin} accent="border-l-teal-600" />
         <KpiCard label="Pending Approvals" value={k.pendingApprovals} icon={Clock} accent="border-l-amber-500" />
-        <KpiCard label="Open Audit Logs" value={k.openAuditLogs} icon={FileSearch} accent="border-l-violet-600" />
+        <KpiCard label="Audit Records" value={k.totalAuditRecords} icon={FileSearch} accent="border-l-violet-600" />
         <KpiCard label="Firebase" value={k.firebaseStatus} isStatus accent="border-l-sky-600" />
         <KpiCard label="Last Backup" value={k.lastBackupStatus} accent="border-l-purple-600" />
         <KpiCard label="Health Score" value={`${k.systemHealthScore}%`} icon={Activity} accent="border-l-emerald-600" />
@@ -222,13 +235,49 @@ export function AdminDashboard({ basePath = '/admin' }: AdminDashboardProps) {
             <Button asChild size="sm" variant="outline"><Link href={`${adminBase}/departments`}><Building2 className="h-4 w-4 mr-1" />Add Department</Link></Button>
             <Button asChild size="sm" variant="outline"><Link href={`${adminBase}/workflows`}><GitBranch className="h-4 w-4 mr-1" />Configure Workflow</Link></Button>
             <Button asChild size="sm" variant="outline"><Link href={`${adminBase}/audit-trail`}><Eye className="h-4 w-4 mr-1" />View Audit Trail</Link></Button>
-            <Button size="sm" variant="outline" onClick={handleBackup} disabled={backingUp}>
-              <Database className="h-4 w-4 mr-1" />{backingUp ? 'Backing up...' : 'Backup Now'}
+            <Button asChild size="sm" variant="outline">
+              <Link href={`${adminBase}/backup/create`}><Database className="h-4 w-4 mr-1" />Create Backup Export</Link>
             </Button>
             <Button asChild size="sm" variant="outline"><Link href={`${adminBase}/system-settings`}><Settings className="h-4 w-4 mr-1" />System Settings</Link></Button>
           </CardContent>
         </Card>
       )}
+
+      {(data.dataQuality.sampled || data.dataQuality.warnings.length > 0) && (
+        <div
+          role="status"
+          className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200"
+        >
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <div>
+            <p className="font-semibold">Dashboard data quality notice</p>
+            <p>
+              {data.dataQuality.sampled
+                ? 'KPI totals are server aggregates; charts and activity lists use bounded recent samples. '
+                : ''}
+              {data.dataQuality.warnings.length > 0
+                ? `${data.dataQuality.warnings.length} data source(s) could not be read.`
+                : ''}
+            </p>
+          </div>
+        </div>
+      )}
+
+      <section aria-labelledby="module-overview-title" className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 id="module-overview-title" className="text-lg font-semibold">QMS Module Overview</h2>
+          <span className="text-xs text-muted-foreground">
+            Updated {new Date(data.dataQuality.fetchedAt).toLocaleTimeString()}
+          </span>
+        </div>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
+          {visibleModuleKpis.map((item) => (
+            <Link key={item.label} href={item.href} className="rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600">
+              <KpiCard label={item.label} value={item.value} accent="border-l-blue-500" />
+            </Link>
+          ))}
+        </div>
+      </section>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Login Activity */}
@@ -357,69 +406,12 @@ export function AdminDashboard({ basePath = '/admin' }: AdminDashboardProps) {
 
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-        <ChartCard title="Users by Role" data={safeChartData(data.charts.usersByRole)} type="pie" />
-        <ChartCard title="Users by Department" data={safeChartData(data.charts.usersByDepartment)} type="bar" />
-        <ChartCard title="Monthly Login Trend" data={safeChartData(data.charts.monthlyLoginTrend)} type="line" dataKey="value" nameKey="name" />
-        <ChartCard title="Module Usage (Audit)" data={safeChartData(data.charts.moduleUsageTrend)} type="bar" />
-        <ChartCard title="Audit Actions Trend" data={safeChartData(data.charts.auditActionsTrend)} type="line" dataKey="value" nameKey="name" />
+        <DashboardChartCard title="Users by Role" data={safeChartData(data.charts.usersByRole)} type="pie" />
+        <DashboardChartCard title="Users by Department" data={safeChartData(data.charts.usersByDepartment)} type="bar" />
+        <DashboardChartCard title="Monthly Login Trend" data={safeChartData(data.charts.monthlyLoginTrend)} type="line" />
+        <DashboardChartCard title="Module Usage (Audit)" data={safeChartData(data.charts.moduleUsageTrend)} type="bar" />
+        <DashboardChartCard title="Audit Actions Trend" data={safeChartData(data.charts.auditActionsTrend)} type="line" />
       </div>
     </div>
-  );
-}
-
-function ChartCard({
-  title,
-  data,
-  type,
-  dataKey = 'value',
-  nameKey = 'name',
-}: {
-  title: string;
-  data: { name: string; value: number }[];
-  type: 'pie' | 'bar' | 'line';
-  dataKey?: string;
-  nameKey?: string;
-}) {
-  const isEmpty = data.length === 1 && data[0].name === 'No Data' && data[0].value === 0;
-
-  return (
-    <Card>
-      <CardHeader><CardTitle className="text-base">{title}</CardTitle></CardHeader>
-      <CardContent>
-        {isEmpty ? (
-          <EmptyState message="Chart data will appear when records exist." />
-        ) : (
-          <ResponsiveContainer width="100%" height={240}>
-            {type === 'pie' ? (
-              <PieChart>
-                <Pie data={data} dataKey={dataKey} nameKey={nameKey} cx="50%" cy="50%" outerRadius={80} label>
-                  {data.map((_, i) => (
-                    <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip />
-                <Legend />
-              </PieChart>
-            ) : type === 'bar' ? (
-              <BarChart data={data}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey={nameKey} tick={{ fontSize: 11 }} />
-                <YAxis allowDecimals={false} />
-                <Tooltip />
-                <Bar dataKey={dataKey} fill="#2563eb" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            ) : (
-              <LineChart data={data}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey={nameKey} tick={{ fontSize: 11 }} />
-                <YAxis allowDecimals={false} />
-                <Tooltip />
-                <Line type="monotone" dataKey={dataKey} stroke="#0891b2" strokeWidth={2} dot={{ r: 3 }} />
-              </LineChart>
-            )}
-          </ResponsiveContainer>
-        )}
-      </CardContent>
-    </Card>
   );
 }

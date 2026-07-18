@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   CPV_COLLECTIONS, CppRecord, CqaRecord, RiskRecord, UtilityRecord, YieldRecord,
 } from '@/lib/cpv';
@@ -8,6 +8,8 @@ import { listCpvRecords, loadIntegrationSnapshot } from '@/lib/cpv-service';
 import { runCpvAiAnalytics, type AiAnalyticsReport, type AiAnalyticsFilters } from '@/lib/cpv-ai-analytics';
 
 export function useCpvAiAnalytics(filters: AiAnalyticsFilters = {}) {
+  const { product } = filters;
+  const stableFilters = useMemo(() => ({ product }), [product]);
   const [loading, setLoading] = useState(true);
   const [report, setReport] = useState<AiAnalyticsReport | null>(null);
 
@@ -26,7 +28,7 @@ export function useCpvAiAnalytics(filters: AiAnalyticsFilters = {}) {
       let equipment: Record<string, unknown>[] = [];
       try {
         const { loadAnnualReviewSourceData } = await import('@/lib/cpv-annual-review-service');
-        const source = await loadAnnualReviewSourceData(new Date().getFullYear(), filters.product || 'all');
+        const source = await loadAnnualReviewSourceData(new Date().getFullYear(), product || 'all');
         equipment = source.raw?.equipment || [];
       } catch {
         equipment = [];
@@ -40,14 +42,14 @@ export function useCpvAiAnalytics(filters: AiAnalyticsFilters = {}) {
         equipment,
         deviations: integrations.deviations,
         risks,
-        filters,
+        filters: stableFilters,
       }));
     } catch {
       setReport(null);
     } finally {
       setLoading(false);
     }
-  }, [filters.product]);
+  }, [product, stableFilters]);
 
   useEffect(() => { void reload(); }, [reload]);
 
