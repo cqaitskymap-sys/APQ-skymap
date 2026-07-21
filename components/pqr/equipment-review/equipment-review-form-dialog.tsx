@@ -4,8 +4,8 @@ import { useEffect } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import {
-  PQR_CALIBRATION_STATUSES, PQR_EQUIPMENT_CATEGORIES, PQR_EQUIPMENT_TYPES,
-  PQR_PM_STATUSES, PQR_QUALIFICATION_STATUSES, PQR_RISK_LEVELS,
+  PQR_EQUIPMENT_CATEGORIES, PQR_EQUIPMENT_TYPES,
+  PQR_QUALIFICATION_STATUSES,
   equipmentReviewFormSchema, type EquipmentReviewFormData, type PqrEquipmentReviewRecord,
 } from '@/lib/pqr-equipment-review-records';
 import type { PqrOption } from '@/lib/pqr-batch-review-records';
@@ -109,36 +109,11 @@ export function EquipmentReviewFormDialog({
                   </Select>
                 </FormItem>
               )} />
-              <FormField control={form.control} name="calibrationStatus" render={({ field }) => (
-                <FormItem><FormLabel>Calibration Status *</FormLabel>
-                  <Select value={field.value} onValueChange={field.onChange}>
-                    <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                    <SelectContent>{PQR_CALIBRATION_STATUSES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
-                  </Select>
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="pmStatus" render={({ field }) => (
-                <FormItem><FormLabel>PM Status *</FormLabel>
-                  <Select value={field.value} onValueChange={field.onChange}>
-                    <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                    <SelectContent>{PQR_PM_STATUSES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
-                  </Select>
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="lastCalibrationDate" render={({ field }) => (
-                <FormItem><FormLabel>Last Calibration</FormLabel><FormControl><Input type="date" {...field} /></FormControl></FormItem>
-              )} />
               <FormField control={form.control} name="nextCalibrationDate" render={({ field }) => (
                 <FormItem><FormLabel>Next Calibration</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem>
               )} />
               <FormField control={form.control} name="lastPmDate" render={({ field }) => (
                 <FormItem><FormLabel>Last PM Date</FormLabel><FormControl><Input type="date" {...field} /></FormControl></FormItem>
-              )} />
-              <FormField control={form.control} name="nextPmDate" render={({ field }) => (
-                <FormItem><FormLabel>Next PM Date</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
-              <FormField control={form.control} name="breakdownCount" render={({ field }) => (
-                <FormItem><FormLabel>Breakdown Count</FormLabel><FormControl><Input type="number" {...field} /></FormControl></FormItem>
               )} />
               <FormField control={form.control} name="department" render={({ field }) => (
                 <FormItem><FormLabel>Department</FormLabel><FormControl><Input {...field} /></FormControl></FormItem>

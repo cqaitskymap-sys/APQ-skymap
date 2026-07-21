@@ -44,6 +44,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import type { ColumnDef } from '@/components/admin/admin-data-table';
 
 const CHART_COLORS = ['#2563eb', '#059669', '#d97706', '#dc2626', '#7c3aed'];
+const FORM_CATEGORY_OPTIONS: Array<{ label: string; value: RawMaterialMonitoringFormData['materialType'] }> = [
+  { label: 'API', value: 'API' },
+  { label: 'Excipients', value: 'Excipient' },
+];
 
 function RiskBadge({ level }: { level: string }) {
   const cls = level === 'Critical' ? 'bg-red-900/10 text-red-900 border-red-300'
@@ -136,6 +140,10 @@ export function RawMaterialMonitoringPage() {
 
   const summary = useMemo(() => summarizeRawMaterialRecords(records), [records]);
   const charts = useMemo(() => buildRawMaterialChartSeries(filtered), [filtered]);
+  const filteredMaterials = useMemo(() => {
+    if (!form.materialType || !FORM_CATEGORY_OPTIONS.some((o) => o.value === form.materialType)) return materials;
+    return materials.filter((m) => mapMaterialType(m.materialType) === form.materialType);
+  }, [materials, form.materialType]);
 
   const onProductChange = async (productId: string) => {
     setFormProductId(productId);
@@ -458,10 +466,26 @@ export function RawMaterialMonitoringPage() {
                 <SelectContent>{formBatches.map((b) => <SelectItem key={b.id} value={b.batchNumber}>{b.batchNumber}</SelectItem>)}</SelectContent>
               </Select>
             </div>
+            <div><Label>Category *</Label>
+              <Select
+                value={FORM_CATEGORY_OPTIONS.some((o) => o.value === form.materialType) ? form.materialType : ''}
+                onValueChange={(v) => setForm((f) => ({
+                  ...f,
+                  materialType: v as RawMaterialMonitoringFormData['materialType'],
+                  materialCode: '',
+                  materialName: '',
+                }))}
+              >
+                <SelectTrigger className="mt-1"><SelectValue placeholder="Category" /></SelectTrigger>
+                <SelectContent>
+                  {FORM_CATEGORY_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
             <div><Label>Material *</Label>
               <Select value={materials.find((m) => m.materialCode === form.materialCode)?.id || ''} onValueChange={onMaterialChange} disabled={Boolean(editing)}>
                 <SelectTrigger className="mt-1"><SelectValue placeholder="Material" /></SelectTrigger>
-                <SelectContent>{materials.map((m) => <SelectItem key={m.id} value={m.id || ''}>{m.materialName}</SelectItem>)}</SelectContent>
+                <SelectContent>{filteredMaterials.map((m) => <SelectItem key={m.id} value={m.id || ''}>{m.materialName}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div><Label>Vendor *</Label>
