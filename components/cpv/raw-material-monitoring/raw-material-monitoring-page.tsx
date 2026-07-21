@@ -263,6 +263,7 @@ export function RawMaterialMonitoringPage() {
       stpNumber: '',
       testParameter: '',
       testUnit: '',
+      testResultSummary: '',
       remarks: row.remarks,
     }));
     setSubmitting(true);
