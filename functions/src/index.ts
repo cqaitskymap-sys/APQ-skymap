@@ -13,7 +13,7 @@ import { defineSecret } from 'firebase-functions/params';
 import * as logger from 'firebase-functions/logger';
 import { getApps, initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
-import { getFirestore, type Firestore } from 'firebase-admin/firestore';
+import { getFirestore, type Firestore, type DocumentData, type WriteBatch } from 'firebase-admin/firestore';
 
 function initializeAdmin() {
   if (getApps().length === 0) initializeApp();
@@ -69,6 +69,7 @@ const ADMIN_USER_ROLES = [
   'warehouse_manager', 'warehouse_executive', 'engineering_manager',
   'engineering_executive', 'regulatory_affairs', 'hr', 'training_coordinator',
   'document_controller', 'department_head', 'employee', 'auditor', 'vendor', 'viewer',
+  'maintenance', 'validation', 'it_administrator',
 ] as const;
 
 const ADMIN_USER_STATUSES = ['Active', 'Inactive', 'Locked', 'Suspended', 'Pending Approval'] as const;
@@ -1311,3 +1312,1580 @@ export const scheduledTrainingAutomationJobs = onSchedule(
     logger.info('Training automation completed', { retrainingUpdated, certificatesUpdated });
   },
 );
+
+const ROLE_MATRIX_MODULES = [
+  'Dashboard', 'Admin', 'CPV', 'PQR', 'Deviation', 'OOS', 'CAPA', 'Change Control',
+  'Risk Management', 'Stability', 'Complaint', 'Recall', 'DMS', 'Training', 'Audit',
+  'Vendor', 'Supplier', 'Validation', 'CSV', 'Equipment', 'Calibration', 'Maintenance',
+  'Monitoring', 'Warehouse', 'Inventory', 'eBMR', 'Reports', 'Analytics', 'Settings',
+  'Notifications', 'Audit Trail', 'Electronic Signature',
+] as const;
+
+const ROLE_MATRIX_ACTIONS = [
+  'View', 'Create', 'Edit', 'Delete', 'Review', 'Approve', 'Reject', 'Assign',
+  'Export', 'Import', 'Print', 'Archive', 'Restore', 'Close',
+  'Electronic Signature', 'Admin', 'Read Only',
+] as const;
+
+const SYSTEM_ROLE_IDS = new Set([
+  'super_admin', 'admin', 'qa', 'qc', 'production', 'engineering', 'warehouse',
+  'regulatory', 'auditor', 'department_head', 'hr', 'training_coordinator',
+  'document_controller', 'employee', 'vendor', 'viewer', 'maintenance',
+  'validation', 'it_administrator', 'head_qa', 'qa_manager', 'qc_manager',
+  'production_manager', 'warehouse_manager', 'engineering_manager', 'regulatory_affairs',
+]);
+
+const DATA_SCOPE_OPTIONS = [
+  'Own Records', 'Department Records', 'Site Records', 'Business Unit Records', 'Organization Records',
+] as const;
+
+function assertActiveAdmin(actor: DocumentData | undefined, actorRole: string) {
+  if (!actor || actor.is_active !== true || !['super_admin', 'admin'].includes(actorRole)) {
+    throw new HttpsError('permission-denied', 'Active administrator access required');
+  }
+}
+
+function assertCanModifyTargetRole(actorRole: string, targetRoleId: string) {
+  if (targetRoleId === 'super_admin' && actorRole !== 'super_admin') {
+    throw new HttpsError('permission-denied', 'Only a Super Admin can modify the Super Admin role');
+  }
+  if (actorRole === 'admin' && ['super_admin', 'admin', 'it_administrator'].includes(targetRoleId)) {
+    throw new HttpsError('permission-denied', 'Admin cannot modify privileged system administrator roles');
+  }
+}
+
+function buildFullMatrix(roleId: string): Record<string, Record<string, boolean>> {
+  const matrix: Record<string, Record<string, boolean>> = {};
+  const isSuper = roleId === 'super_admin';
+  for (const mod of ROLE_MATRIX_MODULES) {
+    matrix[mod] = {};
+    for (const action of ROLE_MATRIX_ACTIONS) {
+      matrix[mod][action] = isSuper;
+    }
+  }
+  return matrix;
+}
+
+function sanitizeRoleMatrix(
+  roleId: string,
+  value: unknown,
+): Record<string, Record<string, boolean>> {
+  if (roleId === 'super_admin') return buildFullMatrix('super_admin');
+  const validated = validatePermissionMatrix(value);
+  if (!validated) {
+    throw new HttpsError('invalid-argument', 'Permission matrix is required');
+  }
+  const matrix: Record<string, Record<string, boolean>> = {};
+  for (const mod of ROLE_MATRIX_MODULES) {
+    matrix[mod] = {};
+    for (const action of ROLE_MATRIX_ACTIONS) {
+      matrix[mod][action] = Boolean(validated[mod]?.[action]);
+    }
+  }
+  // Preserve unknown legacy module keys so existing grants are not silently dropped.
+  for (const [mod, actions] of Object.entries(validated)) {
+    if (!matrix[mod]) matrix[mod] = {};
+    for (const [action, allowed] of Object.entries(actions)) {
+      if (matrix[mod][action] === undefined) matrix[mod][action] = allowed;
+    }
+  }
+  if (roleId !== 'super_admin') {
+    if (!matrix.Admin) matrix.Admin = {};
+    matrix.Admin.Admin = false;
+    if (!['admin', 'it_administrator'].includes(roleId)) {
+      matrix.Admin.Delete = false;
+    }
+  }
+  return matrix;
+}
+
+function roleNotification(
+  targetUid: string,
+  recordId: string,
+  eventName: string,
+  title: string,
+  message: string,
+  now: string,
+) {
+  return {
+    notificationId: `NTF-${Date.now().toString(36).toUpperCase()}-${recordId.slice(0, 6)}`,
+    userId: targetUid,
+    recipientUserId: targetUid,
+    title,
+    message,
+    type: 'info',
+    moduleName: 'Role Management',
+    eventName,
+    recordId,
+    priority: 'High',
+    notificationChannel: 'In-App',
+    readStatus: 'Unread',
+    sentStatus: 'Sent',
+    isRead: false,
+    actionLink: `/admin/roles/${recordId}`,
+    createdAt: now,
+    readAt: null,
+    readBy: [],
+    readAtBy: {},
+  };
+}
+
+function writeRoleAudit(
+  batch: WriteBatch,
+  firestore: Firestore,
+  input: {
+    actorUid: string;
+    actorName: string;
+    recordId: string;
+    action: string;
+    oldValue: unknown;
+    newValue: unknown;
+    reason: string;
+    now: string;
+  },
+) {
+  const auditRef = firestore.collection('audit_logs').doc();
+  batch.set(auditRef, {
+    dateTime: input.now,
+    userId: input.actorUid,
+    userName: input.actorName,
+    module: 'Role Management',
+    recordId: input.recordId,
+    action: input.action,
+    oldValue: typeof input.oldValue === 'string' ? input.oldValue : JSON.stringify(input.oldValue ?? ''),
+    newValue: typeof input.newValue === 'string' ? input.newValue : JSON.stringify(input.newValue ?? ''),
+    reason: input.reason,
+    ipAddress: 'server',
+    device: 'cloud-function',
+    status: 'Success',
+  });
+  const trailRef = firestore.collection('audit_trail').doc();
+  batch.set(trailRef, {
+    collectionName: 'roles',
+    documentId: input.recordId,
+    action: input.action,
+    oldValue: input.oldValue ?? null,
+    newValue: input.newValue ?? null,
+    userId: input.actorUid,
+    userName: input.actorName,
+    moduleName: 'Role Management',
+    reason: input.reason,
+    timestamp: input.now,
+  });
+}
+
+async function findPermissionDoc(firestore: Firestore, roleId: string) {
+  const snapshot = await firestore.collection('permissions')
+    .where('roleId', '==', roleId)
+    .limit(10)
+    .get();
+  return snapshot.docs.find((document) => document.data().isDeleted !== true) || null;
+}
+
+async function countAssignedUsers(firestore: Firestore, roleId: string) {
+  const snapshot = await firestore.collection('users')
+    .where('role', '==', roleId)
+    .limit(500)
+    .get();
+  return snapshot.docs.filter((document) => document.data().isDeleted !== true).length;
+}
+
+/**
+ * Creates a role + permission matrix atomically with immutable audit + notification.
+ */
+export const createAdminRole = onCall(async (request) => {
+  if (!request.auth?.uid) throw new HttpsError('unauthenticated', 'Authentication required');
+  initializeAdmin();
+  const firestore = getFirestore();
+  const actorSnapshot = await firestore.collection('profiles').doc(request.auth.uid).get();
+  const actor = actorSnapshot.data();
+  const actorRole = String(actor?.role || '');
+  assertActiveAdmin(actor, actorRole);
+
+  const input = request.data as Record<string, unknown>;
+  const roleId = requiredString(input.roleId, 'roleId', 64).toLowerCase();
+  if (!/^[a-z][a-z0-9_]{1,63}$/.test(roleId)) {
+    throw new HttpsError('invalid-argument', 'Role ID must be lowercase snake_case');
+  }
+  assertCanModifyTargetRole(actorRole, roleId);
+
+  const roleName = requiredString(input.roleName, 'roleName', 120);
+  const roleDescription = optionalString(input.roleDescription, 'roleDescription', 2000);
+  const reason = requiredString(input.reason || input.changeReason, 'reason', 500);
+  const roleLevel = Number(input.roleLevel ?? 10);
+  if (!Number.isFinite(roleLevel) || roleLevel < 1 || roleLevel > 100) {
+    throw new HttpsError('invalid-argument', 'Role level must be between 1 and 100');
+  }
+  if (actorRole === 'admin' && roleLevel >= 90) {
+    throw new HttpsError('permission-denied', 'Admin cannot create administrator-level roles');
+  }
+
+  const status = String(input.status || 'Active') === 'Inactive' ? 'Inactive' : 'Active';
+  const departmentAccess = optionalString(input.departmentAccess, 'departmentAccess', 160);
+  const siteAccess = optionalString(input.siteAccess, 'siteAccess', 160);
+  const businessUnitAccess = optionalString(input.businessUnitAccess, 'businessUnitAccess', 160);
+  const dataScope = DATA_SCOPE_OPTIONS.includes(input.dataScope as typeof DATA_SCOPE_OPTIONS[number])
+    ? String(input.dataScope)
+    : 'Organization Records';
+  const fieldPolicies = Array.isArray(input.fieldPolicies) ? input.fieldPolicies.slice(0, 100) : [];
+  const permissions = sanitizeRoleMatrix(roleId, input.permissions);
+  if (actorRole === 'admin') {
+    if (!permissions.Admin) permissions.Admin = {};
+    permissions.Admin.Admin = false;
+    permissions.Admin.Delete = false;
+  }
+  const isSystemRole = Boolean(input.isSystemRole) || SYSTEM_ROLE_IDS.has(roleId);
+
+  const [dupId, dupName] = await Promise.all([
+    firestore.collection('roles').where('roleId', '==', roleId).limit(5).get(),
+    firestore.collection('roles').where('roleName', '==', roleName).limit(5).get(),
+  ]);
+  if (dupId.docs.some((document) => document.data().isDeleted !== true)) {
+    throw new HttpsError('already-exists', 'Role ID already exists');
+  }
+  if (dupName.docs.some((document) => document.data().isDeleted !== true)) {
+    throw new HttpsError('already-exists', 'Role name already exists');
+  }
+
+  const now = new Date().toISOString();
+  const roleRef = firestore.collection('roles').doc();
+  const permRef = firestore.collection('permissions').doc();
+  const batch = firestore.batch();
+  const rolePayload = {
+    roleId,
+    roleName,
+    roleDescription,
+    description: roleDescription,
+    roleLevel,
+    level: roleLevel,
+    departmentAccess,
+    siteAccess,
+    businessUnitAccess,
+    dataScope,
+    fieldPolicies,
+    status,
+    isSystemRole,
+    isDeleted: false,
+    createdBy: request.auth.uid,
+    updatedBy: request.auth.uid,
+    createdAt: now,
+    updatedAt: now,
+  };
+  batch.set(roleRef, rolePayload);
+  batch.set(permRef, {
+    roleId,
+    roleName,
+    permissions,
+    status,
+    isDeleted: false,
+    createdBy: request.auth.uid,
+    updatedBy: request.auth.uid,
+    createdAt: now,
+    updatedAt: now,
+  });
+  writeRoleAudit(batch, firestore, {
+    actorUid: request.auth.uid,
+    actorName: String(actor?.full_name || actor?.email || 'Admin'),
+    recordId: roleRef.id,
+    action: 'CREATE_ROLE',
+    oldValue: null,
+    newValue: { role: rolePayload, permissions },
+    reason,
+    now,
+  });
+  batch.set(
+    firestore.collection('notifications').doc(),
+    roleNotification(
+      request.auth.uid,
+      roleRef.id,
+      'ROLE_CREATED',
+      'Role created',
+      `Role "${roleName}" was created with an updated permission matrix.`,
+      now,
+    ),
+  );
+  await batch.commit();
+  return { id: roleRef.id, ...rolePayload };
+});
+
+export const updateAdminRole = onCall(async (request) => {
+  if (!request.auth?.uid) throw new HttpsError('unauthenticated', 'Authentication required');
+  initializeAdmin();
+  const firestore = getFirestore();
+  const actorSnapshot = await firestore.collection('profiles').doc(request.auth.uid).get();
+  const actor = actorSnapshot.data();
+  const actorRole = String(actor?.role || '');
+  assertActiveAdmin(actor, actorRole);
+
+  const input = request.data as Record<string, unknown>;
+  const roleDocId = requiredString(input.roleDocId, 'roleDocId', 128);
+  const reason = requiredString(input.reason, 'reason', 500);
+  const updates = (input.updates && typeof input.updates === 'object' && !Array.isArray(input.updates))
+    ? input.updates as Record<string, unknown>
+    : {};
+
+  const roleRef = firestore.collection('roles').doc(roleDocId);
+  const roleSnap = await roleRef.get();
+  if (!roleSnap.exists || roleSnap.data()?.isDeleted === true) {
+    throw new HttpsError('not-found', 'Role not found');
+  }
+  const existing = roleSnap.data() || {};
+  const targetRoleId = String(existing.roleId || '');
+  assertCanModifyTargetRole(actorRole, targetRoleId);
+
+  const roleName = optionalString(updates.roleName, 'roleName', 120) || String(existing.roleName || '');
+  if (roleName !== existing.roleName) {
+    const dupName = await firestore.collection('roles').where('roleName', '==', roleName).limit(5).get();
+    if (dupName.docs.some((document) => document.id !== roleDocId && document.data().isDeleted !== true)) {
+      throw new HttpsError('already-exists', 'Role name already exists');
+    }
+  }
+
+  const roleLevel = Number(updates.roleLevel ?? existing.roleLevel ?? existing.level ?? 10);
+  if (!Number.isFinite(roleLevel) || roleLevel < 1 || roleLevel > 100) {
+    throw new HttpsError('invalid-argument', 'Role level must be between 1 and 100');
+  }
+  if (actorRole === 'admin' && roleLevel >= 90) {
+    throw new HttpsError('permission-denied', 'Admin cannot raise roles to administrator privilege level');
+  }
+
+  const status = String(updates.status || existing.status || 'Active') === 'Inactive' ? 'Inactive' : 'Active';
+  if (targetRoleId === 'super_admin' && status !== 'Active') {
+    throw new HttpsError('failed-precondition', 'Super Admin role cannot be deactivated');
+  }
+
+  const permissions = sanitizeRoleMatrix(targetRoleId, input.permissions);
+  if (actorRole === 'admin') {
+    if (!permissions.Admin) permissions.Admin = {};
+    permissions.Admin.Admin = false;
+    permissions.Admin.Delete = false;
+  }
+  const now = new Date().toISOString();
+  const rolePayload = {
+    roleName,
+    roleDescription: optionalString(updates.roleDescription, 'roleDescription', 2000)
+      || String(existing.roleDescription || existing.description || ''),
+    description: optionalString(updates.roleDescription, 'roleDescription', 2000)
+      || String(existing.roleDescription || existing.description || ''),
+    roleLevel,
+    level: roleLevel,
+    departmentAccess: optionalString(updates.departmentAccess, 'departmentAccess', 160),
+    siteAccess: optionalString(updates.siteAccess, 'siteAccess', 160),
+    businessUnitAccess: optionalString(updates.businessUnitAccess, 'businessUnitAccess', 160),
+    dataScope: DATA_SCOPE_OPTIONS.includes(updates.dataScope as typeof DATA_SCOPE_OPTIONS[number])
+      ? String(updates.dataScope)
+      : String(existing.dataScope || 'Organization Records'),
+    fieldPolicies: Array.isArray(updates.fieldPolicies) ? updates.fieldPolicies.slice(0, 100) : (existing.fieldPolicies || []),
+    status,
+    updatedBy: request.auth.uid,
+    updatedAt: now,
+  };
+
+  const permDoc = await findPermissionDoc(firestore, targetRoleId);
+  const batch = firestore.batch();
+  batch.update(roleRef, rolePayload);
+  if (permDoc) {
+    batch.update(permDoc.ref, {
+      roleName,
+      permissions,
+      status,
+      updatedBy: request.auth.uid,
+      updatedAt: now,
+    });
+  } else {
+    batch.set(firestore.collection('permissions').doc(), {
+      roleId: targetRoleId,
+      roleName,
+      permissions,
+      status,
+      isDeleted: false,
+      createdBy: request.auth.uid,
+      updatedBy: request.auth.uid,
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+
+  writeRoleAudit(batch, firestore, {
+    actorUid: request.auth.uid,
+    actorName: String(actor?.full_name || actor?.email || 'Admin'),
+    recordId: roleDocId,
+    action: 'EDIT_ROLE',
+    oldValue: existing,
+    newValue: { ...rolePayload, permissions },
+    reason,
+    now,
+  });
+  batch.set(
+    firestore.collection('notifications').doc(),
+    roleNotification(
+      request.auth.uid,
+      roleDocId,
+      'ROLE_UPDATED',
+      'Role updated',
+      `Role "${roleName}" permissions were updated.`,
+      now,
+    ),
+  );
+  await batch.commit();
+  const affectedUsers = await countAssignedUsers(firestore, targetRoleId);
+  return {
+    role: { id: roleDocId, roleId: targetRoleId, ...existing, ...rolePayload },
+    affectedUsers,
+  };
+});
+
+export const setAdminRoleStatus = onCall(async (request) => {
+  if (!request.auth?.uid) throw new HttpsError('unauthenticated', 'Authentication required');
+  initializeAdmin();
+  const firestore = getFirestore();
+  const actorSnapshot = await firestore.collection('profiles').doc(request.auth.uid).get();
+  const actor = actorSnapshot.data();
+  const actorRole = String(actor?.role || '');
+  assertActiveAdmin(actor, actorRole);
+
+  const roleDocId = requiredString(request.data?.roleDocId, 'roleDocId', 128);
+  const status = String(request.data?.status || '') === 'Inactive' ? 'Inactive' : 'Active';
+  const reason = requiredString(request.data?.reason, 'reason', 500);
+  const roleRef = firestore.collection('roles').doc(roleDocId);
+  const roleSnap = await roleRef.get();
+  if (!roleSnap.exists || roleSnap.data()?.isDeleted === true) {
+    throw new HttpsError('not-found', 'Role not found');
+  }
+  const existing = roleSnap.data() || {};
+  const targetRoleId = String(existing.roleId || '');
+  assertCanModifyTargetRole(actorRole, targetRoleId);
+  if (targetRoleId === 'super_admin' && status !== 'Active') {
+    throw new HttpsError('failed-precondition', 'Super Admin role cannot be deactivated');
+  }
+
+  const now = new Date().toISOString();
+  const batch = firestore.batch();
+  batch.update(roleRef, { status, updatedAt: now, updatedBy: request.auth.uid });
+  const permDoc = await findPermissionDoc(firestore, targetRoleId);
+  if (permDoc) {
+    batch.update(permDoc.ref, { status, updatedAt: now, updatedBy: request.auth.uid });
+  }
+  writeRoleAudit(batch, firestore, {
+    actorUid: request.auth.uid,
+    actorName: String(actor?.full_name || actor?.email || 'Admin'),
+    recordId: roleDocId,
+    action: status === 'Active' ? 'ROLE_ACTIVATED' : 'ROLE_DEACTIVATED',
+    oldValue: existing.status,
+    newValue: status,
+    reason,
+    now,
+  });
+  batch.set(
+    firestore.collection('notifications').doc(),
+    roleNotification(
+      request.auth.uid,
+      roleDocId,
+      status === 'Active' ? 'ROLE_ACTIVATED' : 'ROLE_DEACTIVATED',
+      status === 'Active' ? 'Role activated' : 'Role deactivated',
+      `Role "${String(existing.roleName || targetRoleId)}" is now ${status}.`,
+      now,
+    ),
+  );
+  await batch.commit();
+  return { success: true, status };
+});
+
+export const softDeleteAdminRole = onCall(async (request) => {
+  if (!request.auth?.uid) throw new HttpsError('unauthenticated', 'Authentication required');
+  initializeAdmin();
+  const firestore = getFirestore();
+  const actorSnapshot = await firestore.collection('profiles').doc(request.auth.uid).get();
+  const actor = actorSnapshot.data();
+  const actorRole = String(actor?.role || '');
+  assertActiveAdmin(actor, actorRole);
+  if (actorRole !== 'super_admin') {
+    throw new HttpsError('permission-denied', 'Only Super Admin can soft-delete roles');
+  }
+
+  const roleDocId = requiredString(request.data?.roleDocId, 'roleDocId', 128);
+  const reason = requiredString(request.data?.reason, 'reason', 500);
+  const roleRef = firestore.collection('roles').doc(roleDocId);
+  const roleSnap = await roleRef.get();
+  if (!roleSnap.exists) throw new HttpsError('not-found', 'Role not found');
+  const existing = roleSnap.data() || {};
+  const targetRoleId = String(existing.roleId || '');
+  if (SYSTEM_ROLE_IDS.has(targetRoleId) || existing.isSystemRole === true) {
+    throw new HttpsError('failed-precondition', 'System roles cannot be deleted');
+  }
+  const assigned = await countAssignedUsers(firestore, targetRoleId);
+  if (assigned > 0) {
+    throw new HttpsError('failed-precondition', `Cannot delete role assigned to ${assigned} user(s)`);
+  }
+
+  const now = new Date().toISOString();
+  const batch = firestore.batch();
+  batch.update(roleRef, {
+    isDeleted: true,
+    status: 'Inactive',
+    updatedAt: now,
+    updatedBy: request.auth.uid,
+  });
+  const permDoc = await findPermissionDoc(firestore, targetRoleId);
+  if (permDoc) {
+    batch.update(permDoc.ref, {
+      isDeleted: true,
+      status: 'Inactive',
+      updatedAt: now,
+      updatedBy: request.auth.uid,
+    });
+  }
+  writeRoleAudit(batch, firestore, {
+    actorUid: request.auth.uid,
+    actorName: String(actor?.full_name || actor?.email || 'Admin'),
+    recordId: roleDocId,
+    action: 'DELETE_ROLE',
+    oldValue: existing,
+    newValue: { isDeleted: true, status: 'Inactive' },
+    reason,
+    now,
+  });
+  batch.set(
+    firestore.collection('notifications').doc(),
+    roleNotification(
+      request.auth.uid,
+      roleDocId,
+      'ROLE_DELETED',
+      'Role deleted',
+      `Role "${String(existing.roleName || targetRoleId)}" was soft-deleted.`,
+      now,
+    ),
+  );
+  await batch.commit();
+  return { success: true };
+});
+
+export const restoreAdminRole = onCall(async (request) => {
+  if (!request.auth?.uid) throw new HttpsError('unauthenticated', 'Authentication required');
+  initializeAdmin();
+  const firestore = getFirestore();
+  const actorSnapshot = await firestore.collection('profiles').doc(request.auth.uid).get();
+  const actor = actorSnapshot.data();
+  const actorRole = String(actor?.role || '');
+  assertActiveAdmin(actor, actorRole);
+
+  const roleDocId = requiredString(request.data?.roleDocId, 'roleDocId', 128);
+  const reason = requiredString(request.data?.reason, 'reason', 500);
+  const roleRef = firestore.collection('roles').doc(roleDocId);
+  const roleSnap = await roleRef.get();
+  if (!roleSnap.exists) throw new HttpsError('not-found', 'Role not found');
+  const existing = roleSnap.data() || {};
+  const targetRoleId = String(existing.roleId || '');
+  assertCanModifyTargetRole(actorRole, targetRoleId);
+
+  const now = new Date().toISOString();
+  const batch = firestore.batch();
+  batch.update(roleRef, {
+    isDeleted: false,
+    status: 'Active',
+    updatedAt: now,
+    updatedBy: request.auth.uid,
+  });
+  const permSnap = await firestore.collection('permissions')
+    .where('roleId', '==', targetRoleId)
+    .limit(10)
+    .get();
+  const permDoc = permSnap.docs[0];
+  if (permDoc) {
+    batch.update(permDoc.ref, {
+      isDeleted: false,
+      status: 'Active',
+      updatedAt: now,
+      updatedBy: request.auth.uid,
+    });
+  }
+  writeRoleAudit(batch, firestore, {
+    actorUid: request.auth.uid,
+    actorName: String(actor?.full_name || actor?.email || 'Admin'),
+    recordId: roleDocId,
+    action: 'RESTORE_ROLE',
+    oldValue: { isDeleted: existing.isDeleted, status: existing.status },
+    newValue: { isDeleted: false, status: 'Active' },
+    reason,
+    now,
+  });
+  batch.set(
+    firestore.collection('notifications').doc(),
+    roleNotification(
+      request.auth.uid,
+      roleDocId,
+      'ROLE_RESTORED',
+      'Role restored',
+      `Role "${String(existing.roleName || targetRoleId)}" was restored.`,
+      now,
+    ),
+  );
+  await batch.commit();
+  return { success: true };
+});
+
+export const cloneAdminRole = onCall(async (request) => {
+  if (!request.auth?.uid) throw new HttpsError('unauthenticated', 'Authentication required');
+  initializeAdmin();
+  const firestore = getFirestore();
+  const actorSnapshot = await firestore.collection('profiles').doc(request.auth.uid).get();
+  const actor = actorSnapshot.data();
+  const actorRole = String(actor?.role || '');
+  assertActiveAdmin(actor, actorRole);
+
+  const sourceRoleDocId = requiredString(request.data?.sourceRoleDocId, 'sourceRoleDocId', 128);
+  const newRoleId = requiredString(request.data?.newRoleId, 'newRoleId', 64).toLowerCase();
+  const newRoleName = requiredString(request.data?.newRoleName, 'newRoleName', 120);
+  const reason = requiredString(request.data?.reason, 'reason', 500);
+  if (!/^[a-z][a-z0-9_]{1,63}$/.test(newRoleId)) {
+    throw new HttpsError('invalid-argument', 'Role ID must be lowercase snake_case');
+  }
+  if (newRoleId === 'super_admin') {
+    throw new HttpsError('permission-denied', 'Cannot clone into Super Admin');
+  }
+  assertCanModifyTargetRole(actorRole, newRoleId);
+
+  const sourceSnap = await firestore.collection('roles').doc(sourceRoleDocId).get();
+  if (!sourceSnap.exists || sourceSnap.data()?.isDeleted === true) {
+    throw new HttpsError('not-found', 'Source role not found');
+  }
+  const source = sourceSnap.data() || {};
+  const sourcePerm = await findPermissionDoc(firestore, String(source.roleId || ''));
+  const permissions = sanitizeRoleMatrix(
+    newRoleId,
+    sourcePerm?.data()?.permissions || {},
+  );
+  if (actorRole === 'admin') {
+    if (!permissions.Admin) permissions.Admin = {};
+    permissions.Admin.Admin = false;
+    permissions.Admin.Delete = false;
+  }
+
+  const [dupId, dupName] = await Promise.all([
+    firestore.collection('roles').where('roleId', '==', newRoleId).limit(5).get(),
+    firestore.collection('roles').where('roleName', '==', newRoleName).limit(5).get(),
+  ]);
+  if (dupId.docs.some((document) => document.data().isDeleted !== true)) {
+    throw new HttpsError('already-exists', 'Role ID already exists');
+  }
+  if (dupName.docs.some((document) => document.data().isDeleted !== true)) {
+    throw new HttpsError('already-exists', 'Role name already exists');
+  }
+
+  const now = new Date().toISOString();
+  const roleRef = firestore.collection('roles').doc();
+  const permRef = firestore.collection('permissions').doc();
+  const roleLevel = Math.min(Number(source.roleLevel || source.level || 10), actorRole === 'admin' ? 89 : 100);
+  const rolePayload = {
+    roleId: newRoleId,
+    roleName: newRoleName,
+    roleDescription: `Cloned from ${String(source.roleName || source.roleId)}`,
+    description: `Cloned from ${String(source.roleName || source.roleId)}`,
+    roleLevel,
+    level: roleLevel,
+    departmentAccess: String(source.departmentAccess || ''),
+    siteAccess: String(source.siteAccess || ''),
+    businessUnitAccess: String(source.businessUnitAccess || ''),
+    dataScope: String(source.dataScope || 'Organization Records'),
+    fieldPolicies: Array.isArray(source.fieldPolicies) ? source.fieldPolicies : [],
+    status: 'Active',
+    isSystemRole: SYSTEM_ROLE_IDS.has(newRoleId),
+    isDeleted: false,
+    clonedFrom: sourceRoleDocId,
+    createdBy: request.auth.uid,
+    updatedBy: request.auth.uid,
+    createdAt: now,
+    updatedAt: now,
+  };
+  const batch = firestore.batch();
+  batch.set(roleRef, rolePayload);
+  batch.set(permRef, {
+    roleId: newRoleId,
+    roleName: newRoleName,
+    permissions,
+    status: 'Active',
+    isDeleted: false,
+    createdBy: request.auth.uid,
+    updatedBy: request.auth.uid,
+    createdAt: now,
+    updatedAt: now,
+  });
+  writeRoleAudit(batch, firestore, {
+    actorUid: request.auth.uid,
+    actorName: String(actor?.full_name || actor?.email || 'Admin'),
+    recordId: roleRef.id,
+    action: 'CLONE_ROLE',
+    oldValue: { sourceRoleDocId },
+    newValue: { role: rolePayload, permissions },
+    reason,
+    now,
+  });
+  batch.set(
+    firestore.collection('notifications').doc(),
+    roleNotification(
+      request.auth.uid,
+      roleRef.id,
+      'ROLE_CLONED',
+      'Role cloned',
+      `Role "${newRoleName}" was cloned from "${String(source.roleName || '')}".`,
+      now,
+    ),
+  );
+  await batch.commit();
+  return { id: roleRef.id, ...rolePayload };
+});
+
+export const bulkUpdateAdminRoles = onCall(async (request) => {
+  if (!request.auth?.uid) throw new HttpsError('unauthenticated', 'Authentication required');
+  initializeAdmin();
+  const firestore = getFirestore();
+  const actorSnapshot = await firestore.collection('profiles').doc(request.auth.uid).get();
+  const actor = actorSnapshot.data();
+  const actorRole = String(actor?.role || '');
+  assertActiveAdmin(actor, actorRole);
+
+  const roleDocIds = Array.isArray(request.data?.roleDocIds)
+    ? (request.data.roleDocIds as unknown[]).map((id) => String(id)).filter(Boolean).slice(0, 50)
+    : [];
+  if (roleDocIds.length === 0) {
+    throw new HttpsError('invalid-argument', 'Select at least one role');
+  }
+  const action = String(request.data?.action || '');
+  if (!['activate', 'deactivate'].includes(action)) {
+    throw new HttpsError('invalid-argument', 'Unsupported bulk action');
+  }
+  const reason = requiredString(request.data?.reason, 'reason', 500);
+  const status = action === 'activate' ? 'Active' : 'Inactive';
+  const now = new Date().toISOString();
+  let successCount = 0;
+
+  for (const roleDocId of roleDocIds) {
+    const roleRef = firestore.collection('roles').doc(roleDocId);
+    const roleSnap = await roleRef.get();
+    if (!roleSnap.exists || roleSnap.data()?.isDeleted === true) continue;
+    const existing = roleSnap.data() || {};
+    const targetRoleId = String(existing.roleId || '');
+    try {
+      assertCanModifyTargetRole(actorRole, targetRoleId);
+      if (targetRoleId === 'super_admin' && status !== 'Active') continue;
+    } catch {
+      continue;
+    }
+    const batch = firestore.batch();
+    batch.update(roleRef, { status, updatedAt: now, updatedBy: request.auth!.uid });
+    const permDoc = await findPermissionDoc(firestore, targetRoleId);
+    if (permDoc) {
+      batch.update(permDoc.ref, { status, updatedAt: now, updatedBy: request.auth!.uid });
+    }
+    writeRoleAudit(batch, firestore, {
+      actorUid: request.auth.uid,
+      actorName: String(actor?.full_name || actor?.email || 'Admin'),
+      recordId: roleDocId,
+      action: status === 'Active' ? 'ROLE_ACTIVATED' : 'ROLE_DEACTIVATED',
+      oldValue: existing.status,
+      newValue: status,
+      reason,
+      now,
+    });
+    await batch.commit();
+    successCount += 1;
+  }
+
+  return { successCount };
+});
+
+const SYSTEM_DEPARTMENT_CODES = new Set([
+  'QA', 'QC', 'PROD', 'WH', 'ENG', 'RA', 'IT', 'CQA', 'ADMIN', 'HR', 'VAL', 'MAINT',
+]);
+
+const DEPARTMENT_TYPES = [
+  'QA', 'QC', 'Production', 'Warehouse', 'Engineering', 'HR', 'IT',
+  'Regulatory', 'Purchase', 'Microbiology', 'Validation', 'Maintenance', 'Admin', 'Other',
+] as const;
+
+function departmentNotification(
+  targetUid: string,
+  recordId: string,
+  eventName: string,
+  title: string,
+  message: string,
+  now: string,
+) {
+  return {
+    notificationId: `NTF-${Date.now().toString(36).toUpperCase()}-${recordId.slice(0, 6)}`,
+    userId: targetUid,
+    recipientUserId: targetUid,
+    title,
+    message,
+    type: 'info',
+    moduleName: 'Department Master',
+    eventName,
+    recordId,
+    priority: 'High',
+    notificationChannel: 'In-App',
+    readStatus: 'Unread',
+    sentStatus: 'Sent',
+    isRead: false,
+    actionLink: `/admin/departments/${recordId}`,
+    createdAt: now,
+    readAt: null,
+    readBy: [],
+    readAtBy: {},
+  };
+}
+
+function writeDepartmentAudit(
+  batch: WriteBatch,
+  firestore: Firestore,
+  input: {
+    actorUid: string;
+    actorName: string;
+    recordId: string;
+    action: string;
+    oldValue: unknown;
+    newValue: unknown;
+    reason: string;
+    now: string;
+  },
+) {
+  batch.set(firestore.collection('audit_logs').doc(), {
+    dateTime: input.now,
+    userId: input.actorUid,
+    userName: input.actorName,
+    module: 'Department Master',
+    recordId: input.recordId,
+    action: input.action,
+    oldValue: typeof input.oldValue === 'string' ? input.oldValue : JSON.stringify(input.oldValue ?? ''),
+    newValue: typeof input.newValue === 'string' ? input.newValue : JSON.stringify(input.newValue ?? ''),
+    reason: input.reason,
+    ipAddress: 'server',
+    device: 'cloud-function',
+    status: 'Success',
+  });
+  batch.set(firestore.collection('audit_trail').doc(), {
+    collectionName: 'departments',
+    documentId: input.recordId,
+    action: input.action,
+    oldValue: input.oldValue ?? null,
+    newValue: input.newValue ?? null,
+    userId: input.actorUid,
+    userName: input.actorName,
+    moduleName: 'Department Master',
+    reason: input.reason,
+    timestamp: input.now,
+  });
+}
+
+function buildDepartmentId(code: string): string {
+  return `DEPT-${code.toUpperCase().replace(/\s+/g, '-')}`;
+}
+
+async function resolveActiveUserByIdOrName(
+  firestore: Firestore,
+  userId: string,
+  fullName: string,
+): Promise<(DocumentData & { id: string }) | null> {
+  if (userId) {
+    const byId = await firestore.collection('users').doc(userId).get();
+    if (byId.exists && byId.data()?.isDeleted !== true
+      && String(byId.data()?.userStatus || byId.data()?.status || '') === 'Active') {
+      return { id: byId.id, ...(byId.data() || {}) };
+    }
+  }
+  if (!fullName) return null;
+  const byName = await firestore.collection('users').where('fullName', '==', fullName).limit(5).get();
+  const match = byName.docs.find((document) =>
+    document.data().isDeleted !== true
+    && String(document.data().userStatus || document.data().status || '') === 'Active');
+  return match ? { id: match.id, ...(match.data() || {}) } : null;
+}
+
+async function assertNoDepartmentCycle(
+  firestore: Firestore,
+  departmentDocId: string,
+  parentDepartmentId: string,
+) {
+  if (!parentDepartmentId) return;
+  if (parentDepartmentId === departmentDocId) {
+    throw new HttpsError('failed-precondition', 'A department cannot be its own parent');
+  }
+  let currentId = parentDepartmentId;
+  const visited = new Set<string>([departmentDocId]);
+  for (let depth = 0; depth < 25; depth += 1) {
+    if (visited.has(currentId)) {
+      throw new HttpsError('failed-precondition', 'Circular parent-child hierarchy is not allowed');
+    }
+    visited.add(currentId);
+    const parentSnap = await firestore.collection('departments').doc(currentId).get();
+    if (!parentSnap.exists || parentSnap.data()?.isDeleted === true) {
+      throw new HttpsError('failed-precondition', 'Parent department is missing or inactive');
+    }
+    if (String(parentSnap.data()?.status || 'Active') !== 'Active') {
+      throw new HttpsError('failed-precondition', 'Parent department must be Active');
+    }
+    currentId = String(parentSnap.data()?.parentDepartmentId || '');
+    if (!currentId) return;
+  }
+  throw new HttpsError('failed-precondition', 'Department hierarchy exceeds supported depth');
+}
+
+async function countUsersMatchingDepartment(
+  firestore: Firestore,
+  dept: DocumentData,
+) {
+  const names = [dept.departmentName, dept.departmentCode, dept.departmentId, dept.shortName]
+    .map((value) => String(value || '').trim())
+    .filter(Boolean);
+  let total = 0;
+  for (const name of Array.from(new Set(names))) {
+    const snapshot = await firestore.collection('users')
+      .where('department', '==', name)
+      .limit(500)
+      .get();
+    total += snapshot.docs.filter((document) => document.data().isDeleted !== true).length;
+  }
+  return total;
+}
+
+async function cascadeDepartmentRename(
+  firestore: Firestore,
+  batch: WriteBatch,
+  oldNames: string[],
+  newName: string,
+  actorUid: string,
+  now: string,
+) {
+  let cascadeCount = 0;
+  const uniqueOld = Array.from(new Set(oldNames.map((n) => n.trim()).filter(Boolean)));
+  for (const oldName of uniqueOld) {
+    if (oldName === newName) continue;
+    const users = await firestore.collection('users').where('department', '==', oldName).limit(400).get();
+    users.docs.forEach((document) => {
+      if (document.data().isDeleted === true) return;
+      batch.update(document.ref, { department: newName, updatedAt: now, updatedBy: actorUid });
+      cascadeCount += 1;
+    });
+    const designations = await firestore.collection('designations').where('department', '==', oldName).limit(200).get();
+    designations.docs.forEach((document) => {
+      if (document.data().isDeleted === true) return;
+      batch.update(document.ref, { department: newName, updatedAt: now, updatedBy: actorUid });
+      cascadeCount += 1;
+    });
+  }
+  return cascadeCount;
+}
+
+export const createAdminDepartment = onCall(async (request) => {
+  if (!request.auth?.uid) throw new HttpsError('unauthenticated', 'Authentication required');
+  initializeAdmin();
+  const firestore = getFirestore();
+  const actorSnapshot = await firestore.collection('profiles').doc(request.auth.uid).get();
+  const actor = actorSnapshot.data();
+  const actorRole = String(actor?.role || '');
+  assertActiveAdmin(actor, actorRole);
+
+  const input = request.data as Record<string, unknown>;
+  const departmentCode = requiredString(input.departmentCode, 'departmentCode', 32).toUpperCase();
+  const departmentName = requiredString(input.departmentName, 'departmentName', 160);
+  const reason = requiredString(input.reason || input.changeReason, 'reason', 500);
+  const departmentType = String(input.departmentType || 'Other');
+  if (!DEPARTMENT_TYPES.includes(departmentType as typeof DEPARTMENT_TYPES[number])) {
+    throw new HttpsError('invalid-argument', 'Invalid department type');
+  }
+  const parentDepartmentId = optionalString(input.parentDepartmentId, 'parentDepartmentId', 128);
+  const departmentHead = requiredString(input.departmentHead, 'departmentHead', 200);
+  const departmentHeadId = optionalString(input.departmentHeadId, 'departmentHeadId', 128);
+  const manager = optionalString(input.manager, 'manager', 200);
+  const managerId = optionalString(input.managerId, 'managerId', 128);
+  const status = String(input.status || 'Active') === 'Inactive' ? 'Inactive' : 'Active';
+
+  const head = await resolveActiveUserByIdOrName(firestore, departmentHeadId, departmentHead);
+  if (!head) throw new HttpsError('failed-precondition', 'Department head must be an active user');
+  let managerRecord: (DocumentData & { id: string }) | null = null;
+  if (manager || managerId) {
+    managerRecord = await resolveActiveUserByIdOrName(firestore, managerId, manager);
+    if (!managerRecord) throw new HttpsError('failed-precondition', 'Manager must be an active user');
+  }
+
+  if (parentDepartmentId) {
+    await assertNoDepartmentCycle(firestore, 'new', parentDepartmentId);
+  }
+
+  const [dupCode, dupName] = await Promise.all([
+    firestore.collection('departments').where('departmentCode', '==', departmentCode).limit(5).get(),
+    firestore.collection('departments').where('departmentName', '==', departmentName).limit(5).get(),
+  ]);
+  if (dupCode.docs.some((document) => document.data().isDeleted !== true)) {
+    throw new HttpsError('already-exists', 'Department code already exists');
+  }
+  if (dupName.docs.some((document) => document.data().isDeleted !== true)) {
+    throw new HttpsError('already-exists', 'Department name already exists');
+  }
+
+  let parentDepartmentName = '';
+  if (parentDepartmentId) {
+    const parentSnap = await firestore.collection('departments').doc(parentDepartmentId).get();
+    parentDepartmentName = String(parentSnap.data()?.departmentName || '');
+  }
+
+  const siteId = optionalString(input.siteId, 'siteId', 128);
+  let siteLocation = optionalString(input.siteLocation, 'siteLocation', 200);
+  let businessUnit = optionalString(input.businessUnit, 'businessUnit', 160);
+  if (siteId) {
+    const site = await firestore.collection('company_sites').doc(siteId).get();
+    if (!site.exists || site.data()?.isDeleted === true) {
+      throw new HttpsError('failed-precondition', 'Site is missing or inactive');
+    }
+    siteLocation = siteLocation || String(site.data()?.siteName || '');
+    businessUnit = businessUnit || String(site.data()?.companyName || '');
+  }
+
+  const now = new Date().toISOString();
+  const departmentId = buildDepartmentId(departmentCode);
+  const isSystemDepartment = SYSTEM_DEPARTMENT_CODES.has(departmentCode);
+  const payload = {
+    departmentId,
+    departmentCode,
+    departmentName,
+    shortName: optionalString(input.shortName, 'shortName', 40) || departmentCode,
+    departmentType,
+    parentDepartmentId,
+    parentDepartmentName,
+    departmentHead: String(head.fullName || departmentHead),
+    departmentHeadId: String(head.id || ''),
+    manager: managerRecord ? String(managerRecord.fullName || manager) : '',
+    managerId: managerRecord ? String(managerRecord.id || '') : '',
+    hodEmail: optionalString(input.hodEmail, 'hodEmail', 320) || String(head.email || ''),
+    email: optionalString(input.email, 'email', 320) || String(head.email || ''),
+    phone: validatedPhone(input.phone, 'phone'),
+    extension: optionalString(input.extension, 'extension', 20),
+    businessUnit,
+    siteId,
+    siteLocation,
+    location: optionalString(input.location, 'location', 200) || siteLocation,
+    costCenter: optionalString(input.costCenter, 'costCenter', 64),
+    description: optionalString(input.description, 'description', 2000),
+    remarks: optionalString(input.remarks, 'remarks', 2000),
+    status,
+    isSystemDepartment,
+    isDeleted: false,
+    createdBy: request.auth.uid,
+    updatedBy: request.auth.uid,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  const ref = firestore.collection('departments').doc();
+  const batch = firestore.batch();
+  batch.set(ref, payload);
+  writeDepartmentAudit(batch, firestore, {
+    actorUid: request.auth.uid,
+    actorName: String(actor?.full_name || actor?.email || 'Admin'),
+    recordId: ref.id,
+    action: 'CREATE_DEPARTMENT',
+    oldValue: null,
+    newValue: payload,
+    reason,
+    now,
+  });
+  batch.set(
+    firestore.collection('notifications').doc(),
+    departmentNotification(
+      request.auth.uid,
+      ref.id,
+      'DEPARTMENT_CREATED',
+      'Department created',
+      `Department "${departmentName}" was created.`,
+      now,
+    ),
+  );
+  await batch.commit();
+  return { id: ref.id, ...payload };
+});
+
+export const updateAdminDepartment = onCall(async (request) => {
+  if (!request.auth?.uid) throw new HttpsError('unauthenticated', 'Authentication required');
+  initializeAdmin();
+  const firestore = getFirestore();
+  const actorSnapshot = await firestore.collection('profiles').doc(request.auth.uid).get();
+  const actor = actorSnapshot.data();
+  const actorRole = String(actor?.role || '');
+  assertActiveAdmin(actor, actorRole);
+
+  const input = request.data as Record<string, unknown>;
+  const departmentDocId = requiredString(input.departmentDocId, 'departmentDocId', 128);
+  const reason = requiredString(input.reason || input.changeReason, 'reason', 500);
+  const updates = (input.updates && typeof input.updates === 'object' && !Array.isArray(input.updates))
+    ? input.updates as Record<string, unknown>
+    : input;
+
+  const ref = firestore.collection('departments').doc(departmentDocId);
+  const snap = await ref.get();
+  if (!snap.exists || snap.data()?.isDeleted === true) {
+    throw new HttpsError('not-found', 'Department not found');
+  }
+  const existing = snap.data() || {};
+
+  const departmentCode = requiredString(
+    updates.departmentCode ?? existing.departmentCode,
+    'departmentCode',
+    32,
+  ).toUpperCase();
+  const departmentName = requiredString(
+    updates.departmentName ?? existing.departmentName,
+    'departmentName',
+    160,
+  );
+  const departmentType = String(updates.departmentType || existing.departmentType || 'Other');
+  if (!DEPARTMENT_TYPES.includes(departmentType as typeof DEPARTMENT_TYPES[number])) {
+    throw new HttpsError('invalid-argument', 'Invalid department type');
+  }
+
+  if (departmentCode !== existing.departmentCode) {
+    const dupCode = await firestore.collection('departments').where('departmentCode', '==', departmentCode).limit(5).get();
+    if (dupCode.docs.some((document) => document.id !== departmentDocId && document.data().isDeleted !== true)) {
+      throw new HttpsError('already-exists', 'Department code already exists');
+    }
+  }
+  if (departmentName !== existing.departmentName) {
+    const dupName = await firestore.collection('departments').where('departmentName', '==', departmentName).limit(5).get();
+    if (dupName.docs.some((document) => document.id !== departmentDocId && document.data().isDeleted !== true)) {
+      throw new HttpsError('already-exists', 'Department name already exists');
+    }
+  }
+
+  const parentDepartmentId = optionalString(
+    updates.parentDepartmentId ?? existing.parentDepartmentId,
+    'parentDepartmentId',
+    128,
+  );
+  await assertNoDepartmentCycle(firestore, departmentDocId, parentDepartmentId);
+  let parentDepartmentName = '';
+  if (parentDepartmentId) {
+    const parentSnap = await firestore.collection('departments').doc(parentDepartmentId).get();
+    parentDepartmentName = String(parentSnap.data()?.departmentName || '');
+  }
+
+  const departmentHead = requiredString(
+    updates.departmentHead ?? existing.departmentHead,
+    'departmentHead',
+    200,
+  );
+  const departmentHeadId = optionalString(
+    updates.departmentHeadId ?? existing.departmentHeadId,
+    'departmentHeadId',
+    128,
+  );
+  const head = await resolveActiveUserByIdOrName(firestore, departmentHeadId, departmentHead);
+  if (!head) throw new HttpsError('failed-precondition', 'Department head must be an active user');
+
+  const manager = optionalString(updates.manager ?? existing.manager, 'manager', 200);
+  const managerId = optionalString(updates.managerId ?? existing.managerId, 'managerId', 128);
+  let managerRecord: (DocumentData & { id: string }) | null = null;
+  if (manager || managerId) {
+    managerRecord = await resolveActiveUserByIdOrName(firestore, managerId, manager);
+    if (!managerRecord) throw new HttpsError('failed-precondition', 'Manager must be an active user');
+  }
+
+  const siteId = optionalString(updates.siteId ?? existing.siteId, 'siteId', 128);
+  let siteLocation = optionalString(updates.siteLocation ?? existing.siteLocation, 'siteLocation', 200);
+  let businessUnit = optionalString(updates.businessUnit ?? existing.businessUnit, 'businessUnit', 160);
+  if (siteId) {
+    const site = await firestore.collection('company_sites').doc(siteId).get();
+    if (!site.exists || site.data()?.isDeleted === true) {
+      throw new HttpsError('failed-precondition', 'Site is missing or inactive');
+    }
+    siteLocation = siteLocation || String(site.data()?.siteName || '');
+    businessUnit = businessUnit || String(site.data()?.companyName || '');
+  }
+
+  const status = String(updates.status || existing.status || 'Active') === 'Inactive' ? 'Inactive' : 'Active';
+  const now = new Date().toISOString();
+  const payload = {
+    departmentId: buildDepartmentId(departmentCode),
+    departmentCode,
+    departmentName,
+    shortName: optionalString(updates.shortName ?? existing.shortName, 'shortName', 40) || departmentCode,
+    departmentType,
+    parentDepartmentId,
+    parentDepartmentName,
+    departmentHead: String(head.fullName || departmentHead),
+    departmentHeadId: String(head.id || ''),
+    manager: managerRecord ? String(managerRecord.fullName || manager) : '',
+    managerId: managerRecord ? String(managerRecord.id || '') : '',
+    hodEmail: optionalString(updates.hodEmail ?? existing.hodEmail, 'hodEmail', 320) || String(head.email || ''),
+    email: optionalString(updates.email ?? existing.email, 'email', 320) || String(head.email || ''),
+    phone: validatedPhone(updates.phone ?? existing.phone, 'phone'),
+    extension: optionalString(updates.extension ?? existing.extension, 'extension', 20),
+    businessUnit,
+    siteId,
+    siteLocation,
+    location: optionalString(updates.location ?? existing.location, 'location', 200) || siteLocation,
+    costCenter: optionalString(updates.costCenter ?? existing.costCenter, 'costCenter', 64),
+    description: optionalString(updates.description ?? existing.description, 'description', 2000),
+    remarks: optionalString(updates.remarks ?? existing.remarks, 'remarks', 2000),
+    status,
+    isSystemDepartment: SYSTEM_DEPARTMENT_CODES.has(departmentCode) || Boolean(existing.isSystemDepartment),
+    updatedBy: request.auth.uid,
+    updatedAt: now,
+  };
+
+  const batch = firestore.batch();
+  batch.update(ref, payload);
+  const cascadeCount = await cascadeDepartmentRename(
+    firestore,
+    batch,
+    [String(existing.departmentName || ''), String(existing.departmentCode || '')],
+    departmentName,
+    request.auth.uid,
+    now,
+  );
+
+  if (existing.departmentHead !== payload.departmentHead) {
+    writeDepartmentAudit(batch, firestore, {
+      actorUid: request.auth.uid,
+      actorName: String(actor?.full_name || actor?.email || 'Admin'),
+      recordId: departmentDocId,
+      action: 'DEPARTMENT_HEAD_CHANGED',
+      oldValue: existing.departmentHead,
+      newValue: payload.departmentHead,
+      reason,
+      now,
+    });
+  }
+  if (String(existing.parentDepartmentId || '') !== parentDepartmentId) {
+    writeDepartmentAudit(batch, firestore, {
+      actorUid: request.auth.uid,
+      actorName: String(actor?.full_name || actor?.email || 'Admin'),
+      recordId: departmentDocId,
+      action: 'HIERARCHY_CHANGED',
+      oldValue: { parentDepartmentId: existing.parentDepartmentId, parentDepartmentName: existing.parentDepartmentName },
+      newValue: { parentDepartmentId, parentDepartmentName },
+      reason,
+      now,
+    });
+  }
+  writeDepartmentAudit(batch, firestore, {
+    actorUid: request.auth.uid,
+    actorName: String(actor?.full_name || actor?.email || 'Admin'),
+    recordId: departmentDocId,
+    action: 'EDIT_DEPARTMENT',
+    oldValue: existing,
+    newValue: payload,
+    reason,
+    now,
+  });
+  batch.set(
+    firestore.collection('notifications').doc(),
+    departmentNotification(
+      request.auth.uid,
+      departmentDocId,
+      'DEPARTMENT_UPDATED',
+      'Department updated',
+      `Department "${departmentName}" was updated.`,
+      now,
+    ),
+  );
+  await batch.commit();
+  return {
+    department: { id: departmentDocId, ...existing, ...payload },
+    cascadeCount,
+  };
+});
+
+export const setAdminDepartmentStatus = onCall(async (request) => {
+  if (!request.auth?.uid) throw new HttpsError('unauthenticated', 'Authentication required');
+  initializeAdmin();
+  const firestore = getFirestore();
+  const actorSnapshot = await firestore.collection('profiles').doc(request.auth.uid).get();
+  const actor = actorSnapshot.data();
+  assertActiveAdmin(actor, String(actor?.role || ''));
+
+  const departmentDocId = requiredString(request.data?.departmentDocId, 'departmentDocId', 128);
+  const status = String(request.data?.status || '') === 'Inactive' ? 'Inactive' : 'Active';
+  const reason = requiredString(request.data?.reason, 'reason', 500);
+  const ref = firestore.collection('departments').doc(departmentDocId);
+  const snap = await ref.get();
+  if (!snap.exists || snap.data()?.isDeleted === true) {
+    throw new HttpsError('not-found', 'Department not found');
+  }
+  const existing = snap.data() || {};
+  const linkedUsers = await countUsersMatchingDepartment(firestore, existing);
+  const now = new Date().toISOString();
+  const batch = firestore.batch();
+  batch.update(ref, { status, updatedAt: now, updatedBy: request.auth.uid });
+  writeDepartmentAudit(batch, firestore, {
+    actorUid: request.auth.uid,
+    actorName: String(actor?.full_name || actor?.email || 'Admin'),
+    recordId: departmentDocId,
+    action: status === 'Active' ? 'DEPARTMENT_ACTIVATED' : 'DEPARTMENT_DEACTIVATED',
+    oldValue: existing.status,
+    newValue: status,
+    reason,
+    now,
+  });
+  batch.set(
+    firestore.collection('notifications').doc(),
+    departmentNotification(
+      request.auth.uid,
+      departmentDocId,
+      status === 'Active' ? 'DEPARTMENT_ACTIVATED' : 'DEPARTMENT_DEACTIVATED',
+      status === 'Active' ? 'Department activated' : 'Department deactivated',
+      `Department "${String(existing.departmentName || '')}" is now ${status}.`,
+      now,
+    ),
+  );
+  await batch.commit();
+  return { success: true, linkedUsers };
+});
+
+export const softDeleteAdminDepartment = onCall(async (request) => {
+  if (!request.auth?.uid) throw new HttpsError('unauthenticated', 'Authentication required');
+  initializeAdmin();
+  const firestore = getFirestore();
+  const actorSnapshot = await firestore.collection('profiles').doc(request.auth.uid).get();
+  const actor = actorSnapshot.data();
+  const actorRole = String(actor?.role || '');
+  assertActiveAdmin(actor, actorRole);
+  if (actorRole !== 'super_admin') {
+    throw new HttpsError('permission-denied', 'Only Super Admin can soft-delete departments');
+  }
+
+  const departmentDocId = requiredString(request.data?.departmentDocId, 'departmentDocId', 128);
+  const reason = requiredString(request.data?.reason, 'reason', 500);
+  const ref = firestore.collection('departments').doc(departmentDocId);
+  const snap = await ref.get();
+  if (!snap.exists) throw new HttpsError('not-found', 'Department not found');
+  const existing = snap.data() || {};
+  const code = String(existing.departmentCode || '').toUpperCase();
+  if (SYSTEM_DEPARTMENT_CODES.has(code) || existing.isSystemDepartment === true) {
+    throw new HttpsError('failed-precondition', 'System departments cannot be deleted');
+  }
+
+  const linkedUsers = await countUsersMatchingDepartment(firestore, existing);
+  if (linkedUsers > 0) {
+    throw new HttpsError('failed-precondition', `Cannot delete department: ${linkedUsers} user(s) are linked`);
+  }
+  const children = await firestore.collection('departments')
+    .where('parentDepartmentId', '==', departmentDocId)
+    .limit(20)
+    .get();
+  if (children.docs.some((document) => document.data().isDeleted !== true)) {
+    throw new HttpsError('failed-precondition', 'Cannot delete department with active child departments');
+  }
+  const designations = await firestore.collection('designations')
+    .where('department', '==', String(existing.departmentName || ''))
+    .limit(20)
+    .get();
+  if (designations.docs.some((document) => document.data().isDeleted !== true)) {
+    throw new HttpsError('failed-precondition', 'Cannot delete department linked to designations');
+  }
+
+  const now = new Date().toISOString();
+  const batch = firestore.batch();
+  batch.update(ref, {
+    isDeleted: true,
+    status: 'Inactive',
+    updatedAt: now,
+    updatedBy: request.auth.uid,
+  });
+  writeDepartmentAudit(batch, firestore, {
+    actorUid: request.auth.uid,
+    actorName: String(actor?.full_name || actor?.email || 'Admin'),
+    recordId: departmentDocId,
+    action: 'DELETE_DEPARTMENT',
+    oldValue: existing,
+    newValue: { isDeleted: true, status: 'Inactive' },
+    reason,
+    now,
+  });
+  batch.set(
+    firestore.collection('notifications').doc(),
+    departmentNotification(
+      request.auth.uid,
+      departmentDocId,
+      'DEPARTMENT_DELETED',
+      'Department deleted',
+      `Department "${String(existing.departmentName || '')}" was soft-deleted.`,
+      now,
+    ),
+  );
+  await batch.commit();
+  return { success: true };
+});
+
+export const restoreAdminDepartment = onCall(async (request) => {
+  if (!request.auth?.uid) throw new HttpsError('unauthenticated', 'Authentication required');
+  initializeAdmin();
+  const firestore = getFirestore();
+  const actorSnapshot = await firestore.collection('profiles').doc(request.auth.uid).get();
+  const actor = actorSnapshot.data();
+  assertActiveAdmin(actor, String(actor?.role || ''));
+
+  const departmentDocId = requiredString(request.data?.departmentDocId, 'departmentDocId', 128);
+  const reason = requiredString(request.data?.reason, 'reason', 500);
+  const ref = firestore.collection('departments').doc(departmentDocId);
+  const snap = await ref.get();
+  if (!snap.exists) throw new HttpsError('not-found', 'Department not found');
+  const existing = snap.data() || {};
+  const now = new Date().toISOString();
+  const batch = firestore.batch();
+  batch.update(ref, {
+    isDeleted: false,
+    status: 'Active',
+    updatedAt: now,
+    updatedBy: request.auth.uid,
+  });
+  writeDepartmentAudit(batch, firestore, {
+    actorUid: request.auth.uid,
+    actorName: String(actor?.full_name || actor?.email || 'Admin'),
+    recordId: departmentDocId,
+    action: 'RESTORE_DEPARTMENT',
+    oldValue: { isDeleted: existing.isDeleted, status: existing.status },
+    newValue: { isDeleted: false, status: 'Active' },
+    reason,
+    now,
+  });
+  await batch.commit();
+  return { success: true };
+});
+
+export const bulkUpdateAdminDepartments = onCall(async (request) => {
+  if (!request.auth?.uid) throw new HttpsError('unauthenticated', 'Authentication required');
+  initializeAdmin();
+  const firestore = getFirestore();
+  const actorSnapshot = await firestore.collection('profiles').doc(request.auth.uid).get();
+  const actor = actorSnapshot.data();
+  assertActiveAdmin(actor, String(actor?.role || ''));
+
+  const departmentDocIds = Array.isArray(request.data?.departmentDocIds)
+    ? (request.data.departmentDocIds as unknown[]).map((id) => String(id)).filter(Boolean).slice(0, 50)
+    : [];
+  if (departmentDocIds.length === 0) {
+    throw new HttpsError('invalid-argument', 'Select at least one department');
+  }
+  const action = String(request.data?.action || '');
+  if (!['activate', 'deactivate'].includes(action)) {
+    throw new HttpsError('invalid-argument', 'Unsupported bulk action');
+  }
+  const reason = requiredString(request.data?.reason, 'reason', 500);
+  const status = action === 'activate' ? 'Active' : 'Inactive';
+  const now = new Date().toISOString();
+  let successCount = 0;
+
+  for (const departmentDocId of departmentDocIds) {
+    const ref = firestore.collection('departments').doc(departmentDocId);
+    const snap = await ref.get();
+    if (!snap.exists || snap.data()?.isDeleted === true) continue;
+    const existing = snap.data() || {};
+    const batch = firestore.batch();
+    batch.update(ref, { status, updatedAt: now, updatedBy: request.auth!.uid });
+    writeDepartmentAudit(batch, firestore, {
+      actorUid: request.auth.uid,
+      actorName: String(actor?.full_name || actor?.email || 'Admin'),
+      recordId: departmentDocId,
+      action: status === 'Active' ? 'DEPARTMENT_ACTIVATED' : 'DEPARTMENT_DEACTIVATED',
+      oldValue: existing.status,
+      newValue: status,
+      reason,
+      now,
+    });
+    await batch.commit();
+    successCount += 1;
+  }
+  return { successCount };
+});
+
+export const linkUsersToAdminDepartment = onCall(async (request) => {
+  if (!request.auth?.uid) throw new HttpsError('unauthenticated', 'Authentication required');
+  initializeAdmin();
+  const firestore = getFirestore();
+  const actorSnapshot = await firestore.collection('profiles').doc(request.auth.uid).get();
+  const actor = actorSnapshot.data();
+  assertActiveAdmin(actor, String(actor?.role || ''));
+
+  const departmentDocId = requiredString(request.data?.departmentDocId, 'departmentDocId', 128);
+  const reason = requiredString(request.data?.reason, 'reason', 500);
+  const userIds = Array.isArray(request.data?.userIds)
+    ? (request.data.userIds as unknown[]).map((id) => String(id)).filter(Boolean).slice(0, 50)
+    : [];
+  if (userIds.length === 0) {
+    throw new HttpsError('invalid-argument', 'Select at least one user');
+  }
+
+  const deptSnap = await firestore.collection('departments').doc(departmentDocId).get();
+  if (!deptSnap.exists || deptSnap.data()?.isDeleted === true) {
+    throw new HttpsError('not-found', 'Department not found');
+  }
+  const dept = deptSnap.data() || {};
+  if (String(dept.status || '') !== 'Active') {
+    throw new HttpsError('failed-precondition', 'Cannot assign users to an inactive department');
+  }
+
+  const now = new Date().toISOString();
+  const batch = firestore.batch();
+  let count = 0;
+  for (const userId of userIds) {
+    const userRef = firestore.collection('users').doc(userId);
+    const userSnap = await userRef.get();
+    if (!userSnap.exists || userSnap.data()?.isDeleted === true) continue;
+    batch.update(userRef, {
+      department: String(dept.departmentName || ''),
+      updatedAt: now,
+      updatedBy: request.auth.uid,
+    });
+    count += 1;
+  }
+  if (count === 0) {
+    throw new HttpsError('failed-precondition', 'No valid users to link');
+  }
+  writeDepartmentAudit(batch, firestore, {
+    actorUid: request.auth.uid,
+    actorName: String(actor?.full_name || actor?.email || 'Admin'),
+    recordId: departmentDocId,
+    action: 'LINK_USERS',
+    oldValue: null,
+    newValue: { userIds, department: dept.departmentName },
+    reason,
+    now,
+  });
+  await batch.commit();
+  return { count };
+});
+
+export const logAdminDepartmentExport = onCall(async (request) => {
+  if (!request.auth?.uid) throw new HttpsError('unauthenticated', 'Authentication required');
+  initializeAdmin();
+  const firestore = getFirestore();
+  const actorSnapshot = await firestore.collection('profiles').doc(request.auth.uid).get();
+  const actor = actorSnapshot.data();
+  assertActiveAdmin(actor, String(actor?.role || ''));
+  const count = Number(request.data?.count || 0);
+  const reason = optionalString(request.data?.reason, 'reason', 500) || 'Department list export';
+  const now = new Date().toISOString();
+  const batch = firestore.batch();
+  writeDepartmentAudit(batch, firestore, {
+    actorUid: request.auth.uid,
+    actorName: String(actor?.full_name || actor?.email || 'Admin'),
+    recordId: 'export',
+    action: 'EXPORT_DEPARTMENT_LIST',
+    oldValue: null,
+    newValue: { count },
+    reason,
+    now,
+  });
+  await batch.commit();
+  return { success: true };
+});
+
+export {
+  createAdminDesignation,
+  updateAdminDesignation,
+  setAdminDesignationStatus,
+  softDeleteAdminDesignation,
+  restoreAdminDesignation,
+  bulkUpdateAdminDesignations,
+  importAdminDesignations,
+  logAdminDesignationExport,
+} from './designation-admin';
+

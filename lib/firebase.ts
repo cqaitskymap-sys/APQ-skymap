@@ -156,7 +156,10 @@ export type UserRole =
   | 'employee'
   | 'auditor'
   | 'vendor'
-  | 'viewer';
+  | 'viewer'
+  | 'maintenance'
+  | 'validation'
+  | 'it_administrator';
 
 export interface Profile {
   id: string;

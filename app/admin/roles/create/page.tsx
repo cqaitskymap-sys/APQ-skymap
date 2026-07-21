@@ -20,11 +20,11 @@ import type { RoleFormData } from '@/lib/admin/schemas';
 function CreateRoleContent() {
   const router = useRouter();
   const { user, profile } = useAuth();
-  const { role } = useAdminPermissions();
+  const { role, hasPermission } = useAdminPermissions();
   const [submitting, setSubmitting] = useState(false);
   const [pendingData, setPendingData] = useState<RoleFormData | null>(null);
 
-  if (!canEditRoles(role)) {
+  if (!canEditRoles(role) || !hasPermission('Admin', 'create')) {
     return <ErrorCard accessDenied title="Access Denied" message="Only Super Admin and Admin can create roles." />;
   }
 
@@ -33,8 +33,10 @@ function CreateRoleContent() {
     const result = await createRole(data, {
       userId: user?.uid || 'system',
       userName: profile?.full_name || profile?.email || 'Admin',
+      role,
     }, role);
     setSubmitting(false);
+    setPendingData(null);
     if (result.error) {
       toast.error(result.error);
       return;
@@ -43,33 +45,31 @@ function CreateRoleContent() {
     router.push(`/admin/roles/${result.role?.id}`);
   };
 
-  const onSubmit = (data: RoleFormData) => {
-    setPendingData(data);
-  };
-
   return (
     <div className="space-y-6">
-      <PageHeader title="Create Role" description="Define a new role and permission matrix" basePath="/admin" />
+      <PageHeader title="Create Role" description="Define a new role, scopes, and permission matrix" basePath="/admin" />
       <RoleForm
-        onSubmit={onSubmit}
+        onSubmit={(data) => setPendingData(data)}
         onCancel={() => router.push('/admin/roles')}
         submitting={submitting}
       />
-      <AlertDialog open={!!pendingData} onOpenChange={() => setPendingData(null)}>
+      <AlertDialog open={!!pendingData} onOpenChange={() => !submitting && setPendingData(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Confirm Role Creation</AlertDialogTitle>
             <AlertDialogDescription>
               Create role &quot;{pendingData?.roleName}&quot; with the configured permissions?
+              Reason: {pendingData?.changeReason}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={submitting}>Cancel</AlertDialogCancel>
             <AlertDialogAction
               className="bg-blue-600"
+              disabled={submitting}
               onClick={() => pendingData && submit(pendingData)}
             >
-              Create Role
+              {submitting ? 'Creating…' : 'Create Role'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

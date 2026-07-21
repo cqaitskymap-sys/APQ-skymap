@@ -12,32 +12,64 @@ export const PERMISSION_ACTIONS = [
 
 /** Modules shown in Role & Permission matrix UI */
 export const ROLE_MATRIX_MODULES = [
-  'Admin', 'CPV', 'PQR', 'Deviation', 'OOS', 'CAPA', 'Change Control',
-  'Stability', 'Complaint', 'Recall', 'DMS', 'Training', 'Audit',
-  'Vendor', 'Validation', 'CSV', 'Equipment', 'Monitoring', 'Warehouse', 'eBMR',
+  'Dashboard', 'Admin', 'CPV', 'PQR', 'Deviation', 'OOS', 'CAPA', 'Change Control',
+  'Risk Management', 'Stability', 'Complaint', 'Recall', 'DMS', 'Training', 'Audit',
+  'Vendor', 'Supplier', 'Validation', 'CSV', 'Equipment', 'Calibration', 'Maintenance',
+  'Monitoring', 'Warehouse', 'Inventory', 'eBMR', 'Reports', 'Analytics', 'Settings',
+  'Notifications', 'Audit Trail', 'Electronic Signature',
 ] as const;
 
 /** Permission actions in Role & Permission matrix UI */
 export const ROLE_MATRIX_ACTIONS = [
-  'View', 'Create', 'Edit', 'Delete', 'Review', 'Approve', 'Reject',
-  'Close', 'Export', 'Print', 'Read Only',
+  'View', 'Create', 'Edit', 'Delete', 'Review', 'Approve', 'Reject', 'Assign',
+  'Export', 'Import', 'Print', 'Archive', 'Restore', 'Close',
+  'Electronic Signature', 'Admin', 'Read Only',
+] as const;
+
+/** Built-in system roles that cannot be permanently removed */
+export const SYSTEM_ROLE_IDS = [
+  'super_admin', 'admin', 'qa', 'qc', 'production', 'engineering', 'warehouse',
+  'regulatory', 'auditor', 'department_head', 'hr', 'training_coordinator',
+  'document_controller', 'employee', 'vendor', 'viewer', 'maintenance',
+  'validation', 'it_administrator', 'head_qa', 'qa_manager', 'qc_manager',
+  'production_manager', 'warehouse_manager', 'engineering_manager',
+  'regulatory_affairs',
 ] as const;
 
 /** Preset role types for role management */
 export const ROLE_PRESET_OPTIONS = [
   { id: 'super_admin', name: 'Super Admin', level: 100 },
-  { id: 'admin', name: 'Admin', level: 90 },
-  { id: 'qa', name: 'QA', level: 75 },
-  { id: 'qc', name: 'QC', level: 75 },
+  { id: 'admin', name: 'System Admin', level: 90 },
+  { id: 'qa', name: 'Quality Assurance', level: 75 },
+  { id: 'qc', name: 'Quality Control', level: 75 },
+  { id: 'document_controller', name: 'Document Controller', level: 65 },
+  { id: 'training_coordinator', name: 'Training Coordinator', level: 65 },
+  { id: 'department_head', name: 'Department Head', level: 80 },
+  { id: 'hr', name: 'HR', level: 65 },
+  { id: 'warehouse', name: 'Warehouse', level: 70 },
   { id: 'production', name: 'Production', level: 70 },
   { id: 'engineering', name: 'Engineering', level: 70 },
-  { id: 'warehouse', name: 'Warehouse', level: 70 },
-  { id: 'regulatory', name: 'Regulatory', level: 70 },
+  { id: 'maintenance', name: 'Maintenance', level: 65 },
+  { id: 'validation', name: 'Validation', level: 65 },
+  { id: 'it_administrator', name: 'IT Administrator', level: 85 },
   { id: 'auditor', name: 'Auditor', level: 50 },
-  { id: 'department_head', name: 'Department Head', level: 80 },
+  { id: 'employee', name: 'Employee', level: 30 },
+  { id: 'vendor', name: 'Vendor', level: 20 },
+  { id: 'viewer', name: 'Viewer', level: 10 },
+  { id: 'regulatory', name: 'Regulatory', level: 70 },
   { id: 'reviewer', name: 'Reviewer', level: 55 },
   { id: 'approver', name: 'Approver', level: 60 },
 ] as const;
+
+export const DATA_SCOPE_OPTIONS = [
+  'Own Records',
+  'Department Records',
+  'Site Records',
+  'Business Unit Records',
+  'Organization Records',
+] as const;
+
+export const FIELD_ACCESS_LEVELS = ['Hidden', 'Read Only', 'Editable', 'Conditional'] as const;
 
 export const ADMIN_ROLES = [
   { id: 'super_admin', name: 'Super Admin', level: 100 },
@@ -68,6 +100,9 @@ export const ADMIN_ROLES = [
   { id: 'auditor', name: 'Auditor', level: 50 },
   { id: 'vendor', name: 'Vendor', level: 20 },
   { id: 'viewer', name: 'Viewer', level: 10 },
+  { id: 'maintenance', name: 'Maintenance', level: 65 },
+  { id: 'validation', name: 'Validation', level: 65 },
+  { id: 'it_administrator', name: 'IT Administrator', level: 85 },
 ] as const;
 
 export const DEFAULT_DEPARTMENTS = [
@@ -80,7 +115,13 @@ export const DEFAULT_DEPARTMENTS = [
   { departmentCode: 'IT', departmentName: 'IT', description: 'Information Technology' },
   { departmentCode: 'CQA', departmentName: 'CQA', description: 'Corporate Quality Assurance' },
   { departmentCode: 'ADMIN', departmentName: 'Admin', description: 'Administration' },
+  { departmentCode: 'HR', departmentName: 'HR', description: 'Human Resources' },
+  { departmentCode: 'VAL', departmentName: 'Validation', description: 'Validation' },
+  { departmentCode: 'MAINT', departmentName: 'Maintenance', description: 'Maintenance' },
 ];
+
+/** Built-in department codes that cannot be permanently removed */
+export const SYSTEM_DEPARTMENT_CODES = DEFAULT_DEPARTMENTS.map((d) => d.departmentCode);
 
 export const DEFAULT_DESIGNATIONS = [
   { designationCode: 'HQA', designationName: 'Head QA', department: 'QA', approvalLevel: 5 },
@@ -94,6 +135,25 @@ export const DEFAULT_DESIGNATIONS = [
   { designationCode: 'CQA-IT', designationName: 'CQA IT', department: 'CQA', approvalLevel: 3 },
   { designationCode: 'AUD', designationName: 'Auditor', department: 'QA', approvalLevel: 1 },
 ];
+
+/** Built-in designation codes that cannot be permanently removed */
+export const SYSTEM_DESIGNATION_CODES = DEFAULT_DESIGNATIONS.map((d) => d.designationCode);
+
+export const EMPLOYMENT_CATEGORIES = [
+  'Permanent', 'Contract', 'Temporary', 'Consultant', 'Intern', 'Vendor',
+] as const;
+
+export const JOB_BANDS = [
+  'Band A', 'Band B', 'Band C', 'Band D', 'Band E', 'Band F', 'Unbanded',
+] as const;
+
+export const JOB_GRADES = [
+  'G1', 'G2', 'G3', 'G4', 'G5', 'G6', 'G7', 'G8', 'G9', 'G10',
+] as const;
+
+export const REPORTING_LEVELS = [
+  'L1', 'L2', 'L3', 'L4', 'L5', 'L6', 'L7', 'L8', 'L9', 'L10',
+] as const;
 
 export const PARAMETER_TYPES = [
   'CPP', 'CQA', 'IPC', 'Finished Product Test', 'Stability Test',

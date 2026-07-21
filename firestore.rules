@@ -100,8 +100,38 @@ service cloud.firestore {
         || name in ['cpv_audit_trail', 'audit_logs', 'audit_trail', 'packaging_audit_trail', 'audit_logs_material', 'integration_logs'];
     }
 
-    function isRegisteredCollection(name) {
+    // Non-prefixed CPV collections (legacy cpv_* covered by name.matches('cpv_.*')).
+    function isCpvOperationalCollection(name) {
       return name.matches('cpv_.*')
+        || name in [
+          'cpp_parameters', 'cpp_results', 'cqa_parameters', 'cqa_results',
+          'raw_material_monitoring', 'packing_material_monitoring',
+          'yield_monitoring', 'environmental_monitoring', 'area_master',
+          'utility_monitoring', 'utility_master',
+          'stability_schedules', 'stability_results', 'stability_monitoring',
+          'hold_time_monitoring', 'hold_time_master',
+          'process_capability', 'trend_analysis', 'control_charts',
+          'spc_rule_violations', 'risk_assessment', 'risk_assessments',
+          'risk_register', 'risk_controls', 'risk_reviews',
+          'alerts', 'alert_rules', 'alert_notifications', 'alert_escalations',
+          'ai_predictions', 'ai_recommendations', 'reports', 'report_exports'
+        ];
+    }
+
+    // PQR module collections (pqr_* plus equipment/vendor sources used by PQR reviews).
+    function isPqrOperationalCollection(name) {
+      return name.matches('pqr_.*')
+        || name in [
+          'material_review', 'approved_vendor_list', 'packing_material_master',
+          'capa_trends', 'equipment_qualification', 'equipment_calibration',
+          'preventive_maintenance', 'pm_records', 'breakdown_records',
+          'equipment_usage_logs', 'utility_equipment'
+        ];
+    }
+
+    function isRegisteredCollection(name) {
+      return isCpvOperationalCollection(name)
+        || isPqrOperationalCollection(name)
         || name in [
           'users', 'roles', 'permissions', 'user_permissions', 'products', 'batches',
           'cpv_reviews', 'cpp_parameters', 'cpp_results',
@@ -232,7 +262,8 @@ service cloud.firestore {
         || (isEngineeringRole() && name in ['equipment_master', 'equipment_records', 'calibration_records', 'validation_records', 'csv_systems', 'monitoring_records'])
         || (isWarehouseRole() && name in ['warehouse_materials', 'warehouse_records', 'material_master', 'recall_distribution', 'recall_recovery'])
         || (isRegulatoryRole() && name in ['change_controls', 'change_control', 'recalls', 'recall_records', 'recall_regulatory_notifications', 'documents', 'dms_documents', 'document_revisions', 'document_versions', 'document_approvals', 'document_distribution', 'distribution_lists', 'distribution_groups', 'document_acknowledgements', 'read_confirmations', 'document_attachments', 'document_lifecycle', 'document_reviews', 'review_workflows', 'review_steps', 'review_comments', 'review_checklists', 'approval_delegations', 'approval_escalations', 'approval_comments', 'electronic_signatures', 'document_effective_dates', 'periodic_reviews', 'review_schedules', 'review_decisions', 'document_archives', 'document_archive', 'archive_jobs', 'archive_policies', 'archive_requests', 'archive_restoration_requests', 'archive_locations', 'retention_policies', 'retention_schedules', 'retention_reviews', 'retention_events', 'disposal_requests', 'disposal_approvals', 'disposal_certificates', 'legal_holds', 'regulatory_holds', 'external_documents', 'external_document_versions', 'external_document_reviews', 'external_document_distribution', 'external_document_sources', 'external_document_categories', 'supplier_documents', 'regulatory_documents', 'standards_documents', 'safety_documents', 'linked_internal_documents', 'print_requests', 'printed_documents', 'print_copies', 'print_locations', 'print_distribution', 'print_reconciliation', 'print_returns', 'print_destruction', 'watermark_templates', 'watermark_rules', 'watermark_history', 'document_watermarks', 'audit_events', 'audit_exports', 'audit_filters', 'document_obsolete', 'sop_master', 'sop_versions', 'sop_reviews', 'sop_approvals', 'sop_training_links', 'sop_distribution', 'sop_acknowledgements', 'sop_periodic_reviews', 'sop_archive', 'sop_management', 'work_instructions', 'wi_versions', 'wi_reviews', 'wi_approvals', 'wi_training_links', 'wi_distribution', 'wi_acknowledgements', 'wi_periodic_reviews', 'wi_archive', 'forms_templates', 'form_versions', 'form_reviews', 'form_approvals', 'form_distribution', 'form_acknowledgements', 'form_periodic_reviews', 'form_archive', 'production_lines', 'pqr_records'])
-        || (isNotReadOnly() && name.matches('cpv_.*'));
+        || (isNotReadOnly() && isCpvOperationalCollection(name))
+        || (isNotReadOnly() && isPqrOperationalCollection(name));
     }
 
     // ── Profiles & Users ──
@@ -289,12 +320,14 @@ service cloud.firestore {
 
     match /roles/{docId} {
       allow read: if canReadAdminDirectory();
-      allow write: if isSuperAdmin();
+      // Privileged role writes are enforced by trusted Cloud Functions.
+      allow create, update, delete: if false;
     }
 
     match /permissions/{docId} {
       allow read: if canReadAdminDirectory();
-      allow write: if isSuperAdmin();
+      // Privileged permission matrix writes are enforced by trusted Cloud Functions.
+      allow create, update, delete: if false;
     }
 
     match /user_permissions/{docId} {
@@ -506,12 +539,14 @@ service cloud.firestore {
 
     match /departments/{docId} {
       allow read: if isActiveUser() && canReadCollection('departments');
-      allow write: if isAdmin() || isQaRole();
+      // Privileged department master writes are enforced by trusted Cloud Functions.
+      allow create, update, delete: if false;
     }
 
     match /designations/{docId} {
       allow read: if isActiveUser() && canReadCollection('designations');
-      allow write: if isAdmin() || isQaRole();
+      // Privileged designation master writes are enforced by trusted Cloud Functions.
+      allow create, update, delete: if false;
     }
 
     match /company_sites/{docId} {

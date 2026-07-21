@@ -99,17 +99,16 @@ export function PackingDetailView({ id }: { id: string }) {
         <AvlBadge status={record.avlStatus} />
         <StatusBadge status={record.reviewStatus} />
       </div>
-      <div className="grid gap-4 sm:grid-cols-4">
-        <KpiCard label="Issued" value={`${record.issuedQuantity} ${record.unit}`} tone="blue" />
+      <div className="grid gap-4 sm:grid-cols-3">
+        <KpiCard label="Standard Qty" value={`${record.issuedQuantity} ${record.unit}`} tone="blue" />
         <KpiCard label="Used" value={`${record.usedQuantity} ${record.unit}`} tone="green" />
-        <KpiCard label="Balance" value={`${record.balanceQuantity} ${record.unit}`} tone="amber" />
         <KpiCard label="Category" value={record.materialCategory} tone="blue" />
       </div>
       <Card>
         <CardHeader><CardTitle className="text-sm">Details</CardTitle></CardHeader>
         <CardContent className="grid gap-2 sm:grid-cols-2 text-sm">
           <p><span className="text-muted-foreground">Type:</span> {record.materialType}</p>
-          <p><span className="text-muted-foreground">AR / GRN:</span> {record.arNumber} / {record.grnNumber}</p>
+          <p><span className="text-muted-foreground">AR Number:</span> {record.arNumber}</p>
           <p><span className="text-muted-foreground">Vendor:</span> {record.vendorName}</p>
           <p><span className="text-muted-foreground">QC:</span> {record.qcStatus}</p>
           <p><span className="text-muted-foreground">Test Summary:</span> {record.testResultSummary || '—'}</p>

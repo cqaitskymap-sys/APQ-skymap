@@ -37,6 +37,11 @@ const LEGACY_ROLE_MAP: Record<string, AdminRoleId> = {
   engineering_manager: 'engineering_manager',
   warehouse_manager: 'warehouse_manager',
   regulatory_affairs: 'regulatory_affairs',
+  maintenance: 'maintenance',
+  validation: 'validation',
+  it_administrator: 'it_administrator',
+  it_admin: 'it_administrator',
+  'it administrator': 'it_administrator',
 };
 
 export const ROLE_DEFINITIONS: { id: UserRole; label: string; description: string }[] = [
@@ -55,6 +60,10 @@ export const ROLE_DEFINITIONS: { id: UserRole; label: string; description: strin
   { id: 'employee', label: 'Employee', description: 'Assigned training and controlled document access' },
   { id: 'auditor', label: 'Auditor', description: 'Read-only access across modules' },
   { id: 'vendor', label: 'Vendor', description: 'Restricted vendor portal access' },
+  { id: 'viewer', label: 'Viewer', description: 'Read-only viewer access' },
+  { id: 'maintenance', label: 'Maintenance', description: 'Equipment maintenance operations' },
+  { id: 'validation', label: 'Validation', description: 'Process and system validation' },
+  { id: 'it_administrator', label: 'IT Administrator', description: 'IT administration and system support' },
 ];
 
 export function normalizeRole(role?: string | null): AdminRoleId {
@@ -149,8 +158,8 @@ function buildDefaultPermissions(roleId: AdminRoleId): Record<AdminModule, Recor
 export function buildDefaultRoleMatrix(roleId: string): Record<string, Record<string, boolean>> {
   const matrix: Record<string, Record<string, boolean>> = {};
   const isSuper = roleId === 'super_admin';
-  const isAdmin = roleId === 'admin' || isSuper;
-  const isAuditor = roleId === 'auditor';
+  const isAdmin = roleId === 'admin' || roleId === 'it_administrator' || isSuper;
+  const isAuditor = roleId === 'auditor' || roleId === 'viewer';
 
   for (const mod of ROLE_MATRIX_MODULES) {
     matrix[mod] = {};
@@ -158,9 +167,10 @@ export function buildDefaultRoleMatrix(roleId: string): Record<string, Record<st
       if (isSuper) {
         matrix[mod][action] = true;
       } else if (isAuditor) {
-        matrix[mod][action] = action === 'View' || action === 'Read Only';
+        matrix[mod][action] = action === 'View' || action === 'Read Only' || action === 'Export' || action === 'Print';
       } else if (isAdmin) {
-        matrix[mod][action] = mod === 'Admin' && action === 'Delete' ? false : action !== 'Delete';
+        const denyAdminDelete = mod === 'Admin' && (action === 'Delete' || action === 'Admin');
+        matrix[mod][action] = !denyAdminDelete && action !== 'Delete';
       } else {
         matrix[mod][action] = action === 'View' || action === 'Read Only';
       }
@@ -592,21 +602,23 @@ const ACTION_ALIASES: Record<PermissionAction, string[]> = {
   approve: ['Approve', 'approve'],
   reject: ['Reject', 'reject'],
   export: ['Export', 'export', 'Print'],
-  import: ['import'],
-  archive: ['Close', 'archive'],
-  eSign: ['eSign'],
+  import: ['Import', 'import'],
+  archive: ['Archive', 'Close', 'archive'],
+  eSign: ['Electronic Signature', 'eSign', 'e-sign'],
 };
 
 const MODULE_ALIASES: Record<string, string[]> = {
-  Dashboard: ['Admin'],
+  Dashboard: ['Admin', 'Dashboard'],
   Document: ['DMS'],
-  Reports: ['Admin'],
+  Reports: ['Admin', 'Reports'],
   CPP: ['CPV'],
   CQA: ['CPV'],
-  Batch: ['Warehouse', 'eBMR'],
+  Batch: ['Warehouse', 'eBMR', 'Inventory'],
   Product: ['CPV'],
-  Material: ['Warehouse'],
+  Material: ['Warehouse', 'Inventory'],
   Complaint: ['Complaint'],
+  Settings: ['Admin', 'Settings'],
+  Notifications: ['Notifications'],
 };
 
 function matrixHasAction(

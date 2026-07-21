@@ -60,13 +60,14 @@ export const rawMaterialMonitoringFormSchema = z.object({
   lowerLimit: z.coerce.number().optional(),
   upperLimit: z.coerce.number().optional(),
   testUnit: z.string().trim().optional().default(''),
+  testResultSummary: z.string().trim().default(''),
   remarks: z.string().trim().default(''),
 }).refine((d) => {
   const mfg = new Date(d.mfgDate);
   const exp = new Date(d.expDate);
   return !Number.isNaN(mfg.getTime()) && !Number.isNaN(exp.getTime()) && exp > mfg;
 }, { message: 'EXP date must be after MFG date', path: ['expDate'] }).refine((d) => d.usedQuantity <= d.issuedQuantity || d.issuedQuantity === 0, {
-  message: 'Used quantity cannot exceed issued quantity',
+  message: 'Used quantity cannot exceed standard quantity',
   path: ['usedQuantity'],
 }).refine((d) => {
   if (!d.testParameter || d.lowerLimit == null || d.upperLimit == null) return true;

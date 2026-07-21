@@ -27,6 +27,8 @@ export const DEFAULT_PM_MATERIALS = [
   'Package Insert / Leaflet', 'Shipper Box', 'PVC Film', 'BOPP Tape',
 ] as const;
 
+export const PM_FORM_MATERIAL_OPTIONS = ['Primary Material', 'Secondary Material'] as const;
+
 const LABEL_CATEGORIES = ['Label', 'Package Insert / Leaflet'];
 
 const requiredText = z.string().trim().min(1, 'Required');
@@ -70,7 +72,7 @@ export const packingMaterialMonitoringFormSchema = z.object({
   const exp = new Date(d.expDate);
   return !Number.isNaN(mfg.getTime()) && !Number.isNaN(exp.getTime()) && exp > mfg;
 }, { message: 'EXP date must be after MFG date', path: ['expDate'] }).refine((d) => d.usedQuantity <= d.issuedQuantity, {
-  message: 'Used quantity cannot exceed issued quantity',
+  message: 'Used quantity cannot exceed standard quantity',
   path: ['usedQuantity'],
 });
 

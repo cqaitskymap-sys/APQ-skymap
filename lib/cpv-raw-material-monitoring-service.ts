@@ -118,6 +118,7 @@ function normalizeRawMaterialRecord(raw: Record<string, unknown>): RawMaterialMo
     lowerLimit: num(raw.lowerLimit ?? raw.lower_limit ?? raw.lsl),
     upperLimit: num(raw.upperLimit ?? raw.upper_limit ?? raw.usl),
     testUnit: str(raw.testUnit || raw.test_unit),
+    testResultSummary: str(raw.testResultSummary || raw.test_result_summary || raw.testResultSummery),
     remarks: str(raw.remarks),
     complianceStatus: str(raw.complianceStatus || raw.compliance_status || raw.status, 'Complies'),
     riskLevel: str(raw.riskLevel || raw.risk_level, 'Low'),
@@ -544,6 +545,7 @@ export async function importFromWarehouseReceipt(
     stpNumber: '',
     testParameter: '',
     testUnit: '',
+    testResultSummary: '',
     remarks: receipt.remarks || 'Imported from warehouse receipt',
   };
 

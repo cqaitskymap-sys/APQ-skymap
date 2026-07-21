@@ -100,10 +100,8 @@ export function YieldDetailView({ id }: { id: string }) {
         <CardContent className="grid gap-3 sm:grid-cols-2 text-sm">
           {[
             ['Yield ID', record.yieldMonitoringId],
-            ['Theoretical', record.theoreticalQuantity],
+            ['Theoretical Qty', record.theoreticalQuantity],
             ['Actual', record.actualQuantity],
-            ['Reject', record.rejectQuantity],
-            ['Rework', record.reworkQuantity],
             ['Limits', `${record.lowerLimit}% – ${record.upperLimit}%`],
             ['MFG Date', record.manufacturingDate],
             ['Recorded By', record.recordedBy],

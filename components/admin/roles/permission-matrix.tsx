@@ -62,26 +62,28 @@ export function PermissionMatrix({ permissions, onChange, disabled, readOnly }: 
           </Button>
         </div>
       )}
-      <div className="overflow-x-auto rounded-lg border max-h-[520px]">
+      <div className="overflow-x-auto rounded-lg border max-h-[560px] bg-card">
         <Table>
-          <TableHeader className="sticky top-0 z-20 bg-slate-50 dark:bg-slate-900">
+          <TableHeader className="sticky top-0 z-20 bg-muted/95 backdrop-blur supports-[backdrop-filter]:bg-muted/80">
             <TableRow>
-              <TableHead className="sticky left-0 z-30 bg-slate-50 dark:bg-slate-900 min-w-[140px] font-semibold">
+              <TableHead className="sticky left-0 z-30 bg-muted/95 min-w-[150px] font-semibold">
                 Module
               </TableHead>
               {ROLE_MATRIX_ACTIONS.map((action) => (
-                <TableHead key={action} className="text-center text-xs min-w-[72px] p-2">
+                <TableHead key={action} className="text-center text-[11px] min-w-[70px] p-1.5 align-bottom">
                   <div className="flex flex-col items-center gap-1">
-                    <span>{action}</span>
+                    <span className="leading-tight">{action}</span>
                     {!readOnly && (
-                      <button
+                      <Button
                         type="button"
-                        className="text-[10px] text-blue-600 hover:underline"
+                        variant="link"
+                        className="h-auto p-0 text-[10px]"
                         onClick={() => setActionAll(action, true)}
                         disabled={locked}
+                        aria-label={`Select all ${action}`}
                       >
                         All
-                      </button>
+                      </Button>
                     )}
                   </div>
                 </TableHead>
@@ -94,28 +96,31 @@ export function PermissionMatrix({ permissions, onChange, disabled, readOnly }: 
           <TableBody>
             {ROLE_MATRIX_MODULES.map((mod) => (
               <TableRow key={mod}>
-                <TableCell className="sticky left-0 z-10 bg-white dark:bg-slate-950 font-medium text-sm whitespace-nowrap">
+                <TableCell className="sticky left-0 z-10 bg-background font-medium text-sm whitespace-nowrap">
                   {mod}
                 </TableCell>
                 {ROLE_MATRIX_ACTIONS.map((action) => (
-                  <TableCell key={action} className="text-center p-2">
+                  <TableCell key={action} className="text-center p-1.5">
                     <Checkbox
                       checked={permissions[mod]?.[action] ?? false}
                       onCheckedChange={() => toggle(mod, action)}
                       disabled={locked}
+                      aria-label={`${mod} ${action}`}
                     />
                   </TableCell>
                 ))}
                 {!readOnly && (
                   <TableCell className="text-center">
-                    <button
+                    <Button
                       type="button"
-                      className="text-xs text-blue-600 hover:underline"
+                      variant="link"
+                      className="h-auto p-0 text-xs"
                       onClick={() => setModuleAll(mod, true)}
                       disabled={locked}
+                      aria-label={`Select all actions for ${mod}`}
                     >
                       All
-                    </button>
+                    </Button>
                   </TableCell>
                 )}
               </TableRow>
@@ -123,6 +128,9 @@ export function PermissionMatrix({ permissions, onChange, disabled, readOnly }: 
           </TableBody>
         </Table>
       </div>
+      <p className="text-xs text-muted-foreground">
+        Matrix covers module, menu, screen, API, export/import/print, approval, and electronic signature permissions.
+      </p>
     </div>
   );
 }

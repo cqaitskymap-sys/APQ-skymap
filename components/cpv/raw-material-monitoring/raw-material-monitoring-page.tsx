@@ -472,10 +472,9 @@ export function RawMaterialMonitoringPage() {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div><Label>AR Number *</Label><Input className="mt-1" value={form.arNumber || ''} onChange={(e) => setForm((f) => ({ ...f, arNumber: e.target.value }))} /></div>
-              <div><Label>GRN Number</Label><Input className="mt-1" value={form.grnNumber || ''} onChange={(e) => setForm((f) => ({ ...f, grnNumber: e.target.value }))} /></div>
               <div><Label>MFG Date *</Label><Input className="mt-1" type="month" value={(form.mfgDate || '').slice(0, 7)} onChange={(e) => setForm((f) => ({ ...f, mfgDate: e.target.value }))} /></div>
               <div><Label>EXP Date *</Label><Input className="mt-1" type="month" value={(form.expDate || '').slice(0, 7)} onChange={(e) => setForm((f) => ({ ...f, expDate: e.target.value }))} /></div>
-              <div><Label>Issued Qty</Label><Input className="mt-1" type="number" value={form.issuedQuantity ?? ''} onChange={(e) => setForm((f) => ({ ...f, issuedQuantity: Number(e.target.value) }))} /></div>
+              <div><Label>Standard Qty</Label><Input className="mt-1" type="number" value={form.issuedQuantity ?? ''} onChange={(e) => setForm((f) => ({ ...f, issuedQuantity: Number(e.target.value) }))} /></div>
               <div><Label>Used Qty *</Label><Input className="mt-1" type="number" value={form.usedQuantity ?? ''} onChange={(e) => setForm((f) => ({ ...f, usedQuantity: Number(e.target.value) }))} /></div>
               <div><Label>Unit *</Label><Input className="mt-1" value={form.unit || ''} onChange={(e) => setForm((f) => ({ ...f, unit: e.target.value }))} /></div>
               <div><Label>QC Status *</Label>
@@ -491,6 +490,7 @@ export function RawMaterialMonitoringPage() {
                 </Select>
               </div>
             </div>
+            <div><Label>Test result summery</Label><Input className="mt-1" value={form.testResultSummary || ''} onChange={(e) => setForm((f) => ({ ...f, testResultSummary: e.target.value }))} /></div>
             <div><Label>Remarks</Label><Textarea className="mt-1" value={form.remarks || ''} onChange={(e) => setForm((f) => ({ ...f, remarks: e.target.value }))} /></div>
             <div className="flex justify-end gap-2 pt-2">
               <Button variant="outline" onClick={() => setFormOpen(false)}>Cancel</Button>

@@ -7,6 +7,10 @@ import { DesignationAccessGuard } from '@/components/admin/designations/designat
 import { DesignationForm } from '@/components/admin/designations/designation-form';
 import { PageHeader } from '@/components/admin/dashboard/page-header';
 import { ErrorCard } from '@/components/admin/dashboard/error-card';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { useAuth } from '@/contexts/auth-context';
 import { useAdminPermissions } from '@/hooks/use-admin-permissions';
 import { canEditDesignations } from '@/lib/permissions';
@@ -16,20 +20,23 @@ import type { DesignationFormData } from '@/lib/admin/schemas';
 function CreateDesignationContent() {
   const router = useRouter();
   const { user, profile } = useAuth();
-  const { role } = useAdminPermissions();
+  const { role, hasPermission } = useAdminPermissions();
   const [submitting, setSubmitting] = useState(false);
+  const [pending, setPending] = useState<DesignationFormData | null>(null);
 
-  if (!canEditDesignations(role)) {
+  if (!canEditDesignations(role) || !hasPermission('Admin', 'create')) {
     return <ErrorCard accessDenied message="Only Super Admin and Admin can create designations." />;
   }
 
-  const onSubmit = async (data: DesignationFormData) => {
+  const submit = async (data: DesignationFormData) => {
     setSubmitting(true);
     const result = await createDesignation(data, {
       userId: user?.uid || 'system',
       userName: profile?.full_name || profile?.email || 'Admin',
+      role,
     });
     setSubmitting(false);
+    setPending(null);
     if (result.error) {
       toast.error(result.error);
       return;
@@ -42,10 +49,31 @@ function CreateDesignationContent() {
     <div className="space-y-6">
       <PageHeader title="Create Designation" description="Add a new employee designation" basePath="/admin" />
       <DesignationForm
-        onSubmit={onSubmit}
+        onSubmit={(data) => setPending(data)}
         onCancel={() => router.push('/admin/designations')}
         submitting={submitting}
       />
+      <AlertDialog open={!!pending} onOpenChange={() => !submitting && setPending(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm Designation Creation</AlertDialogTitle>
+            <AlertDialogDescription>
+              Create designation &quot;{pending?.designationName}&quot;?
+              Reason: {pending?.changeReason}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={submitting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-blue-600"
+              disabled={submitting}
+              onClick={() => pending && submit(pending)}
+            >
+              {submitting ? 'Creating…' : 'Create Designation'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

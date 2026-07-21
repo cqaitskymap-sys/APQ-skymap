@@ -92,7 +92,7 @@ export function YieldMonitoringPage() {
   const [bulkProductId, setBulkProductId] = useState('');
   const [bulkBatchId, setBulkBatchId] = useState('');
   const [bulkRows, setBulkRows] = useState<Array<{
-    stage: string; theoretical: string; actual: string; reject: string; rework: string; remarks: string;
+    stage: string; theoretical: string; actual: string; remarks: string;
   }>>([]);
 
   const actor = { id: user?.uid || 'system', name: profile?.full_name || 'System', role: role || '' };
@@ -199,7 +199,11 @@ export function YieldMonitoringPage() {
       return;
     }
     setSubmitting(true);
-    const data = form as YieldMonitoringFormData;
+    const data = {
+      ...form,
+      rejectQuantity: 0,
+      reworkQuantity: 0,
+    } as YieldMonitoringFormData;
     if (editing) {
       const { error: err } = await updateYieldRecord(editing.id, data, actor, editing, qaOverride || (editing.isLocked && canQaOverride));
       if (err) toast.error(err);
@@ -217,7 +221,7 @@ export function YieldMonitoringPage() {
     setBulkProductId(products[0].id);
     setFormBatches(await fetchYieldBatchesForProduct(products[0].productName));
     setBulkRows(YIELD_STAGES.map((stage) => ({
-      stage, theoretical: '', actual: '', reject: '', rework: '', remarks: '',
+      stage, theoretical: '', actual: '', remarks: '',
     })));
     setBulkOpen(true);
   };
@@ -239,8 +243,8 @@ export function YieldMonitoringPage() {
         yieldStage: row.stage as YieldMonitoringFormData['yieldStage'],
         theoreticalQuantity: Number(row.theoretical),
         actualQuantity: Number(row.actual),
-        rejectQuantity: Number(row.reject) || 0,
-        reworkQuantity: Number(row.rework) || 0,
+        rejectQuantity: 0,
+        reworkQuantity: 0,
         lowerLimit: limits.lowerLimit,
         upperLimit: limits.upperLimit,
         targetYield: limits.targetYield,
@@ -437,10 +441,8 @@ export function YieldMonitoringPage() {
               </Select>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <div><Label>Theoretical *</Label><Input className="mt-1" type="number" value={form.theoreticalQuantity ?? ''} onChange={(e) => setForm((f) => ({ ...f, theoreticalQuantity: Number(e.target.value) }))} /></div>
+              <div><Label>Theoretical Qty *</Label><Input className="mt-1" type="number" value={form.theoreticalQuantity ?? ''} onChange={(e) => setForm((f) => ({ ...f, theoreticalQuantity: Number(e.target.value) }))} /></div>
               <div><Label>Actual *</Label><Input className="mt-1" type="number" value={form.actualQuantity ?? ''} onChange={(e) => setForm((f) => ({ ...f, actualQuantity: Number(e.target.value) }))} /></div>
-              <div><Label>Reject</Label><Input className="mt-1" type="number" value={form.rejectQuantity ?? ''} onChange={(e) => setForm((f) => ({ ...f, rejectQuantity: Number(e.target.value) }))} /></div>
-              <div><Label>Rework</Label><Input className="mt-1" type="number" value={form.reworkQuantity ?? ''} onChange={(e) => setForm((f) => ({ ...f, reworkQuantity: Number(e.target.value) }))} /></div>
               <div><Label>Lower Limit % *</Label><Input className="mt-1" type="number" value={form.lowerLimit ?? ''} onChange={(e) => setForm((f) => ({ ...f, lowerLimit: Number(e.target.value) }))} /></div>
               <div><Label>Upper Limit % *</Label><Input className="mt-1" type="number" value={form.upperLimit ?? ''} onChange={(e) => setForm((f) => ({ ...f, upperLimit: Number(e.target.value) }))} /></div>
               <div><Label>Target Yield % *</Label><Input className="mt-1" type="number" value={form.targetYield ?? ''} onChange={(e) => setForm((f) => ({ ...f, targetYield: Number(e.target.value) }))} /></div>
@@ -482,8 +484,8 @@ export function YieldMonitoringPage() {
           </div>
           <Table>
             <TableHeader><TableRow>
-              <TableHead>Stage</TableHead><TableHead>Limits</TableHead><TableHead>Theoretical</TableHead>
-              <TableHead>Actual</TableHead><TableHead>Reject</TableHead><TableHead>Rework</TableHead><TableHead>Remarks</TableHead>
+              <TableHead>Stage</TableHead><TableHead>Limits</TableHead><TableHead>Theoretical Qty</TableHead>
+              <TableHead>Actual</TableHead><TableHead>Remarks</TableHead>
             </TableRow></TableHeader>
             <TableBody>
               {bulkRows.map((row, i) => {
@@ -503,8 +505,6 @@ export function YieldMonitoringPage() {
                     <TableCell className="text-xs">{limits.lowerLimit}–{limits.upperLimit}%</TableCell>
                     <TableCell><Input value={row.theoretical} onChange={(e) => setBulkRows((rows) => rows.map((r, j) => j === i ? { ...r, theoretical: e.target.value } : r))} /></TableCell>
                     <TableCell><Input value={row.actual} onChange={(e) => setBulkRows((rows) => rows.map((r, j) => j === i ? { ...r, actual: e.target.value } : r))} /></TableCell>
-                    <TableCell><Input value={row.reject} onChange={(e) => setBulkRows((rows) => rows.map((r, j) => j === i ? { ...r, reject: e.target.value } : r))} /></TableCell>
-                    <TableCell><Input value={row.rework} onChange={(e) => setBulkRows((rows) => rows.map((r, j) => j === i ? { ...r, rework: e.target.value } : r))} /></TableCell>
                     <TableCell>
                       <Input value={row.remarks} onChange={(e) => setBulkRows((rows) => rows.map((r, j) => j === i ? { ...r, remarks: e.target.value } : r))} />
                       {computed && <span className="text-xs text-muted-foreground">{computed.yieldPercentage}% · {computed.status}</span>}

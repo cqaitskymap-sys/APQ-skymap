@@ -9,7 +9,7 @@ import { useAuth } from '@/contexts/auth-context';
 import { cpvPermissions } from '@/lib/cpv';
 import {
   summarizePackingRecords, buildPackingChartSeries, PM_MATERIAL_TYPES, PM_MATERIAL_CATEGORIES,
-  PM_QC_STATUSES, calculateBalanceQuantity, evaluateReconciliationStatus,
+  PM_QC_STATUSES, PM_FORM_MATERIAL_OPTIONS, evaluateReconciliationStatus,
   isLabelCategory, type PackingMaterialMonitoringFormData, type PackingMaterialMonitoringRecord,
 } from '@/lib/cpv-packing-material-monitoring';
 import {
@@ -147,14 +147,6 @@ export function PackingMonitoringPage() {
   const summary = useMemo(() => summarizePackingRecords(records), [records]);
   const charts = useMemo(() => buildPackingChartSeries(filtered), [filtered]);
 
-  const formBalance = useMemo(() => {
-    const issued = Number(form.issuedQuantity) || 0;
-    const used = Number(form.usedQuantity) || 0;
-    const rejected = Number(form.rejectedQuantity) || 0;
-    const returned = Number(form.returnedQuantity) || 0;
-    return calculateBalanceQuantity(issued, used, rejected, returned);
-  }, [form.issuedQuantity, form.usedQuantity, form.rejectedQuantity, form.returnedQuantity]);
-
   const formRecon = useMemo(() => evaluateReconciliationStatus(
     Number(form.issuedQuantity) || 0,
     Number(form.usedQuantity) || 0,
@@ -170,19 +162,15 @@ export function PackingMonitoringPage() {
     setFormBatches(await fetchPmBatchesForProduct(p.productName));
   };
 
-  const onMaterialChange = (materialId: string) => {
-    const m = materials.find((x) => x.id === materialId);
-    if (!m) return;
+  const onMaterialChange = (value: typeof PM_FORM_MATERIAL_OPTIONS[number]) => {
+    const isPrimary = value === 'Primary Material';
     setForm((f) => ({
       ...f,
-      materialCode: m.materialCode,
-      materialName: m.materialName,
-      materialType: mapPackagingType(m.materialType),
-      materialCategory: mapPackagingCategory(m.materialCategory),
-      specificationNumber: m.specificationNo,
-      stpNumber: m.stpNo,
-      storageCondition: m.storageCondition,
-      unit: m.unit || f.unit || 'pcs',
+      materialCode: isPrimary ? 'PM-PRIMARY' : 'PM-SECONDARY',
+      materialName: value,
+      materialType: isPrimary ? 'Primary Packing Material' : 'Secondary Packing Material',
+      manufacturerName: f.manufacturerName || value,
+      supplierName: f.supplierName || value,
     }));
   };
 
@@ -224,7 +212,12 @@ export function PackingMonitoringPage() {
       return;
     }
     setSubmitting(true);
-    const data = form as PackingMaterialMonitoringFormData;
+    const data = {
+      ...form,
+      grnNumber: '',
+      rejectedQuantity: 0,
+      returnedQuantity: 0,
+    } as PackingMaterialMonitoringFormData;
     if (editing) {
       const { error: err } = await updatePackingMaterialRecord(editing.id, data, actor, editing, editing.attachments, qaOverride || (editing.isLocked && canQaOverride));
       if (err) toast.error(err);
@@ -278,8 +271,8 @@ export function PackingMonitoringPage() {
       receivedQuantity: 0,
       issuedQuantity: Number(row.issued) || Number(row.used),
       usedQuantity: Number(row.used),
-      rejectedQuantity: Number(row.rejected) || 0,
-      returnedQuantity: Number(row.returned) || 0,
+      rejectedQuantity: 0,
+      returnedQuantity: 0,
       unit: row.material.unit || 'pcs',
       storageCondition: row.material.storageCondition,
       qcStatus: 'Under Test',
@@ -514,9 +507,17 @@ export function PackingMonitoringPage() {
               </Select>
             </div>
             <div><Label>Material *</Label>
-              <Select value={materials.find((m) => m.materialCode === form.materialCode)?.id || ''} onValueChange={onMaterialChange} disabled={Boolean(editing)}>
-                <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
-                <SelectContent>{materials.map((m) => <SelectItem key={m.id} value={m.id}>{m.materialName}</SelectItem>)}</SelectContent>
+              <Select
+                value={PM_FORM_MATERIAL_OPTIONS.includes(form.materialName as typeof PM_FORM_MATERIAL_OPTIONS[number]) ? form.materialName : ''}
+                onValueChange={onMaterialChange}
+                disabled={Boolean(editing)}
+              >
+                <SelectTrigger className="mt-1"><SelectValue placeholder="Material" /></SelectTrigger>
+                <SelectContent>
+                  {PM_FORM_MATERIAL_OPTIONS.map((option) => (
+                    <SelectItem key={option} value={option}>{option}</SelectItem>
+                  ))}
+                </SelectContent>
               </Select>
             </div>
             <div><Label>Category *</Label>
@@ -534,13 +535,8 @@ export function PackingMonitoringPage() {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div><Label>AR Number *</Label><Input className="mt-1" value={form.arNumber || ''} onChange={(e) => setForm((f) => ({ ...f, arNumber: e.target.value }))} /></div>
-              <div><Label>GRN</Label><Input className="mt-1" value={form.grnNumber || ''} onChange={(e) => setForm((f) => ({ ...f, grnNumber: e.target.value }))} /></div>
-              <div><Label>Issued *</Label><Input className="mt-1" type="number" value={form.issuedQuantity ?? ''} onChange={(e) => setForm((f) => ({ ...f, issuedQuantity: Number(e.target.value) }))} /></div>
+              <div><Label>Standard Qty *</Label><Input className="mt-1" type="number" value={form.issuedQuantity ?? ''} onChange={(e) => setForm((f) => ({ ...f, issuedQuantity: Number(e.target.value) }))} /></div>
               <div><Label>Used *</Label><Input className="mt-1" type="number" value={form.usedQuantity ?? ''} onChange={(e) => setForm((f) => ({ ...f, usedQuantity: Number(e.target.value) }))} /></div>
-              <div><Label>Rejected</Label><Input className="mt-1" type="number" value={form.rejectedQuantity ?? ''} onChange={(e) => setForm((f) => ({ ...f, rejectedQuantity: Number(e.target.value) }))} /></div>
-              <div><Label>Returned</Label><Input className="mt-1" type="number" value={form.returnedQuantity ?? ''} onChange={(e) => setForm((f) => ({ ...f, returnedQuantity: Number(e.target.value) }))} /></div>
-              <div><Label>Balance (auto)</Label><Input className="mt-1" value={formBalance} readOnly /></div>
-              <div><Label>Reconciliation</Label><div className="mt-2"><ReconBadge status={formRecon} /></div></div>
               <div><Label>Unit *</Label><Input className="mt-1" value={form.unit || ''} onChange={(e) => setForm((f) => ({ ...f, unit: e.target.value }))} /></div>
               <div><Label>QC Status *</Label>
                 <Select value={form.qcStatus || ''} onValueChange={(v) => setForm((f) => ({ ...f, qcStatus: v as PackingMaterialMonitoringFormData['qcStatus'] }))}>
@@ -611,8 +607,8 @@ export function PackingMonitoringPage() {
           </div>
           <Table>
             <TableHeader><TableRow>
-              <TableHead>Material</TableHead><TableHead>Issued</TableHead><TableHead>Used</TableHead>
-              <TableHead>Rejected</TableHead><TableHead>Returned</TableHead><TableHead>Remarks</TableHead>
+              <TableHead>Material</TableHead><TableHead>Standard Qty</TableHead><TableHead>Used</TableHead>
+              <TableHead>Remarks</TableHead>
             </TableRow></TableHeader>
             <TableBody>
               {bulkRows.map((row, i) => (
@@ -620,8 +616,6 @@ export function PackingMonitoringPage() {
                   <TableCell>{row.material.materialName}</TableCell>
                   <TableCell><Input value={row.issued} onChange={(e) => setBulkRows((rows) => rows.map((r, j) => j === i ? { ...r, issued: e.target.value } : r))} /></TableCell>
                   <TableCell><Input value={row.used} onChange={(e) => setBulkRows((rows) => rows.map((r, j) => j === i ? { ...r, used: e.target.value } : r))} /></TableCell>
-                  <TableCell><Input value={row.rejected} onChange={(e) => setBulkRows((rows) => rows.map((r, j) => j === i ? { ...r, rejected: e.target.value } : r))} /></TableCell>
-                  <TableCell><Input value={row.returned} onChange={(e) => setBulkRows((rows) => rows.map((r, j) => j === i ? { ...r, returned: e.target.value } : r))} /></TableCell>
                   <TableCell><Input value={row.remarks} onChange={(e) => setBulkRows((rows) => rows.map((r, j) => j === i ? { ...r, remarks: e.target.value } : r))} /></TableCell>
                 </TableRow>
               ))}

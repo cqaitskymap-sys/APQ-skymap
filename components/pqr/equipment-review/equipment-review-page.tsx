@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { usePathname } from 'next/navigation';
 import {
   Download, Eye, FileSpreadsheet, Loader2, Pencil, Plus, RefreshCw, Save, Trash2,
 } from 'lucide-react';
@@ -63,6 +64,8 @@ function SafeChart({ title, empty, children }: { title: string; empty?: boolean;
 type TableRow = PqrEquipmentReviewRecord & { srNo: number };
 
 export function EquipmentReviewPage() {
+  const pathname = usePathname();
+  const isCpvContext = pathname?.startsWith('/cpv') ?? false;
   const { user, profile } = useAuth();
   const role = profile?.role;
   const canManage = canManageEquipmentReview(role);
@@ -236,11 +239,17 @@ export function EquipmentReviewPage() {
         <CpvPageHeader
           title="Equipment Review"
           description="Review qualification, calibration, maintenance and performance of equipment used during PQR period"
-          trail={[
-            { label: 'Dashboard', href: '/dashboard' },
-            { label: 'PQR Management', href: '/pqr/dashboard' },
-            { label: 'Equipment Review' },
-          ]}
+          trail={isCpvContext
+            ? [
+                { label: 'Continued Process Verification', href: '/cpv/dashboard' },
+                { label: 'Equipment Review' },
+              ]
+            : [
+                { label: 'Dashboard', href: '/dashboard' },
+                { label: 'PQR Management', href: '/pqr/dashboard' },
+                { label: 'Equipment Review' },
+              ]}
+
           actions={(
             <>
               {canExport && (

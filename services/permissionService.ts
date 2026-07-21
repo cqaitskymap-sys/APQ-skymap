@@ -1,4 +1,4 @@
-import { query, where, getDocs, collection } from 'firebase/firestore';
+import { query, where, getDocs, collection, limit } from 'firebase/firestore';
 import { getFirebaseFirestore, isFirebaseConfigured } from '@/lib/firebase';
 import {
   getRecords, createDocument, updateDocument, type DocumentActor,
@@ -68,9 +68,9 @@ const ACTION_TO_MATRIX: Record<PermissionAction, string[]> = {
   approve: ['Approve'],
   reject: ['Reject'],
   export: ['Export', 'Print'],
-  import: ['import'],
-  archive: ['Close'],
-  eSign: ['eSign'],
+  import: ['Import', 'import'],
+  archive: ['Archive', 'Close'],
+  eSign: ['Electronic Signature', 'eSign'],
 };
 
 function nowIso() {
@@ -110,8 +110,14 @@ export async function getRolePermissions(roleId: string): Promise<PermissionMatr
     return getDefaultRolePermissionMatrix(roleId).permissions;
   }
   try {
-    const all = await getRecords<PermissionMatrix>(ADMIN_COLLECTIONS.permissions);
-    const match = all.find((p) => p.roleId === roleId && !(p as { isDeleted?: boolean }).isDeleted);
+    const snap = await getDocs(query(
+      collection(getFirebaseFirestore(), ADMIN_COLLECTIONS.permissions),
+      where('roleId', '==', roleId),
+      limit(5),
+    ));
+    const match = snap.docs
+      .map((document) => ({ id: document.id, ...document.data() } as PermissionMatrix))
+      .find((record) => !(record as { isDeleted?: boolean }).isDeleted);
     if (match?.permissions) return match.permissions;
   } catch (e) {
     console.error('getRolePermissions failed:', e);

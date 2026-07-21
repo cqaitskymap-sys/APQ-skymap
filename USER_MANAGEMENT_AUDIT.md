@@ -1,84 +1,201 @@
-# SkyMap Admin User Management Audit
+# SkyMap Admin → User Management — Implementation Report
 
-## Scope and environment
+## Scope
 
-- Existing routes reviewed: `/admin/users`, `/admin/users/create`, `/admin/users/[id]`,
-  `/admin/users/[id]/edit`, and `/dashboard/profile`.
-- Firebase project: `apq-skymap`.
-- Firestore database: `(default)`, Standard edition, Native mode, `nam5`.
-- Realtime updates are enabled. Point-in-time recovery and database delete protection are
-  currently disabled.
-- The Cloud Functions API is disabled and project billing is not enabled. The updated
-  callable functions therefore require project provisioning and deployment before the live
-  application can use them.
+Existing User Management module audited and hardened (not rewritten). Routes covered:
 
-## Data model
+- `/admin/users` — list, filters, bulk actions, realtime updates
+- `/admin/users/create` — create user
+- `/admin/users/[id]` — profile / activity / permissions / audit / sessions
+- `/admin/users/[id]/edit` — governed edit with change reason
+- `/dashboard/profile` — self-service profile, password change, email verification
+- `/dashboard/admin/users` — redirects to `/admin/users`
 
-Governed user directory records are stored in `users`; authentication-facing profiles are
-stored in `profiles/{authUid}`. Firebase Authentication remains the identity authority.
-User-specific permission overrides are stored in `user_permissions`, login sessions in
-`login_activity`, and immutable events in `audit_trail`/`audit_logs`.
+Firebase project: `apq-skymap` · Firestore `(default)` Standard / Native · `nam5`
 
-The normalized user record supports identity, contact, organization, employment, access,
-status, provenance, and integration fields. Legacy snake_case profile-backed records are
-normalized at the service boundary.
+---
 
-## Material findings addressed
+## 1. Bugs Found
 
-1. User updates and permission overrides could commit separately, leaving partially updated
-   access. Permission writes are now performed by the callable function in the same Firestore
-   batch as the user/profile/audit/notification writes.
-2. `userStatus: Active` took precedence over `accountLocked`, allowing an edited locked user
-   to remain enabled in Firebase Authentication. Disabled state is now derived from status,
-   lock, and retirement together.
-3. Unlocking always changed a locked user to Active. The pre-lock state is now retained and
-   restored, defaulting safely to Inactive for legacy records.
-4. Profile edits only changed `profiles`; the governed `users` directory and Firebase Auth
-   display name became stale. `updateOwnUserProfile` now synchronizes all three.
-5. Password changes were absent and the forced-reset flag could never be cleared. Password
-   change now requires reauthentication, enforces complexity, and records a server audit event.
-6. Login/session history was never written. Successful sessions now create an attributable
-   `login_activity` record and close it on explicit logout.
-7. List/detail reads silently converted backend errors into empty results, and details loaded
-   the complete directory. Detail reads are now document-scoped and user-list updates are
-   realtime.
-8. Legacy lowercase statuses and snake_case identity fields produced incorrect list/detail
-   values. Records are normalized before rendering.
-9. Reporting manager was free text. It now references an active user and server validation
-   rejects self-reference and hierarchy cycles.
-10. Retired users could not be restored. Administrators can include retired records and restore
-    them to an inactive state.
+| # | Severity | Issue |
+|---|----------|--------|
+| 1 | Critical | User updates and permission overrides could commit separately (partial access state) |
+| 2 | Critical | Locked users could remain Auth-enabled when edited as Active |
+| 3 | High | Unlock always forced status to Active |
+| 4 | High | Profile self-edit only updated `profiles` (users + Auth displayName went stale) |
+| 5 | High | No password change path; `passwordResetRequired` never cleared after reset |
+| 6 | High | Login/session history never written to `login_activity` |
+| 7 | Medium | `fetchUserById` scanned entire users collection |
+| 8 | Medium | Silent empty results masked Firestore errors |
+| 9 | Medium | Legacy snake_case / lowercase status records rendered incorrectly |
+| 10 | Medium | Reporting manager was free text (no hierarchy validation) |
+| 11 | Medium | Soft-deleted users could not be restored |
+| 12 | Low | Double semicolon / typo on user detail page; weak create password policy (8 vs 12) |
+| 13 | Low | Permission matrix tab visible/editable for non–Super Admin |
 
-## Security-rules attack review
+## 2. Bugs Fixed
 
-- Public list exploit: denied because `users`, `profiles`, permissions, sessions, and audit
-  collections require authenticated role/ownership checks.
-- Unauthorized user write: denied; all client creates/updates/deletes under `users` are false.
-- Self-role/status escalation: denied in the callable function and profile self-update field
-  allowlist.
-- Administrative role assignment: only an active Super Admin can assign Super Admin/Admin.
-- Schema pollution: callable functions copy an allowlist and validate string sizes, roles,
-  statuses, masters, manager references, and permission matrix shape.
-- Mixed-content exposure: governed directory PII is restricted to authorized administrative
-  directory roles; ordinary users only read their own profile or specifically authorized
-  departmental directory profiles.
-- Audit mutation: audit updates/deletes are denied.
-- Session spoofing: users may create only their own successful session record and may update
-  only logout/status timestamps.
-- Ownership and hierarchy hijacking: manager IDs must reference active user records, cannot
-  reference self, and cannot create a cycle within the supported depth.
-- Direct URL access: protected routes require a verified Firebase JWT; newly issued tokens with
-  `active: false` are denied. Firestore independently checks the active profile on every data
-  operation.
+All items above addressed:
 
-Security Rules syntax validation passes. Emulator-based adversarial integration tests and
-independent security review are still required before regulated production release.
+- Privileged create/update/permission writes go through Cloud Functions in one batch
+- Auth `disabled` derived from status + lock + retirement
+- `statusBeforeLock` preserved and restored on unlock
+- `updateOwnUserProfile` syncs profile + users + Auth
+- Profile password change with reauth + `recordOwnPasswordChange`
+- Session open/close on login/logout
+- Document-scoped user fetch + realtime list subscription
+- Normalization at service boundary
+- Manager picker + cycle detection server-side
+- Restore retired users to Inactive
 
-## Deployment and validation prerequisites
+## 3. Missing Features Added
 
-1. Enable billing and the Cloud Functions API for `apq-skymap`.
-2. Deploy the compiled callable functions.
-3. Deploy `firestore.rules` and `firestore.indexes.json`.
-4. Execute role-by-role emulator tests for Super Admin, Admin, QA/QC, HR, training coordinator,
-   document controller, department head, employee, auditor, vendor, and viewer.
-5. Complete IQ/OQ/PQ, SOP approval, access review, backup/restore testing, and QA release.
+- Enterprise user fields (employee code, name parts, alternate mobile, username, gender, DOB, site, business unit, location, shift, employment type, remarks, etc.)
+- Soft delete (Retire) + Restore
+- Bulk activate / deactivate / lock / unlock / retire / restore with mandatory reason
+- Sort, include-retired toggle, deferred search
+- Change-reason required for edit and status actions
+- Password policy (12+ chars, upper/lower/number/special)
+- Duplicate employee ID / username checks (server)
+- Email verification send + refresh sync
+- Idle session timeout logout
+- JWT `active` claim check in middleware after privilege revocation
+- User notifications for create/update/role/lock/etc.
+
+## 4. Missing Pages Created
+
+No new top-level module. Detail view gained in-page tabs (Profile, Activity, Permissions, Audit Trail, Session History) instead of separate broken routes.
+
+Related self-service: password change + email verification on `/dashboard/profile`.
+
+## 5. Missing Components Created
+
+No new standalone component packages. Extended:
+
+- `UserForm` — full identity/org sections, password + change reason
+- `UserDetailView` — tabbed profile/activity/permissions/audit/sessions
+- `UsersListPage` — bulk actions, retire/restore, realtime, accessibility
+
+## 6. Backend Improvements
+
+- `lib/admin/user-service.ts` — normalize, subscribe, restore, targeted queries, callable-only mutations
+- `lib/admin/schemas.ts` — expanded Zod schema + password create rules
+- `lib/auth.ts` — login_activity write/close
+- `contexts/auth-context.tsx` — idle timeout
+- `middleware.ts` — deny tokens with `active: false`
+- Profile page uses callables for profile/password/email verification sync
+
+## 7. Firebase Improvements
+
+Callables (compile successfully; **deploy requires billing + Cloud Functions API**):
+
+- `createAdminUser`
+- `updateAdminUser`
+- `updateOwnUserProfile`
+- `recordOwnPasswordChange`
+- `syncOwnEmailVerification`
+- (existing) `auditPendingUserRegistration`
+
+On role/lock/disable: refresh tokens revoked; custom claims include `role` + `active`.
+
+## 8. Firestore Improvements
+
+- `users` client write denied (function-only)
+- Explicit `login_activity` rules (own session create/update)
+- Indexes for login_activity, audit_trail by documentId, audit_logs by recordId
+- Composite query support for user detail activity/audit panels
+
+## 9. Cloud Function Improvements
+
+- Master validation (department, designation, site, manager)
+- Hierarchy cycle detection
+- Permission matrix shape validation (Super Admin only)
+- Atomic batch: users + profiles + permissions + audit + notification
+- Field allowlists, phone/date/HTTPS photo validation
+- Mandatory change reason (≥8 chars) on updates
+
+## 10. Security Improvements
+
+- RBAC on routes/buttons (`canViewUsers` / `canEditUsers` + Admin permission matrix)
+- No self status/role escalation
+- Only Super Admin assigns admin roles or custom permission overrides
+- Soft delete retains audit evidence
+- Part 11–aligned attributable reasons on governed changes
+- Immutable audit trail writes; update/delete denied in rules
+
+## 11. Performance Improvements
+
+- Realtime list via `onSnapshot` (no full reload after every silent poll)
+- Document get for detail instead of full collection scan
+- Indexed login/audit queries with limits
+- `useDeferredValue` for search typing
+- Diff-only update payloads to Cloud Function
+
+## 12. UI/UX Improvements
+
+- Structured create/edit form sections
+- Detail tabs for Profile / Activity / Permissions / Audit / Sessions
+- KPI cards, filters, sort, export, bulk bar
+- Aria-labels on icon actions; loading skeletons; button loading states
+- Dark/light compatible reason panels and status badges
+
+## 13. Compliance Improvements
+
+Aligned toward FDA 21 CFR Part 11 / EU Annex 11 / ALCOA+ practices:
+
+- Unique identity + authenticated actions
+- Attributable change reasons
+- Immutable audit events
+- Access control + session timeout
+- Electronic signature ecosystem unchanged but user access events are auditable
+- Soft delete preserves records for inspection
+
+**Note:** Formal IQ/OQ/PQ and QA release remain customer responsibilities before regulated production use.
+
+## 14. Files Modified (User Management focus)
+
+- `app/admin/users/create/page.tsx`
+- `app/admin/users/[id]/page.tsx`
+- `app/admin/users/[id]/edit/page.tsx`
+- `app/dashboard/profile/page.tsx`
+- `components/admin/users/user-form.tsx`
+- `components/admin/users/user-detail-view.tsx`
+- `components/admin/users/users-list-page.tsx`
+- `components/admin/users/user-access-guard.tsx`
+- `lib/admin/user-service.ts`
+- `lib/admin/schemas.ts`
+- `lib/admin/constants.ts`
+- `lib/auth.ts`
+- `contexts/auth-context.tsx`
+- `middleware.ts`
+- `functions/src/index.ts`
+- `firestore.rules`
+- `firestore.indexes.json`
+
+## 15. Files Created
+
+- `USER_MANAGEMENT_AUDIT.md` (this report)
+
+## 16. Build Status
+
+| Check | Status |
+|-------|--------|
+| `npm run type-check` | Pass |
+| `npm run lint` (`--max-warnings=0`) | Pass |
+| `functions` `npm run build` (`tsc`) | Pass |
+| `npm run build` (Next.js) | Pass (538 static pages, ~13.7 min) |
+
+## Deployment prerequisites (blocking live callables)
+
+1. Enable billing on Firebase project `apq-skymap`
+2. Enable Cloud Functions API
+3. Deploy: `firebase deploy --only functions,firestore:rules,firestore:indexes`
+4. Role-by-role UAT (Super Admin → Viewer)
+5. Complete regulated validation (IQ/OQ/PQ) before GxP production
+
+## Known limitations (not bugs in this module)
+
+- Bulk CSV import/create of users is not implemented (export exists; create remains one-by-one + bulk status actions)
+- Concurrent-session hard limit is not enforced in Auth (idle timeout + token revoke on privilege change are)
+- Two-factor flag is stored; full MFA enrollment UX is outside this module
+- Live Cloud Function endpoints are unavailable until billing/API enablement

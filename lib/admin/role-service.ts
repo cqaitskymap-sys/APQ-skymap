@@ -1,9 +1,13 @@
 import {
-  getAdminRecords, createAdminRecord, updateAdminRecord,
-  checkUniqueField, logAuditEvent,
-} from './admin-service';
-import { ADMIN_COLLECTIONS } from './constants';
-import { writeAuditTrail } from '@/lib/audit-trail';
+  collection, doc, getDoc, getDocs, limit, onSnapshot, orderBy, query, where,
+  type Unsubscribe,
+} from 'firebase/firestore';
+import { getFunctions, httpsCallable } from 'firebase/functions';
+import {
+  getFirebaseApp, getFirebaseFirestore, isFirebaseConfigured,
+} from '@/lib/firebase';
+import { getAdminRecords, checkUniqueField } from './admin-service';
+import { ADMIN_COLLECTIONS, SYSTEM_ROLE_IDS } from './constants';
 import {
   buildDefaultRoleMatrix, canEditSuperAdminRole,
 } from '@/lib/permissions';
@@ -12,39 +16,13 @@ import type { AdminRole, PermissionMatrix, RoleFormData } from './schemas';
 export interface RoleAuditMeta {
   userId: string;
   userName: string;
+  role?: string;
 }
 
-async function logRoleAudit(
-  action: string,
-  recordId: string,
-  meta: RoleAuditMeta,
-  oldValue: unknown,
-  newValue: unknown,
-) {
-  await logAuditEvent({
-    userId: meta.userId,
-    userName: meta.userName,
-    module: 'Role Management',
-    recordId,
-    action,
-    oldValue: typeof oldValue === 'string' ? oldValue : JSON.stringify(oldValue ?? ''),
-    newValue: typeof newValue === 'string' ? newValue : JSON.stringify(newValue ?? ''),
-    reason: '',
-    ipAddress: 'client',
-    device: typeof navigator !== 'undefined' ? navigator.userAgent : 'browser',
-    status: 'Success',
-  });
+const SYSTEM_ROLE_SET = new Set<string>(SYSTEM_ROLE_IDS);
 
-  await writeAuditTrail({
-    collectionName: ADMIN_COLLECTIONS.roles,
-    documentId: recordId,
-    action,
-    oldValue,
-    newValue,
-    userId: meta.userId,
-    userName: meta.userName,
-    moduleName: 'Role Management',
-  });
+export function isSystemRoleId(roleId: string): boolean {
+  return SYSTEM_ROLE_SET.has(roleId);
 }
 
 export function enforceSuperAdminMatrix(
@@ -74,25 +52,100 @@ export function countPermissionChanges(
   return { added, removed };
 }
 
-export async function fetchRoles(): Promise<AdminRole[]> {
+function normalizeRoleRecord(role: AdminRole): AdminRole {
+  return {
+    ...role,
+    roleDescription: role.roleDescription || role.description || '',
+    description: role.description || role.roleDescription || '',
+    roleLevel: role.roleLevel ?? role.level ?? 10,
+    level: role.level ?? role.roleLevel ?? 10,
+    departmentAccess: role.departmentAccess || '',
+    siteAccess: role.siteAccess || '',
+    businessUnitAccess: role.businessUnitAccess || '',
+    dataScope: role.dataScope || 'Organization Records',
+    fieldPolicies: role.fieldPolicies || [],
+    isSystemRole: Boolean(role.isSystemRole || isSystemRoleId(role.roleId)),
+    isDeleted: Boolean(role.isDeleted),
+  };
+}
+
+function callableErrorMessage(error: unknown, fallback: string): string {
+  const err = error as { message?: string; code?: string };
+  return (err.message || fallback)
+    .replace(/^Firebase:\s*/i, '')
+    .replace(/\s*\([^)]*\)\s*$/, '')
+    .trim() || fallback;
+}
+
+export async function fetchRoles(includeDeleted = false): Promise<AdminRole[]> {
+  if (!isFirebaseConfigured()) return [];
   try {
     const records = await getAdminRecords<AdminRole>(ADMIN_COLLECTIONS.roles);
-    return records.filter((r) => !r.isDeleted);
-  } catch {
-    return [];
+    return records
+      .map(normalizeRoleRecord)
+      .filter((role) => includeDeleted || !role.isDeleted);
+  } catch (error) {
+    console.error('fetchRoles failed:', error);
+    throw new Error('Unable to load roles. Check your connection and permissions.');
   }
 }
 
-export async function fetchRoleById(id: string): Promise<AdminRole | null> {
-  const roles = await fetchRoles();
-  return roles.find((r) => r.id === id) ?? null;
+export function subscribeToRoles(
+  includeDeleted: boolean,
+  onData: (roles: AdminRole[]) => void,
+  onError?: (error: Error) => void,
+): Unsubscribe {
+  if (!isFirebaseConfigured()) {
+    onData([]);
+    return () => undefined;
+  }
+  const rolesQuery = query(
+    collection(getFirebaseFirestore(), ADMIN_COLLECTIONS.roles),
+    orderBy('createdAt', 'desc'),
+  );
+  return onSnapshot(
+    rolesQuery,
+    (snapshot) => {
+      const roles = snapshot.docs
+        .map((document) => normalizeRoleRecord({ id: document.id, ...document.data() } as AdminRole))
+        .filter((role) => includeDeleted || !role.isDeleted);
+      onData(roles);
+    },
+    (error) => {
+      console.error('subscribeToRoles failed:', error);
+      onError?.(new Error(error.message || 'Unable to subscribe to roles'));
+    },
+  );
+}
+
+export async function fetchRoleById(id: string, includeDeleted = false): Promise<AdminRole | null> {
+  if (!isFirebaseConfigured() || !id) return null;
+  try {
+    const snapshot = await getDoc(doc(getFirebaseFirestore(), ADMIN_COLLECTIONS.roles, id));
+    if (!snapshot.exists()) return null;
+    const role = normalizeRoleRecord({ id: snapshot.id, ...snapshot.data() } as AdminRole);
+    if (role.isDeleted && !includeDeleted) return null;
+    return role;
+  } catch (error) {
+    console.error('fetchRoleById failed:', error);
+    throw new Error('Unable to load role details.');
+  }
 }
 
 export async function fetchRolePermissions(roleId: string): Promise<PermissionMatrix | null> {
+  if (!isFirebaseConfigured() || !roleId) return null;
   try {
-    const all = await getAdminRecords<PermissionMatrix>(ADMIN_COLLECTIONS.permissions);
-    return all.find((p) => p.roleId === roleId) ?? null;
-  } catch {
+    const snapshot = await getDocs(query(
+      collection(getFirebaseFirestore(), ADMIN_COLLECTIONS.permissions),
+      where('roleId', '==', roleId),
+      limit(10),
+    ));
+    const match = snapshot.docs
+      .map((document) => ({ id: document.id, ...document.data() } as PermissionMatrix))
+      .find((record) => !record.isDeleted);
+    return match ?? null;
+  } catch (error) {
+    console.error('fetchRolePermissions failed:', error);
     return null;
   }
 }
@@ -101,17 +154,23 @@ export async function fetchRoleWithPermissions(id: string): Promise<{
   role: AdminRole | null;
   permissions: PermissionMatrix | null;
 }> {
-  const role = await fetchRoleById(id);
+  const role = await fetchRoleById(id, true);
   if (!role) return { role: null, permissions: null };
   const permissions = await fetchRolePermissions(role.roleId);
   return { role, permissions };
 }
 
 export async function countUsersWithRole(roleId: string): Promise<number> {
+  if (!isFirebaseConfigured() || !roleId) return 0;
   try {
-    const users = await getAdminRecords<{ role?: string }>(ADMIN_COLLECTIONS.users);
-    return users.filter((u) => u.role === roleId).length;
-  } catch {
+    const snapshot = await getDocs(query(
+      collection(getFirebaseFirestore(), ADMIN_COLLECTIONS.users),
+      where('role', '==', roleId),
+      limit(500),
+    ));
+    return snapshot.docs.filter((document) => document.data().isDeleted !== true).length;
+  } catch (error) {
+    console.error('countUsersWithRole failed:', error);
     return 0;
   }
 }
@@ -123,10 +182,20 @@ export function canModifyRole(
   if (targetRoleId === 'super_admin' && !canEditSuperAdminRole(currentRole)) {
     return { allowed: false, reason: 'Only Super Admin can modify the Super Admin role.' };
   }
-  if (currentRole === 'admin' && targetRoleId === 'super_admin') {
-    return { allowed: false, reason: 'Admin cannot grant or modify Super Admin permissions.' };
+  if (currentRole === 'admin' && ['super_admin', 'admin', 'it_administrator'].includes(targetRoleId)) {
+    return { allowed: false, reason: 'Admin cannot modify privileged system administrator roles.' };
   }
   return { allowed: true };
+}
+
+export function canDeleteRole(
+  currentRole: string,
+  target: AdminRole,
+): { allowed: boolean; reason?: string } {
+  if (isSystemRoleId(target.roleId) || target.isSystemRole) {
+    return { allowed: false, reason: 'System roles cannot be deleted. Deactivate or retire instead.' };
+  }
+  return canModifyRole(currentRole, target.roleId);
 }
 
 export async function createRole(
@@ -136,53 +205,29 @@ export async function createRole(
 ): Promise<{ role: AdminRole | null; error: string | null }> {
   const check = canModifyRole(currentRole, data.roleId);
   if (!check.allowed) return { role: null, error: check.reason ?? 'Action not allowed' };
+  if (currentRole === 'admin' && data.roleLevel >= 90) {
+    return { role: null, error: 'Admin cannot create roles at administrator privilege level' };
+  }
 
   try {
     const nameUnique = await checkUniqueField(ADMIN_COLLECTIONS.roles, 'roleName', data.roleName);
     if (!nameUnique) return { role: null, error: 'Role name already exists' };
+    const idUnique = await checkUniqueField(ADMIN_COLLECTIONS.roles, 'roleId', data.roleId);
+    if (!idUnique) return { role: null, error: 'Role ID already exists' };
 
-    const permissions = enforceSuperAdminMatrix(data.roleId, data.permissions);
-
-    const rolePayload = {
-      roleId: data.roleId,
-      roleName: data.roleName,
-      roleDescription: data.roleDescription,
-      description: data.roleDescription,
-      roleLevel: data.roleLevel,
-      level: data.roleLevel,
-      departmentAccess: data.departmentAccess,
-      status: data.status,
-      createdBy: meta.userId,
-      updatedBy: meta.userId,
-    };
-
-    const created = await createAdminRecord(ADMIN_COLLECTIONS.roles, rolePayload as Omit<AdminRole, 'id'>, {
-      userId: meta.userId,
-      userName: meta.userName,
-      module: 'Role Management',
-      action: 'CREATE_ROLE',
+    const createRoleFn = httpsCallable<Record<string, unknown>, AdminRole>(
+      getFunctions(getFirebaseApp()),
+      'createAdminRole',
+    );
+    const response = await createRoleFn({
+      ...data,
+      permissions: enforceSuperAdminMatrix(data.roleId, data.permissions),
+      isSystemRole: isSystemRoleId(data.roleId),
+      reason: data.changeReason,
     });
-
-    const permPayload: Omit<PermissionMatrix, 'id'> = {
-      roleId: data.roleId,
-      roleName: data.roleName,
-      permissions,
-      status: data.status,
-      createdBy: meta.userId,
-      updatedBy: meta.userId,
-    };
-
-    await createAdminRecord(ADMIN_COLLECTIONS.permissions, permPayload, {
-      userId: meta.userId,
-      userName: meta.userName,
-      module: 'Role Management',
-      action: 'CREATE_PERMISSIONS',
-    });
-
-    await logRoleAudit('CREATE_ROLE', created.id || data.roleId, meta, null, { role: rolePayload, permissions });
-    return { role: created, error: null };
-  } catch (e) {
-    return { role: null, error: (e as Error).message };
+    return { role: normalizeRoleRecord(response.data), error: null };
+  } catch (error) {
+    return { role: null, error: callableErrorMessage(error, 'Unable to create role') };
   }
 }
 
@@ -203,68 +248,44 @@ export async function updateRole(
   }
 
   try {
-    let permissions = enforceSuperAdminMatrix(existing.roleId, data.permissions);
-    const oldPerms = existingPerms?.permissions || {};
+    const updateRoleFn = httpsCallable<
+      {
+        roleDocId: string;
+        updates: Record<string, unknown>;
+        permissions?: Record<string, Record<string, boolean>>;
+        reason: string;
+      },
+      { role: AdminRole; affectedUsers: number }
+    >(getFunctions(getFirebaseApp()), 'updateAdminRole');
 
-    if (existing.roleId === 'super_admin') {
-      permissions = buildDefaultRoleMatrix('super_admin');
-    }
-
-    const roleUpdates: Partial<AdminRole> = {
-      roleName: data.roleName,
-      roleDescription: data.roleDescription,
-      description: data.roleDescription,
-      roleLevel: data.roleLevel,
-      level: data.roleLevel,
-      departmentAccess: data.departmentAccess,
-      status: data.status,
-    };
-
-    const updated = await updateAdminRecord(ADMIN_COLLECTIONS.roles, id, roleUpdates, {
-      userId: meta.userId,
-      userName: meta.userName,
-      module: 'Role Management',
-      oldValue: JSON.stringify(existing),
-    });
-
-    const permData: Partial<PermissionMatrix> = {
-      roleName: data.roleName,
-      permissions,
-      status: data.status,
-    };
-
-    if (existingPerms?.id) {
-      await updateAdminRecord(ADMIN_COLLECTIONS.permissions, existingPerms.id, permData, {
-        userId: meta.userId,
-        userName: meta.userName,
-        module: 'Role Management',
-        oldValue: JSON.stringify(existingPerms),
-      });
-    } else {
-      await createAdminRecord(ADMIN_COLLECTIONS.permissions, {
-        roleId: existing.roleId,
+    const permissions = enforceSuperAdminMatrix(existing.roleId, data.permissions);
+    const response = await updateRoleFn({
+      roleDocId: id,
+      updates: {
         roleName: data.roleName,
-        permissions,
+        roleDescription: data.roleDescription,
+        roleLevel: data.roleLevel,
+        departmentAccess: data.departmentAccess,
+        siteAccess: data.siteAccess,
+        businessUnitAccess: data.businessUnitAccess,
+        dataScope: data.dataScope,
+        fieldPolicies: data.fieldPolicies,
         status: data.status,
-        createdBy: meta.userId,
-        updatedBy: meta.userId,
-      } as Omit<PermissionMatrix, 'id'>, {
-        userId: meta.userId,
-        userName: meta.userName,
-        module: 'Role Management',
-        action: 'CREATE_PERMISSIONS',
-      });
-    }
-
-    const changes = countPermissionChanges(oldPerms, permissions);
-    if (changes.added) await logRoleAudit('PERMISSION_ADDED', id, meta, oldPerms, { added: changes.added });
-    if (changes.removed) await logRoleAudit('PERMISSION_REMOVED', id, meta, oldPerms, { removed: changes.removed });
-    await logRoleAudit('EDIT_ROLE', id, meta, existing, { ...roleUpdates, permissions });
-
-    const affectedUsers = await countUsersWithRole(existing.roleId);
-    return { role: updated, error: null, affectedUsers };
-  } catch (e) {
-    return { role: null, error: (e as Error).message, affectedUsers: 0 };
+      },
+      permissions,
+      reason: data.changeReason,
+    });
+    return {
+      role: normalizeRoleRecord(response.data.role),
+      error: null,
+      affectedUsers: response.data.affectedUsers,
+    };
+  } catch (error) {
+    return {
+      role: null,
+      error: callableErrorMessage(error, 'Unable to update role'),
+      affectedUsers: 0,
+    };
   }
 }
 
@@ -274,6 +295,7 @@ export async function setRoleStatus(
   status: 'Active' | 'Inactive',
   meta: RoleAuditMeta,
   currentRole: string,
+  reason = 'Role status change',
 ): Promise<{ success: boolean; error?: string }> {
   if (role.roleId === 'super_admin') {
     return { success: false, error: 'Super Admin role cannot be deactivated' };
@@ -282,39 +304,147 @@ export async function setRoleStatus(
   if (!check.allowed) return { success: false, error: check.reason ?? 'Action not allowed' };
 
   try {
-    await updateAdminRecord(ADMIN_COLLECTIONS.roles, id, { status }, {
-      userId: meta.userId,
-      userName: meta.userName,
-      module: 'Role Management',
-      oldValue: JSON.stringify(role),
+    const setStatusFn = httpsCallable(
+      getFunctions(getFirebaseApp()),
+      'setAdminRoleStatus',
+    );
+    await setStatusFn({
+      roleDocId: id,
+      status,
+      reason,
     });
-    const action = status === 'Active' ? 'ROLE_ACTIVATED' : 'ROLE_DEACTIVATED';
-    await logRoleAudit(action, id, meta, role.status, status);
     return { success: true };
-  } catch (e) {
-    return { success: false, error: (e as Error).message };
+  } catch (error) {
+    return { success: false, error: callableErrorMessage(error, 'Unable to update role status') };
+  }
+}
+
+export async function softDeleteRole(
+  id: string,
+  role: AdminRole,
+  currentRole: string,
+  reason: string,
+): Promise<{ success: boolean; error?: string }> {
+  const check = canDeleteRole(currentRole, role);
+  if (!check.allowed) return { success: false, error: check.reason };
+
+  try {
+    const deleteFn = httpsCallable(getFunctions(getFirebaseApp()), 'softDeleteAdminRole');
+    await deleteFn({ roleDocId: id, reason });
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: callableErrorMessage(error, 'Unable to delete role') };
+  }
+}
+
+export async function restoreRole(
+  id: string,
+  currentRole: string,
+  reason: string,
+): Promise<{ success: boolean; error?: string }> {
+  if (!['super_admin', 'admin'].includes(currentRole)) {
+    return { success: false, error: 'Only administrators can restore roles' };
+  }
+  try {
+    const restoreFn = httpsCallable(getFunctions(getFirebaseApp()), 'restoreAdminRole');
+    await restoreFn({ roleDocId: id, reason });
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: callableErrorMessage(error, 'Unable to restore role') };
+  }
+}
+
+export async function cloneRole(
+  sourceId: string,
+  newRoleId: string,
+  newRoleName: string,
+  currentRole: string,
+  reason: string,
+): Promise<{ role: AdminRole | null; error: string | null }> {
+  const check = canModifyRole(currentRole, newRoleId);
+  if (!check.allowed) return { role: null, error: check.reason ?? 'Action not allowed' };
+  try {
+    const cloneFn = httpsCallable<
+      Record<string, unknown>,
+      AdminRole
+    >(getFunctions(getFirebaseApp()), 'cloneAdminRole');
+    const response = await cloneFn({
+      sourceRoleDocId: sourceId,
+      newRoleId,
+      newRoleName,
+      reason,
+    });
+    return { role: normalizeRoleRecord(response.data), error: null };
+  } catch (error) {
+    return { role: null, error: callableErrorMessage(error, 'Unable to clone role') };
+  }
+}
+
+export async function bulkUpdateRoleStatus(
+  roleIds: string[],
+  status: 'Active' | 'Inactive',
+  currentRole: string,
+  reason: string,
+): Promise<{ successCount: number; error?: string }> {
+  try {
+    const bulkFn = httpsCallable<
+      Record<string, unknown>,
+      { successCount: number }
+    >(getFunctions(getFirebaseApp()), 'bulkUpdateAdminRoles');
+    const response = await bulkFn({
+      roleDocIds: roleIds,
+      action: status === 'Active' ? 'activate' : 'deactivate',
+      reason,
+    });
+    return { successCount: response.data.successCount };
+  } catch (error) {
+    return { successCount: 0, error: callableErrorMessage(error, 'Bulk update failed') };
   }
 }
 
 export async function fetchRoleAuditTrail(recordId: string) {
+  if (!isFirebaseConfigured() || !recordId) return [];
   try {
+    const db = getFirebaseFirestore();
     const [trail, logs] = await Promise.all([
-      getAdminRecords<Record<string, unknown>>(ADMIN_COLLECTIONS.auditTrail).catch(() => []),
-      getAdminRecords<Record<string, unknown>>(ADMIN_COLLECTIONS.auditLogs).catch(() => []),
+      getDocs(query(
+        collection(db, ADMIN_COLLECTIONS.auditTrail),
+        where('documentId', '==', recordId),
+        orderBy('timestamp', 'desc'),
+        limit(30),
+      )),
+      getDocs(query(
+        collection(db, ADMIN_COLLECTIONS.auditLogs),
+        where('recordId', '==', recordId),
+        orderBy('dateTime', 'desc'),
+        limit(30),
+      )),
     ]);
-    return [...trail, ...logs]
-      .filter((l) => l.documentId === recordId || l.recordId === recordId)
+    return [...trail.docs, ...logs.docs]
+      .map((snapshot): Record<string, unknown> => ({ id: snapshot.id, ...snapshot.data() }))
       .sort((a, b) => String(b.timestamp ?? b.dateTime).localeCompare(String(a.timestamp ?? a.dateTime)))
       .slice(0, 30);
-  } catch {
+  } catch (error) {
+    console.error('fetchRoleAuditTrail failed:', error);
     return [];
   }
 }
 
 export function exportRolesCsv(roles: AdminRole[]): string {
-  const headers = ['Role ID', 'Role Name', 'Level', 'Department Access', 'Status'];
+  const headers = [
+    'Role ID', 'Role Name', 'Level', 'Department Access', 'Site Access',
+    'Business Unit', 'Data Scope', 'System Role', 'Status',
+  ];
   const rows = roles.map((r) => [
-    r.roleId, r.roleName, r.roleLevel ?? r.level, r.departmentAccess, r.status,
+    r.roleId,
+    r.roleName,
+    r.roleLevel ?? r.level,
+    r.departmentAccess || 'All',
+    r.siteAccess || 'All',
+    r.businessUnitAccess || 'All',
+    r.dataScope || 'Organization Records',
+    r.isSystemRole || isSystemRoleId(r.roleId) ? 'Yes' : 'No',
+    r.status,
   ]);
   return [headers.join(','), ...rows.map((row) => row.map((c) => `"${String(c ?? '').replace(/"/g, '""')}"`).join(','))].join('\n');
 }

@@ -116,6 +116,7 @@ export const BREADCRUMB_LABELS: Record<string, string> = {
   validation: 'Validation Management',
   csv: 'CSV Management',
   equipment: 'Equipment Management',
+  'equipment-review': 'Equipment Review',
   monitoring: 'Environmental Monitoring',
   warehouse: 'Warehouse Management',
   ebmr: 'eBMR',

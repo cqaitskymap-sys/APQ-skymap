@@ -93,13 +93,14 @@ export function RawMaterialDetailView({ id }: { id: string }) {
       <Card>
         <CardHeader><CardTitle className="text-sm">Material Details</CardTitle></CardHeader>
         <CardContent className="grid gap-2 sm:grid-cols-2 text-sm">
-          <p><span className="text-muted-foreground">GRN:</span> {record.grnNumber}</p>
+          <p><span className="text-muted-foreground">Standard Qty:</span> {record.issuedQuantity} {record.unit}</p>
           <p><span className="text-muted-foreground">Lot:</span> {record.materialLotNumber}</p>
           <p><span className="text-muted-foreground">Manufacturer:</span> {record.manufacturerName}</p>
           <p><span className="text-muted-foreground">Supplier:</span> {record.supplierName}</p>
           <p><span className="text-muted-foreground">COA:</span> {record.coaAvailable}</p>
           <p><span className="text-muted-foreground">Deviation:</span> {record.linkedDeviationNumber || '—'}</p>
           <p><span className="text-muted-foreground">OOS:</span> {record.linkedOosNumber || '—'}</p>
+          <p className="sm:col-span-2"><span className="text-muted-foreground">Test result summery:</span> {record.testResultSummary || '—'}</p>
           <p className="sm:col-span-2"><span className="text-muted-foreground">Remarks:</span> {record.remarks || '—'}</p>
         </CardContent>
       </Card>
